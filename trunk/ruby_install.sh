@@ -38,12 +38,12 @@ if test $INSTALL_RUBY -eq 1; then
 		cd yaml-0.1.4
 		./configure >/dev/null
 		make >/dev/null
-		#make install >/dev/null
+		make install >/dev/null
 		cd ..
 		make clean >/dev/null 2>&1
 		make >/dev/null 2>&1
 	fi
-	#make install >/dev/null
+	make install >/dev/null
 	cd ..
 fi
 
@@ -67,14 +67,14 @@ if test $INSTALL_GEMS -eq 1; then
 	curl http://production.cf.rubygems.org/rubygems/rubygems-1.8.12.tgz > rubygems-1.8.12.tgz
 	tar -xzf rubygems-1.8.12.tgz
 	cd rubygems-1.8.12
-	#ruby setup.rb >/dev/null
+	ruby setup.rb >/dev/null
 	cd ..	
 fi
 
 if test $INSTALL_RMAGICK -eq 1; then
 	echo "Installing RMagick..."
 	# Use rubygems to install rmagick
-	#gem install rmagick >/dev/null
+	gem install rmagick >/dev/null
 fi
 
 echo "All programs installed"
