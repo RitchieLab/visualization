@@ -47,6 +47,29 @@ if test $INSTALL_RUBY -eq 1; then
 	cd ..
 fi
 
+# Now, check to make sure Imagemagick is installed...
+INSTALL_IM=0
+IM_WEBSITE="http://www.imagemagick.org/download/ImageMagick.tar.gz"
+IM_V=`convert -version`
+EV=$?
+
+if test $EV -eq 127; then
+	INSTALL_IM=1
+fi
+
+if test $INSTALL_IM -eq 1; then
+	echo "Installing ImageMagick..."
+	echo "Downloading ImageMagick.tar.gz"
+	curl $IM_WEBSITE > ImageMagick.tgz
+	IM_DIR=`tar -xvzf ImageMagick.tgz | sed 's/\/.*.//g' | tail -1`
+	cd $IM_DIR
+	./configure >/dev/null
+	make >/dev/null 2>&1
+	make install >/dev/null
+	cd ..
+fi
+	
+
 INSTALL_GEMS=0
 INSTALL_RMAGICK=0
 GEM_LIST=`gem list`
