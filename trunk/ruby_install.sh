@@ -97,7 +97,7 @@ fi
 if test $INSTALL_RMAGICK -eq 1; then
 	echo "Installing RMagick..."
 	# Use rubygems to install rmagick
-	gem install rmagick >/dev/null
+	gem install rmagick >/dev/null 2>&1
 fi
 
 echo "All programs installed"
