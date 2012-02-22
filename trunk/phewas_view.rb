@@ -919,8 +919,8 @@ class ResultFileReader < FileReader
     resultsfound=0
     File.open(filename, "r") do |file|
 
-      file.each_line do |line|
-        #oline.each("\r") do |line|
+      file.each_line do |oline|
+        oline.each_line("\r") do |line|
         lineno += 1
 
         # skip blank lines
@@ -1010,8 +1010,8 @@ class ResultFileReader < FileReader
           end
         else
         end
-        #end
-      end #line
+        end #line
+      end #oline
     end #file
     
     if resultsfound==0 and classname
