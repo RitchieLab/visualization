@@ -130,7 +130,7 @@ class Arg
         options.p_thresh = pthresh.to_f
       end
       opts.on("-m, --maxp [max_p_value]", "Maximum p value to plot.  Values greater are not plotted") do |max_p_value|
-        options.maxp_to_plot = max_p_value
+        options.maxp_to_plot = max_p_value.to_f
       end
       opts.on("-R, --redline [redline]", "Draw red line at designated p value") do |redline|
         options.redline = redline
@@ -159,7 +159,7 @@ class Arg
       end
       opts.on("-s [snp_id]", "SNP to display from input file") do |snp_id|
         options.snpid = snp_id
-      end    
+      end
       opts.on("-L [phenotype_list_file]", "Optional phenotype list for inclusion") do |phenotype_list_file|
         options.phenotype_listfile = phenotype_list_file
       end
@@ -217,8 +217,6 @@ class Arg
 
     if options.sun_file
       if !options.phewasfile or (!options.phenoname and !options.snpid and !options.genename)
-        #help_string = opts.help
-        #puts "\n",help_string,"\n"
         option_list
         puts "\nExamples: #{Name}.rb -e NHANES3_PheWAS_Whites_Merge_sorted.txt -o NHANES3_PheWas\n\n"
         puts "          #{Name}.rb -e NHANES3_PheWAS_combined.txt -p 0.1 -t \"rs2197089 results\" -s rs2197089 -o rs2197089_EA_AA\n\n"
@@ -226,8 +224,6 @@ class Arg
       end      
     else
       if !options.phewasfile
-#        help_string = opts.help
-#        puts "\n",help_string,"\n"
         option_list
         puts "\nExamples: #{Name} -e NHANES3_PheWAS_Whites_Merge_sorted.txt -o NHANES3_PheWas\n\n"
         puts "          #{Name} -e NHANES3_PheWAS_combined.txt -p 0.1 -b -t \"EA AA rs2197089\" -s rs2197089 -r EA,AA -o rs2197089_EA_AA\n\n"
@@ -610,7 +606,7 @@ class ResultHolder
   def get_pval_color(pval, result)
     if pval < @pval_threshold.to_f
       return @nonsigcolor
-    elsif @pheno_list.phenotype_expected?(result.pheno_run_for, result.pheno)
+    elsif @pheno_list.expected_phenotype?(result.pheno, result.SNP)
       return @expectedcolor
     else
       return @unexpectedcolor
@@ -796,6 +792,7 @@ class PhenoList
     @pheno_hash = Hash.new
     @pheno_order = Array.new
     @pheno_group = Hash.new
+    @expected = Hash.new
   end
 
   def add_pheno(phenoname)
@@ -813,6 +810,10 @@ class PhenoList
     end
   end
 
+  def add_expected_pheno(phenotype,snps)
+    @expected[phenotype]=Hash.new unless @expected[phenotype]
+    snps.each {|snpname|@expected[phenotype][snpname]=true}
+  end
 
   # adds keyword to hash that includes groupname
   def add_pheno_keyword(group, keyword)
@@ -824,7 +825,7 @@ class PhenoList
 
 
   # returns phenotype group name based on phenotype passed (which should be one from candidate
-  # study)
+  # study) 
   def get_group_name(phenostr)
     val = "none"
     @pheno_group.each do |phenogroup, keywordhash|
@@ -838,6 +839,12 @@ class PhenoList
     return val
   end
 
+  
+  def expected_phenotype?(phenotype, snpname)
+    return @expected[phenotype][snpname] if @expected[phenotype]
+    return false 
+  end
+  
 
   # returns true when result is expected by the phenotypes
   # otherwise returns false
@@ -946,9 +953,9 @@ class ResultFileReader < FileReader
         elsif !@pvalcol
           print "\nNo P_value column header in file #{filename}\n\n"
           exit
-        elsif !@groupcol and grouprequired
-          print "\nNo Associated_Phenotype column in file #{filename}\n\n"
-          exit
+#        elsif !@groupcol and grouprequired
+#          print "\nNo Associated_Phenotype column in file #{filename}\n\n"
+#          exit
         elsif !@sampsizecol and samprequired
           print "\nNo sample_size column in file #{filename}\n\n"
           exit
@@ -1063,43 +1070,24 @@ end #ResultFileReader
 ############################################################################
 class ExpectedPhenoReader < FileReader
 
-  # main function for reading file
+  # file consists of a phenotype followed by the SNPs expected to be associated
+  # each line is a phenotype
   def read_file(resultholder, filename)
-
-    firstline = true
-
-
-    @column_headers = Array.new
-
+    
+    # no header in file
     File.open(filename, "r") do |file|
-
       file.each_line do |oline|
         oline.each("\r") do |line|
-        # skip blank lines
-        if line !~ /\w/
-          next
+          #skip blank lines
+          next if line !~ /\w/
+          
+          # split the line with first being the phenotype
+          data = strip_and_split(line)
+          resultholder.pheno_list.add_expected_pheno(data[0], data[1..data.length-1])
         end
-
-        # for first line read the column headers
-        if firstline
-          get_columns(line)
-          firstline = false
-          next
-        end
-
-        # standard line of input - add result to ResultHolder
-        data = strip_and_split(line)
-
-        data.each_with_index do |keyword, i|
-          if keyword =~ /\w/
-            resultholder.pheno_list.add_pheno_keyword(@column_headers[i], keyword)
-          end
-        end
-
-        end
-      end #line
-    end #file
-
+      end
+    end
+    
   end
 
 
@@ -1522,7 +1510,6 @@ class SunResultFileReader < FileReader
     lineno = 0
 
     File.open(filename, "r") do |file|
-
       file.each_line do |oline|
         oline.each("\r") do |line|
         lineno += 1
@@ -1554,16 +1541,15 @@ class SunResultFileReader < FileReader
 #        elsif !@phenolongcol
 #          print "\nNo phenotype_long column in file #{filename}\n\n";
 #          exit
-        elsif !@assoc_phenocol and resultholder.phenorequired
-          print "\nNo Associated_Phenotype column in file #{filename}\n\n"
-          exit
+#        elsif !@assoc_phenocol and resultholder.phenorequired
+#          print "\nNo Associated_Phenotype column in file #{filename}\n\n"
+#          exit
         end
 
        resultname = ''
 
         # skip if it isn't the right SNP or phenotype for center
         snpname = data[@snpcol].downcase
-  
         if data[@pvalcol].to_f <= p_cut
           if snpname.downcase == restrict_name# and data[@pvalcol].to_f <= p_cut
             if @substudycol
@@ -1599,15 +1585,15 @@ class SunResultFileReader < FileReader
           
           if resultholder.appendeth && @ethcol
             resultname += ' (' + data[@ethcol] + ')'
-          end
-          
-          resultholder.add_score(resultname, data[@pvalcol], betaval);
+          end          
+          resultholder.add_score(resultname, data[@pvalcol].to_f, betaval);
         end # p-value <= p_cut
         end
       end #line
     end #file
     # sort based on value
     resultholder.results.sort_scores_by_value
+    
     resultholder.center_name += "\n#{genename}" if resultholder.appendgene 
   end
 
@@ -1805,7 +1791,9 @@ class RadialPlotter
         end
         if i==0
           pval = reslist.get_pval(reslist.scores[reslist.ordered[i]].pval)
-          if pval < 0.001
+          if pval < 0.0001
+            label += "\n" + (sprintf "%.2g", reslist.get_pval(reslist.scores[reslist.ordered[i]].pval))
+          elsif pval < 0.001
             label += "\n" + (sprintf "%.4f", reslist.get_pval(reslist.scores[reslist.ordered[i]].pval))
           elsif pval < 0.01
             label += "\n" + (sprintf "%.3f", reslist.get_pval(reslist.scores[reslist.ordered[i]].pval))
@@ -2509,8 +2497,8 @@ class DotPlotter
         xpoints = Array.new
         ypoints = Array.new
 
-        xpoints << point.x-@diameter
-        xpoints << point.x+@diameter
+        xpoints << point.x-@diameter/2
+        xpoints << point.x+@diameter/2
         xpoints << point.x
 
         y_adjust = @diameter
@@ -2862,6 +2850,7 @@ def draw_sun(options)
   resultholder.appendeth = options.include_eth
   
   resreader = SunResultFileReader.new
+
   resreader.read_file(resultholder, options.phewasfile, options.maxp_to_plot.to_f)
 
   # need to figure out height and width for plot
@@ -2944,7 +2933,7 @@ def draw_sun(options)
     plotter.write_main_title(options.title, 0, y_title_start, xmax, y_plot_start, false)
 
     p_val_thresh = resultholder.results.get_neg_log(options.p_thresh)
-    
+
     plotter.draw_main_plot(:center_name=>resultholder.center_name, :reslist=>resultholder.results,
       :midx=>xmax/2, :ystart=>y_plot_start, :yend=>ymax, :p_thresh=>p_val_thresh, 
       :total_radii=>total_radii, :use_beta=>options.beta)
