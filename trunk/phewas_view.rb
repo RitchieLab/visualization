@@ -953,9 +953,6 @@ class ResultFileReader < FileReader
         elsif !@pvalcol
           print "\nNo P_value column header in file #{filename}\n\n"
           exit
-#        elsif !@groupcol and grouprequired
-#          print "\nNo Associated_Phenotype column in file #{filename}\n\n"
-#          exit
         elsif !@sampsizecol and samprequired
           print "\nNo sample_size column in file #{filename}\n\n"
           exit
@@ -964,10 +961,6 @@ class ResultFileReader < FileReader
           exit          
         elsif !@ethcol
           resultholder.single_snp = nil
-#        elsif !@phenolongcol
-#          print "\nNo phenotype_long column in file #{filename}\n\n";
-#          exit
-
         end
 
         # skip results when only a single SNP is needed
@@ -1215,26 +1208,7 @@ class CorrelationReader < FileReader
     # first two lines contain the phenotype names for the columns
     # first two columns are for identifying the horizontal phenotype names
     f = File.new(filename, "r")    
-    
-#    ofirstline = f.readline
-#    firstdata = strip_and_split(firstline)
-#    firstdata.shift
-#    firstdata.shift
-#
-#    secondline = f.readline
-#    seconddata = strip_and_split(secondline)
-#    seconddata.shift
-#    seconddata.shift
-#
-#    columns = Array.new
-#
-#    # set up array of concatenated names
-#    firstdata.each_with_index do |first, i|
-#      name = first + ": " + seconddata[i]
-#      name.gsub!('"', '')
-#      columns.push(name)
-#    end
-   
+ 
     # process all remaining lines
     linenum=0
     while(oline=f.gets)
@@ -1538,12 +1512,6 @@ class SunResultFileReader < FileReader
         elsif !@pvalcol
           print "\nNo P_value column header in file #{filename}\n\n"
           exit
-#        elsif !@phenolongcol
-#          print "\nNo phenotype_long column in file #{filename}\n\n";
-#          exit
-#        elsif !@assoc_phenocol and resultholder.phenorequired
-#          print "\nNo Associated_Phenotype column in file #{filename}\n\n"
-#          exit
         end
 
        resultname = ''
