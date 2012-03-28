@@ -156,7 +156,7 @@ class Arg
       end
 
       opts.on("-t [title_str]", "Main title for plot (enclose in quotes)") do |title_str|
-        if title_str and title_str =~ /\w/
+        if title_str
           options.title = title_str
         else
           options.title = "-log10(p-value) plot"
