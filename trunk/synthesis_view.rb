@@ -156,7 +156,7 @@ class Arg
       end
 
       opts.on("-t [title_str]", "Main title for plot (enclose in quotes)") do |title_str|
-        if title_str
+        if title_str 
           options.title = title_str
         else
           options.title = "-log10(p-value) plot"
@@ -771,7 +771,7 @@ class SNPCombination
     @snp2 = snp2
     @rsquared = rsquared.to_f
     @lod_score = lod_score.to_f
-    @dprime = dprime.to_f
+    @dprime = dprime.to_f 
   end
 
 end
@@ -852,11 +852,18 @@ class SNPList
   # returns maximum number of iteractions for any SNP in list
   def get_max_interactions
     max_interaction = 0
-    @ld_scores.values.each do |snp_combo_array|
-      if snp_combo_array.length > max_interaction
-        max_interaction = snp_combo_array.length
+#    @ld_scores.values.each do |snp_combo_array|
+#      if snp_combo_array.length > max_interaction
+#        max_interaction = snp_combo_array.length
+#      end
+#    end
+    
+    @ld_scores.each_key do |snpname|
+      if @ld_scores[snpname].length > max_interaction
+        max_interaction = @ld_scores[snpname].length
       end
     end
+    
     return max_interaction
   end
 
@@ -879,11 +886,14 @@ class SNPList
   # key is the first snp
   def add_ld_score(snp_combination)
     if !@ld_scores.has_key?(snp_combination.snp1)
-      @ld_scores[snp_combination.snp1] = Array.new
+      @ld_scores[snp_combination.snp1] = Hash.new
       @included_snps_hash[snp_combination.snp1] = true
       @included_snps_hash[snp_combination.snp2] = true
     end
-    @ld_scores[snp_combination.snp1] << snp_combination
+    @ld_scores[snp_combination.snp2]=Hash.new unless @ld_scores.has_key?(snp_combination.snp2)
+    #@ld_scores[snp_combination.snp1] << snp_combination
+    @ld_scores[snp_combination.snp1][snp_combination.snp2]=snp_combination
+    @ld_scores[snp_combination.snp2][snp_combination.snp1]=snp_combination
   end
 
   # sets up included snp array
@@ -3012,8 +3022,12 @@ class PlotWriter
       snp = snp_list.snps[snp_index]
       y_current_start += @box_size
       y = y_current_start
+      start_index = snp_index +1
+      end_index = snp_list.included_snps.length-1
       if snp_list.ld_scores.has_key?(snp.name)
-        snp_list.ld_scores[snp.name].each do |snp_combo|
+        (start_index..end_index).each do |snp2_index|
+          snp2 = snp_list.snps[snp2_index]
+          snp_combo = snp_list.ld_scores[snp.name][snp2.name]
           block_color = get_ld_block_color(snp_combo, use_dprime)
           if use_block_stroke
             stroke_color = block_color
@@ -3360,7 +3374,6 @@ class SynthesisViewReader<FileReader
         end
       end
       group_column, subgroup_column = check_subgroup(lines[0])  
-      #puts "group_column=#{group_column} #{subgroup_column}"
       unless subgroup_column || group_column
         set_groups(glisthash, lines[0], defaultkey, highlighted_group)
       else
@@ -3662,7 +3675,6 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
 
       if column_type =~ /pval/i
         groupkeys.each do |key|
-          puts "#{key} pcol=#{i}"
           groups[key].pcol = i
         end
       elsif column_type =~ /beta_uci|betauci/
@@ -3813,7 +3825,6 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
           groups.store(pcs[0], Group.new(pcs[0], highlighted, GroupList.get_next_color))
           grouporder << pcs[0]
         end
-        #puts "fetching #{pcs[0]}"
         currgroup = groups.fetch(pcs[0])
         column_type = pcs[1].strip
       else # create subgroup if necessary and set current group to be this subgroup
@@ -3825,9 +3836,7 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
           groups.store(key, Group.new(key, highlighted))
           grouporder << key
         end
-        #puts "fetching #{key}"
         currgroup = groups.fetch(key)
-        #puts "fetched group"
         column_type = pcs[2].strip
       end
 
@@ -3963,7 +3972,6 @@ end
       file.each_line do |oline|
 
         oline.each("\r") do |line|
-          #puts splitline.length
         next if line =~ /^\n$/
 
         # skip blank lines
@@ -4031,7 +4039,6 @@ end
       File.open(abbrevfile) do |file|
         file.each_line do |oline|
           oline.each("\r") do |line|
-          #puts splitline.length
           next if line =~ /^\n$/
           if line !~ /\w/
             next
@@ -4058,13 +4065,12 @@ end
       File.open(ldfile, "r") do |file|
         file.each_line  do |oline|
           oline.each("\r") do |line|
-          #puts splitline.length
           next if line =~ /^\n$/
           if line =~ /LOD/
             next
           end
 
-          data=strip_and_split(line)
+          data=strip_and_split(line)         
           snp_lds << SNPCombination.new(data[0], data[1], data[2], data[3], data[4])
           end
         end
@@ -4087,7 +4093,6 @@ end
       File.open(genefile, "r") do |file|
         file.each_line do |oline|
           oline.each("\r") do |line|
-          #puts splitline.length
           next if line =~ /^\n$/
           # skip header line
           if first_line
