@@ -2244,7 +2244,7 @@ class DotPlotter
     end
 
     pval_labels(canvas, minpval, maxpval, 10, xstart,  y_plots_start, offset_mult*@x_offset, y_plots_start+y_interval,
-      font_size, "-log(p value)", rotate)
+      font_size, "-log10(p value)", rotate)
 
     beta_ystart = ystart
     if plot_beta
@@ -2490,7 +2490,7 @@ class DotPlotter
 
 
   # draw and label p values along the vertical axis
-  def pval_labels(canvas, min, max, num_intervals, xstart, ystart, xend, yend, font_size, plot_title="",rotate=false)
+  def pval_labels(canvas, min, max, num_intervals, xstart, ystart, xend, yend, font_size, plot_title,rotate)
     pval_interval = max-min
     stat_break = pval_interval.to_f/num_intervals
     y_interval = yend - ystart
@@ -2512,9 +2512,12 @@ class DotPlotter
       y=y_interval+@diameter/4
     end
 
+    max_label_length=0
+    
     num_intervals.times do |curr_break|
       canvas.g.translate(xstart,ystart).text(num_x, y).rotate(rotation) do |text|
         label = compress_number(current_stat_value, precision)
+        max_label_length = label.length if label.length > max_label_length
         text.tspan(label).styles(:font_size=>font_size/1.4, :text_anchor=>anchor)
         current_stat_value += stat_break
         y -= y_break
@@ -2531,8 +2534,9 @@ class DotPlotter
       end
     end
 
+    dist_mult = max_label_length.to_i/2 + 1.25
     # add title for this portion of plot
-    canvas.g.translate(xstart,ystart).text(num_x-@diameter*4.5,y_interval/2).rotate(-90) do |text|
+    canvas.g.translate(xstart,ystart).text(num_x-@diameter*dist_mult,y_interval/2).rotate(-90) do |text|
       text.tspan(plot_title).styles(:font_size=>font_size, :text_anchor=>'middle')
     end
 
@@ -2751,6 +2755,7 @@ def draw_phewas(options)
       resultholder.minpval = resultholder.get_log10(options.maxp_to_plot.to_f)
     end
 
+    rotate_grid_offset = dotter.diameter*3.0
     # add legend when only single SNP plotted
     if !resultholder.single_snp.nil? 
       # only draw legend including ethnicities and colors selected
@@ -2760,7 +2765,7 @@ def draw_phewas(options)
           ethcolorhash[ethname] = resultholder.ethmap.eths[ethname].colorstr
         end
       end
-
+      rotate_grid_offset = 0
       dotter.draw_legend(canvas, ethcolorhash, 0, y_pval_start, options.rotate)
     end
 
@@ -2768,7 +2773,7 @@ def draw_phewas(options)
   
     if options.rotate and options.phenotype_correlations_file
       ygrid_orig = ygrid_start
-      ygrid_start = y_pval_start
+      ygrid_start = y_pval_start + rotate_grid_offset
       y_pval_start = ymax- ygrid_orig + y_pval_start
     end
     dotter.draw_standard_dot(canvas, resultholder.pheno_list.pheno_order, plot_values,
