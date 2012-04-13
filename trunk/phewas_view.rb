@@ -1070,7 +1070,7 @@ class ExpectedPhenoReader < FileReader
     # no header in file
     File.open(filename, "r") do |file|
       file.each_line do |oline|
-        oline.each("\r") do |line|
+        oline.each_line("\r") do |line|
           #skip blank lines
           next if line !~ /\w/
           
@@ -1115,7 +1115,7 @@ class EthMapReader < FileReader
     File.open(filename, "r") do |file|
 
       file.each_line do |oline|
-        oline.each("\r") do |line|
+        oline.each_line("\r") do |line|
         # skip blank lines
         if line !~ /\w/
           next
@@ -1167,7 +1167,7 @@ class CorrelationReader < FileReader
     startline=2
     tfile = File.new(filename, "r")
     while(oline=tfile.gets)
-      oline.each("\r") do |line|
+      oline.each_line("\r") do |line|
         next if line !~ /\w/
         linenum+=1
         if linenum==1
@@ -1212,7 +1212,7 @@ class CorrelationReader < FileReader
     # process all remaining lines
     linenum=0
     while(oline=f.gets)
-      oline.each("\r") do |line|
+      oline.each_line("\r") do |line|
 
       next if line !~ /\w/
       linenum+=1
@@ -1256,7 +1256,7 @@ class PhenoListReader < FileReader
 
     File.open(filename, "r") do |file|
       file.each_line do |oline|
-        oline.each("\r") do |line|
+        oline.each_line("\r") do |line|
         if line !~ /\w/ or firstline
           firstline = false
           next
@@ -1292,7 +1292,7 @@ class CodeMapReader < FileReader
     File.open(filename, "r") do |file|
 
       file.each_line do |oline|
-        oline.each("\r") do |line|
+        oline.each_line("\r") do |line|
         # skip blank lines
         if line !~ /\w/
           next
@@ -1485,7 +1485,7 @@ class SunResultFileReader < FileReader
 
     File.open(filename, "r") do |file|
       file.each_line do |oline|
-        oline.each("\r") do |line|
+        oline.each_line("\r") do |line|
         lineno += 1
 
         # skip blank lines
