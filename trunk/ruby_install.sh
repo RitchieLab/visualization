@@ -61,7 +61,7 @@ if test $INSTALL_IM -eq 1; then
 	echo "Installing ImageMagick..."
 	echo "Downloading ImageMagick.tar.gz"
 	curl $IM_WEBSITE > ImageMagick.tgz
-	IM_DIR=`tar -xvzf ImageMagick.tgz | sed 's/\/.*.//g' | tail -1`
+	IM_DIR=`tar -xvzf ImageMagick.tgz 2>&1 | sed 's/\/.*.//g' | tail -1 | sed 's/.*[ \t]//g'`
 	cd $IM_DIR
 	./configure >/dev/null
 	make >/dev/null 2>&1
