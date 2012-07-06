@@ -97,6 +97,7 @@ class Arg
     options.classname = nil
     options.showbest = false
     options.include_all_eths = true
+    options.label_cols = Array['phenotype', 'phenotype_long', 'substudy']
     help_selected = false
     version_selected = false
 
@@ -184,7 +185,10 @@ class Arg
       opts.on("-E", "Include ancestry as description of result for sun plot") do |eth|
         options.include_eth = true
       end
-      
+      opts.on("-T [text_columns]",Array, "List columns for inclusion in text label") do |text_columns|
+        #options.label_cols.push(*text_columns)
+        options.label_cols = text_columns
+      end
       opts.on_tail("-h", "--help", "Show this usage statement") do
         #puts opts
         help_selected = true
@@ -196,7 +200,6 @@ class Arg
       
     end
     
-
     begin
       opts.parse!(args)
     rescue Exception => e
@@ -1461,7 +1464,7 @@ end
 class SunResultFileReader < FileReader
 
   # main function for reading file
-  def read_file(resultholder, filename, p_cut)
+  def read_file(resultholder, filename, p_cut, label_headers)
 
     firstline = true
 
@@ -1480,6 +1483,8 @@ class SunResultFileReader < FileReader
     @genecol = nil
     @phenoclasscol = nil
 
+    @label_columns = Array.new
+    
     genename = nil
     lineno = 0
 
@@ -1495,7 +1500,7 @@ class SunResultFileReader < FileReader
 
         # for first line read the column headers
         if firstline
-          get_columns(line)
+          get_columns(line, label_headers)
           firstline = false
           next
         end
@@ -1520,15 +1525,17 @@ class SunResultFileReader < FileReader
         snpname = data[@snpcol].downcase
         if data[@pvalcol].to_f <= p_cut
           if snpname.downcase == restrict_name# and data[@pvalcol].to_f <= p_cut
-            if @substudycol
-              resultname = data[@phenocol]
-              resultname += ':' + data[@phenolongcol] if @phenolongcol
-              resultname +=  ':' + data[@substudycol]
-            else
-              resultname = data[@phenocol]
-              resultname += ' ' + data[@phenolongcol] if @phenolongcol
-            end
-            
+#            if @substudycol
+#              resultname = data[@phenocol]
+#              resultname += ':' + data[@phenolongcol] if @phenolongcol
+#              resultname +=  ':' + data[@substudycol]
+#            else
+#              resultname = data[@phenocol]
+#              resultname += ' ' + data[@phenolongcol] if @phenolongcol
+              resultname = ''
+              @label_columns.each {|col| resultname += ':' + data[col] if data[col]}
+              resultname.slice!(0)
+#            end           
             genename = data[@genecol] if @genecol && data[@genecol]=~/[a-zA-Z0-9]/
           elsif data[@phenocol].downcase == restrict_name
             resultname = snpname
@@ -1567,7 +1574,7 @@ class SunResultFileReader < FileReader
 
 
   # gets columns from tab delimited strings in line and sets variables for identifying columns
-  def get_columns(line)
+  def get_columns(line, label_headers)
     data = strip_and_split(line)
 
     data.each_with_index do |header, i|
@@ -1597,6 +1604,17 @@ class SunResultFileReader < FileReader
         @phenoclasscol = i
       end
     end #data
+    
+    # ID the label headers
+    label_headers.each do |label|
+      data.each_with_index do |header,i|
+        if header =~ /^\s*#{label}\s*$/i
+          @label_columns << i
+          break
+        end
+      end
+    end
+    
   end
 
 end #ResultFileReader
@@ -2824,7 +2842,8 @@ def draw_sun(options)
   
   resreader = SunResultFileReader.new
 
-  resreader.read_file(resultholder, options.phewasfile, options.maxp_to_plot.to_f)
+  resreader.read_file(resultholder, options.phewasfile, options.maxp_to_plot.to_f, 
+    options.label_cols)
 
   # need to figure out height and width for plot
   # width is more straightforward
