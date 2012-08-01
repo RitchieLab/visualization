@@ -769,8 +769,8 @@ class PhenoGramFileReader < FileHandler
       end
     end
     
-    unless @snpcol and @chromcol and @bpcol and @phenocol
-      raise 'Input file must include SNP, chrom, pos, phenotype columns'
+    unless @chromcol and @bpcol and @phenocol
+      raise 'Input file must include chrom, pos, phenotype columns'
     end
     
   end
@@ -784,7 +784,13 @@ class PhenoGramFileReader < FileHandler
       # add SNP info 
       pheno = phenoholder.add_phenotype(data[@phenocol])
 
-      genome.add_snp(:name => data[@snpcol], :chr=>data[@chromcol], :pos=>data[@bpcol],
+      if @snpcol
+        name = data[@snpcol]
+      else
+        name = data[@chromcol] + "." + data[@bpcol]
+      end
+      
+      genome.add_snp(:name => name, :chr=>data[@chromcol], :pos=>data[@bpcol],
         :pheno=>pheno)
     end  
     close   
@@ -1612,6 +1618,117 @@ class PhenotypeLabels < Plotter
   end
 end
 
+def draw_plot(genome, phenoholder, options)
+  
+  if options.pheno_spacing == 'standard'
+    alternative_pheno_spacing = :standard
+  elsif options.pheno_spacing == 'equal'
+    alternative_pheno_spacing = :equal
+  else
+    alternative_pheno_spacing = :alternative  
+  end
+  
+  # 6 phenotypes in a row (when more wrap around with some overlap to show they are
+  # linked) -- main problem will be the verical spacing of the dots
+  # will be done in matched pairs (1 & 13, 2 & 14 etc.)
+  # 
+  # 1.0 inches at top
+  # 4.5 inches for top row of chromosomes
+  # 2.5 inches for bottom row of chromosomes
+  # 0.5 inches between two rows
+  # 1.0 inches to list below
+  # 8.0 inches to display phenotypes (probably make this dynamic)
+
+  # so 19.5 inches vertical X 10 inches horizontal
+
+  # a circle will be 5Y in height
+  # max chrom size (1) will be 40 circles (or 200Y) in height
+  # chromosome will be 2 circles wide
+  circle_size = 20
+  num_circles_in_row=7
+  Plotter.set_circle(circle_size)
+  Plotter.set_maxchrom(Chromosome.chromsize(1))
+  chrom_width = circle_size * 1.5
+  chrom_circles_width = circle_size * num_circles_in_row
+  chrom_box_width = chrom_circles_width + chrom_width
+  ChromosomePlotter.set_chrom_width(chrom_width)
+  ChromosomePlotter.set_phenos_row(num_circles_in_row-1)
+  title_margin = circle_size * 7
+  first_row_start = title_margin
+
+  max_chrom_height = 40 * circle_size
+  max_chrom_box = max_chrom_height + circle_size * 4
+  # X chromosome will be largest chromosome in second row
+  second_row_start = max_chrom_box + first_row_start
+
+  second_row_start -= circle_size*5 if alternative_pheno_spacing == :standard
+
+  second_row_box_max = max_chrom_box * Chromosome.chromsize(23)/Chromosome.chromsize(1)
+
+  phenotypes_per_row = 5
+  phenotype_rows = phenoholder.phenonames.length/phenotypes_per_row
+  phenotype_rows += 1 unless phenoholder.phenonames.length % phenotypes_per_row == 0
+
+  total_y = second_row_start + second_row_box_max
+
+  # each row should be 2 circles high + 2 circle buffer on top
+  phenotype_labels_total = circle_size * 2 * (phenotype_rows+1)
+  phenotype_labels_y_start = total_y
+  total_y += phenotype_labels_total
+  # total y for now
+  width_in = 8
+
+  padded_width = circle_size
+  # total_y is 2 for chromsome width 6 for circles * number of chroms + space on sides
+  total_x = (chrom_width + num_circles_in_row * circle_size )* 12 + padded_width * 2
+  # height can now be determined based on a width of 10 and the ratios
+  # of the total x and total y
+  height_in = width_in * total_y / total_x.to_f
+
+  xmax = total_x
+  ymax = total_y
+
+  inches_ratio = height_in/width_in.to_f
+  coord_ratio = ymax/xmax.to_f
+
+  rvg=RVG.new(width_in.in, height_in.in).viewbox(0,0,xmax,ymax) do |canvas|
+    canvas.background_fill = 'rgb(255,255,255)'
+    xstart = padded_width
+ 
+    Title.draw_center(:canvas=>canvas, :title=>options.title, :ypos=>title_margin-circle_size*3,
+      :xtotal=>xmax)
+  
+    # draw each chromosome (first 12 on top row and then second 12 below)
+    (1..12).each do |chr|
+      ChromosomePlotter.plot_chrom(:canvas=>canvas, :chrom=>genome.chromosomes[chr], 
+        :xstart=>xstart, :ystart=>first_row_start, :height=>max_chrom_height, :alt_spacing=>alternative_pheno_spacing)
+      xstart += chrom_box_width 
+    end
+  
+    xstart = padded_width
+    (13..24).each do |chr|
+      ChromosomePlotter.plot_chrom(:canvas=>canvas, :chrom=>genome.chromosomes[chr], 
+        :xstart=>xstart, :ystart=>second_row_start, :height=>second_row_box_max, :alt_spacing=>alternative_pheno_spacing)    
+      xstart += chrom_box_width
+    end
+  
+    PhenotypeLabels.draw(:canvas=>canvas, :xstart=>padded_width, :ystart=>phenotype_labels_y_start,
+      :phenoholder=>phenoholder, :pheno_row=>phenotypes_per_row, :xtotal=>xmax-padded_width)
+  
+  end
+
+  # produce output file
+  outfile = options.out_name + '.' + options.imageformat
+  print "\n\tDrawing #{outfile}..."
+  STDOUT.flush
+  img = rvg.draw
+
+  img.write(outfile)
+
+  print " Created #{outfile}\n\n"
+end
+
+
 options = Arg.parse(ARGV)
 
 srand(options.rand_seed)
@@ -1622,111 +1739,6 @@ filereader = PhenoGramFileReader.new
 
 filereader.parse_file(options.input, genome, phenoholder)
 
-if options.pheno_spacing == 'standard'
-  alternative_pheno_spacing = :standard
-elsif options.pheno_spacing == 'equal'
-  alternative_pheno_spacing = :equal
-else
-  alternative_pheno_spacing = :alternative
-  
-end
-
-# 6 phenotypes in a row (when more wrap around with some overlap to show they are
-# linked) -- main problem will be the verical spacing of the dots
-# will be done in matched pairs (1 & 13, 2 & 14 etc.)
-# 
-# 1.0 inches at top
-# 4.5 inches for top row of chromosomes
-# 2.5 inches for bottom row of chromosomes
-# 0.5 inches between two rows
-# 1.0 inches to list below
-# 8.0 inches to display phenotypes (probably make this dynamic)
-
-# so 19.5 inches vertical X 10 inches horizontal
-
-# a circle will be 5Y in height
-# max chrom size (1) will be 40 circles (or 200Y) in height
-# chromosome will be 2 circles wide
-circle_size = 20
-num_circles_in_row=7
-Plotter.set_circle(circle_size)
-Plotter.set_maxchrom(Chromosome.chromsize(1))
-chrom_width = circle_size * 1.5
-chrom_circles_width = circle_size * num_circles_in_row
-chrom_box_width = chrom_circles_width + chrom_width
-ChromosomePlotter.set_chrom_width(chrom_width)
-ChromosomePlotter.set_phenos_row(num_circles_in_row-1)
-title_margin = circle_size * 7
-first_row_start = title_margin
-
-max_chrom_height = 40 * circle_size
-max_chrom_box = max_chrom_height + circle_size * 4
-# X chromosome will be largest chromosome in second row
-second_row_start = max_chrom_box + first_row_start
-
-second_row_start -= circle_size*5 if alternative_pheno_spacing == :standard
-
-second_row_box_max = max_chrom_box * Chromosome.chromsize(23)/Chromosome.chromsize(1)
-
-phenotypes_per_row = 5
-phenotype_rows = phenoholder.phenonames.length/phenotypes_per_row
-phenotype_rows += 1 unless phenoholder.phenonames.length % phenotypes_per_row == 0
-
-total_y = second_row_start + second_row_box_max
-
-# each row should be 2 circles high + 2 circle buffer on top
-phenotype_labels_total = circle_size * 2 * (phenotype_rows+1)
-phenotype_labels_y_start = total_y
-total_y += phenotype_labels_total
-# total y for now
-width_in = 8
-
-padded_width = circle_size
-# total_y is 2 for chromsome width 6 for circles * number of chroms + space on sides
-total_x = (chrom_width + num_circles_in_row * circle_size )* 12 + padded_width * 2
-# height can now be determined based on a width of 10 and the ratios
-# of the total x and total y
-height_in = width_in * total_y / total_x.to_f
-
-xmax = total_x
-ymax = total_y
-
-inches_ratio = height_in/width_in.to_f
-coord_ratio = ymax/xmax.to_f
-
-rvg=RVG.new(width_in.in, height_in.in).viewbox(0,0,xmax,ymax) do |canvas|
-  canvas.background_fill = 'rgb(255,255,255)'
-  xstart = padded_width
- 
-  Title.draw_center(:canvas=>canvas, :title=>options.title, :ypos=>title_margin-circle_size*3,
-    :xtotal=>xmax)
-  
-  # draw each chromosome (first 12 on top row and then second 12 below)
-  (1..12).each do |chr|
-    ChromosomePlotter.plot_chrom(:canvas=>canvas, :chrom=>genome.chromosomes[chr], 
-      :xstart=>xstart, :ystart=>first_row_start, :height=>max_chrom_height, :alt_spacing=>alternative_pheno_spacing)
-    xstart += chrom_box_width 
-  end
-  
-  xstart = padded_width
-  (13..24).each do |chr|
-    ChromosomePlotter.plot_chrom(:canvas=>canvas, :chrom=>genome.chromosomes[chr], 
-      :xstart=>xstart, :ystart=>second_row_start, :height=>second_row_box_max, :alt_spacing=>alternative_pheno_spacing)    
-    xstart += chrom_box_width
-  end
-  
-  PhenotypeLabels.draw(:canvas=>canvas, :xstart=>padded_width, :ystart=>phenotype_labels_y_start,
-    :phenoholder=>phenoholder, :pheno_row=>phenotypes_per_row, :xtotal=>xmax-padded_width)
-  
-end
+draw_plot(genome, phenoholder, options)
 
 
-# produce output file
-outfile = options.out_name + '.' + options.imageformat
-print "\n\tDrawing #{outfile}..."
-STDOUT.flush
-img = rvg.draw
-
-img.write(outfile)
-
-print " Created #{outfile}\n\n"
