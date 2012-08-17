@@ -100,6 +100,7 @@ class Arg
     options.include_dist_track = false
     options.plot_power = false
     options.grayscale = false
+    options.additional_columns = Array.new
 
     return options
   end
@@ -202,6 +203,10 @@ class Arg
         options.plot_beta = true
       end
 
+      opts.on("-u [columns]", Array, "Columns to plot that are not standard") do |columns|
+        options.additional_columns = columns
+      end
+      
       opts.on("-n [eff_name]", "Effect size name (beta or es)") do |eff_name|
         options.effect_name = eff_name
       end
@@ -391,6 +396,14 @@ class ChromosomeList
     @maxscore['betalci'] = -100000
   end
 
+  
+  def set_columns(add_columns)
+    add_columns.each do |column|
+      @minscore[column]=1e20
+      @maxscore[column]=-1e20
+    end
+  end
+  
   # returns length of longest SNP name in chromosome list
   def get_max_snp_name
     max_name = 0
@@ -465,7 +478,6 @@ class ChromosomeList
               if res.values[scorekey] !~ /\d/
                 next
               end
-              
               if res.values[scorekey].to_f > @maxscore[scorekey].to_f
                 @maxscore[scorekey] = res.values[scorekey]
               end
@@ -733,7 +745,7 @@ class SNP
 	end
 
 	def add_result(groupname, pval, betaval, maf, sampsizeval, orval, lci, uci, ca, con, cafca, cafcon,
-	  studynum, pownum, betauci, betalci)
+	  studynum, pownum, betauci, betalci, add_columns)
 
 		@results[groupname] =  RegressResult.new
 		@results[groupname].values['pvalue'] = pval
@@ -751,6 +763,7 @@ class SNP
     @results[groupname].values['power'] = pownum
     @results[groupname].values['betauci'] = betauci
     @results[groupname].values['betalci'] = betalci
+    add_columns.each_pair{|key,value| @results[groupname].values[key]=value}
 	end
 
 end
@@ -986,7 +999,7 @@ end
 class Group
   attr_accessor :name, :pcol, :betacol, :colorstr, :mafcafcol, :values, :Ncol, :subgroups,
     :orcol, :ucicol, :lcicol, :casescol, :controlscol, :cafcasescol, :cafcontrolscol, :studycol,
-    :fullname, :highlighted, :powercol, :betaucicol, :betalcicol
+    :fullname, :highlighted, :powercol, :betaucicol, :betalcicol, :additional_cols
 
   #def initialize(n, pc, bc, freqcol, col, sampsizecol, oddsratio, uci, lci, cacol, concol,
   #  cafcacol, cafconcol, studycol, powcol, beta_ucicol, beta_lcicol, hilite=false)
@@ -1013,6 +1026,7 @@ class Group
     @highlighted = hilite
     @betaucicol = -1
     @betalcicol = -1
+    @additional_cols = Hash.new
   end
 
   def has_beta?
@@ -1098,7 +1112,6 @@ class GroupList
     end
     return colorstr
   end
-  
   
   def self.set_grayscale
     @@color_array = ['rgb(82,82,82)', 'rgb(204,204,204)', 'rgb(150,150,150)', 'rgb(247,247,247)']
@@ -1811,10 +1824,7 @@ class PlotWriter
         x_label_start = x_start
       end
 
-#      label_precision = 0
-#      if stat_max < 10
         label_precision = 1
-#      end
 
       write_plot_labels(x_label_start, y_start, ymax, stat_max, stat_min, y_interval, 0,
         prefix_title + '-log10(p value)', false, label_precision, rotate)
@@ -1822,11 +1832,7 @@ class PlotWriter
   end
 
   # for drawing plots for beta values and mean allele frequencies
-  # draws a dot in place of the triangle produced for the p value plots
-#  def draw_basic_plot(jitter, grouplist, snp_list, x_start, y_start, stat_max, stat_min, data_key, plot_labels, title,
-#    precision, rotate=false, size_mult=1, prefix_title ='')
-  
-    
+  # draws a dot in place of the triangle produced for the p value plot    
   def draw_basic_plot(params)  
     jitter = params[:jitter]
     grouplist = params[:grouplist]
@@ -1931,13 +1937,6 @@ class PlotWriter
   	    @canvas.g.translate(x_start,y_start) do |check|
     	    check.styles(:stroke_width=>1, :fill_opacity=>fill_opacity)
   	      point.draw(check)
-          
-          # add line for confidence interval if selected
-          #check.styles(:fill=>point.color, :stroke=>point.stroke)
-#          puts point.xmidpoint
-#          puts point.ymidpoint
-#          #exit
-#          check.line(point.xmidpoint, point.ymidpoint-20,point.xmidpoint,point.ymidpoint+20).styles(:stroke_width=>10)
   	    end 
       end
     
@@ -2342,7 +2341,6 @@ class PlotWriter
 
     num_x = @box_size/2.8
     letters_x = @box_size/2
-
     number_intervals.times do |curr_break|
       @canvas.g.translate(x_start, y_start).text(num_x, y) do |text|
         label = compress_number(current_stat_value, precision)
@@ -2470,7 +2468,6 @@ class PlotWriter
 
   # reduces number representation to appropriate precision
   def compress_number(num, precision=2)
-
     if precision > 0
       num_string = sprintf("%0.#{precision}f", num)
     else
@@ -2935,11 +2932,6 @@ class PlotWriter
         end_x = x_text
         #x_text += @box_size + @box_size/2 - @box_size/10
         x_text = label_step(x_text)
-
-      # for only showing one box to show legend
-#      if show_one
-#        break
-#      end
     end
 
     @canvas.g.translate(x_start, y_start) do |checks|
@@ -3369,7 +3361,6 @@ class SynthesisViewReader<FileReader
       #file.each_line("\r") do |line|
       file.each_line("\n") do |line|
         line.each("\r") do |splitline|
-          #puts splitline.length
           lines << splitline unless splitline =~ /^\n$/
         end
       end
@@ -3456,8 +3447,6 @@ class SynthesisViewReader<FileReader
             end
           end
          end
-        # add SNP to chromosome
-#        chromosome.snp_list.add_snp(snp)
       end
      end
     rescue Exception => e
@@ -3540,7 +3529,8 @@ def read_group_data(snp, group, data)
     sampsizeval = nil
     orval = lowerci = upperci = cases = controls = studynum = nil
     powernum = cafcases = cafcontrols = betauci = betalci = nil
-
+    add_columns = Hash.new
+    
     if group.betacol > -1
       betaval = data[group.betacol]
     end
@@ -3584,8 +3574,10 @@ def read_group_data(snp, group, data)
       betalci = data[group.betalcicol]
     end
 
+    group.additional_cols.each_pair {|key,index| add_columns[key]=data[index] if data[index]}
+    
     snp.add_result(group.name, data[group.pcol], betaval, mafval, sampsizeval, orval, lowerci, upperci,
-      cases, controls, cafcases, cafcontrols, studynum, powernum, betauci, betalci)
+      cases, controls, cafcases, cafcontrols, studynum, powernum, betauci, betalci, add_columns)
 
   end
 
@@ -3636,7 +3628,7 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
   groupkeys = Array.new 
   
   # construct the groups
-  groupnames.each_key do |gname|
+  groupnameorder.each do |gname|
     gname == highlighted_group ? highlighted = true : highlighted = false
     if subnames.empty?
       key = gname
@@ -3672,70 +3664,41 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
     else
       header.strip!
       column_type = header
-
       if column_type =~ /pval/i
-        groupkeys.each do |key|
-          groups[key].pcol = i
-        end
+        groupkeys.each {|key| groups[key].pcol = i}
       elsif column_type =~ /beta_uci|betauci/
-        groupkeys.each do |key|
-          groups[key].betaucicol = i
-        end
+        groupkeys.each {|key| groups[key].betaucicol = i}
       elsif column_type =~ /beta_lci|betalci/
-        groupkeys.each do |key|
-          groups[key].betalcicol = i
-        end
+        groupkeys.each {|key| groups[key].betalcicol = i}
       elsif column_type =~ /beta/i or column_type =~ /^es$/
-        groupkeys.each do |key|
-          groups[key].betacol = i
-        end
+        groupkeys.each {|key| groups[key].betacol = i}
       elsif column_type =~ /^n$/i
-        groupkeys.each do |key|
-          groups[key].Ncol = i
-        end
+        groupkeys.each {|key| groups[key].Ncol = i}
       elsif column_type =~ /cafcases/i
-        groupkeys.each do |key|
-          groups[key].cafcasescol = i
-        end
+        groupkeys.each {|key| groups[key].cafcasescol = i}
       elsif column_type =~ /cafcontrols/i
-        groupkeys.each do |key|
-          groups[key].cafcontrolscol = i
-        end
-      elsif column_type =~ /maf|caf/i
-        groupkeys.each do |key|
-          groups[key].mafcafcol = i
-        end
+        groupkeys.each {|key| groups[key].cafcontrolscol = i}
+      elsif column_type =~ /^maf|caf$/i
         if column_type =~ /caf/i
           mafcoltitle = 'CAF'
         end
-      elsif column_type =~ /or/i
-        groupkeys.each do |key|
-          groups[key].orcol = i
-        end
-      elsif column_type =~ /upper_ci|uci/i
-        groupkeys.each do |key|
-          groups[key].ucicol = i
-        end
+        groupkeys.each {|key| groups[key].mafcafcol = i}
+      elsif column_type =~ /^or$/i
+        groupkeys.each {|key| groups[key].orcol = i}
+      elsif column_type =~ /^upper_ci|uci$/i
+        groupkeys.each {|key| groups[key].ucicol = i}
       elsif column_type =~ /lower_ci|lci/i
-        groupkeys.each do |key|
-          groups[key].lcicol = i
-        end
+        groupkeys.each {|key| groups[key].lcicol = i}
       elsif column_type =~ /cases/i
-        groupkeys.each do |key|
-          groups[key].casescol = i
-        end
+        groupkeys.each {|key| groups[key].casescol = i }
       elsif column_type =~ /controls/i
-        groupkeys.each do |key|
-          groups[key].controlscol = i
-        end
+        groupkeys.each {|key| groups[key].controlscol = i}
       elsif column_type =~ /study/i
-        groupkeys.each do |key|
-          groups[key].studycol = i
-        end
+        groupkeys.each {|key| groups[key].studycol = i}
       elsif column_type =~ /^power$/i
-        groupkeys.each do |key|
-          groups[key].powercol = i
-        end
+        groupkeys.each {|key| groups[key].powercol = i}
+      else
+        groupkeys.each {|key| groups[key].additional_cols[column_type] = i}       
       end
     end
   end
@@ -3744,7 +3707,6 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
     puts "ERROR:  Need SNPID, CHROMOSOME, and LOCATION columns in input file"
     exit
   end
-  
   # add groups to the grouplist
   grouporder.each do |g|
     namepcs = g.split /:/
@@ -3839,7 +3801,7 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
         currgroup = groups.fetch(key)
         column_type = pcs[2].strip
       end
-
+      
       if column_type =~ /pval/i
         currgroup.pcol = i
       elsif column_type =~ /beta_uci|betauci/
@@ -3854,7 +3816,7 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
         currgroup.cafcasescol = i
       elsif column_type =~ /cafcontrols/i
         currgroup.cafcontrolscol = i
-      elsif column_type =~ /maf|caf/i
+      elsif column_type =~ /^maf|caf$/i
         currgroup.mafcafcol = i
         if column_type =~ /caf/i
           mafcoltitle = 'CAF'
@@ -3873,6 +3835,8 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
         currgroup.studycol = i
       elsif column_type =~ /^power$/i
         currgroup.powercol = i
+      else
+        currgroup.additional_cols[column_type]=i
       end
     end
   end
@@ -4173,13 +4137,16 @@ if options.highres
   RVG::dpi=300
 end
 
+
 chromlist = ChromosomeList.new
+chromlist.set_columns(options.additional_columns)
 
 synth_reader = SynthesisViewReader.new
 
 grouplisthash = Hash.new
 
-synth_reader.read_synthesisview_file(options.eaglefile, chromlist, grouplisthash, options.highlighted_group)
+synth_reader.read_synthesisview_file(options.eaglefile, chromlist, grouplisthash, 
+  options.highlighted_group)
 chromlist.sort_chroms!
 if options.rotate
   chromlist.reverse!
@@ -4463,6 +4430,9 @@ if grouplisthash.length == 1 and !options.rotate
   if grouplist.plot_oddsratio?
     total_stat_boxes +=1
   end
+  
+  # add any additional columns to plot
+  total_stat_boxes += options.additional_columns.length
 
 elsif options.rotate
   total_stat_boxes = grouplisthash[GroupList.get_default_name].groups.length
@@ -4494,6 +4464,9 @@ elsif options.rotate
   if options.circlecafcasecontrol
     total_stat_boxes +=1
   end
+  
+  total_stat_boxes += options.additional_columns.length
+  
 else # multiple group lists usually for ethnicity so one plot per ethnicity
   total_stat_boxes = grouplisthash.length
 
@@ -4697,9 +4670,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       pmaxscore = chromlist.maxscore['pvalue']
       pminscore = chromlist.minscore['pvalue']
       
-#      writer.draw_pvalue_plot(options.jitter, options.no_triangles, grouplist, current_chrom.snp_list,
-#        x_start, ystart_stat_boxes[curr_stat_box], chromlist.maxscore['pvalue'], pvalmin,
-#        chromlist.minscore['pvalue'],first_chrom, '', options.rotate)
       writer.draw_pvalue_plot(:jitter=>options.jitter, :no_triangles=>options.no_triangles, :grouplist=>grouplist,
         :snp_list=>current_chrom.snp_list, :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box],
         :stat_max=>pmaxscore, :original_min=>pminscore, :first_plot=>first_chrom,
@@ -4720,8 +4690,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       if options.clean_axes
         increment, minbeta, maxbeta = writer.calculate_increments_include_zero(minbeta, maxbeta)
       end
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, ystart_stat_boxes[curr_stat_box], maxbeta, 
-#          minbeta, 'beta', first_chrom, options.effect_name,2, options.rotate)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>maxbeta, :stat_min=>minbeta,
         :data_key=>'beta', :plot_labels=>first_chrom, :title=>options.effect_name, :precision=>2,
@@ -4751,8 +4719,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     end
 
     if grouplist.plot_maf?
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, 
-#        ystart_stat_boxes[curr_stat_box], 1.0, 0, 'maf', first_chrom, grouplist.mafcoltitle,2)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>1.0, :stat_min=>0.0,
         :data_key=>'maf', :plot_labels=>first_chrom, :title=>grouplist.mafcoltitle, :precision=>2)
@@ -4761,16 +4727,10 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     end
 
     if options.cafcasecontrol
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, 
-#        x_start, ystart_stat_boxes[curr_stat_box],
-#        1, 0, 'cafcases', first_chrom, 'CAF Cases',1)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>1.0, :stat_min=>0.0,
         :data_key=>'cafcases', :plot_labels=>first_chrom, :title=>'CAF Cases', :precision=>1)
       curr_stat_box+=1
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, 
-#        ystart_stat_boxes[curr_stat_box],
-#        1, 0, 'cafcontrols', first_chrom, 'CAF Controls',1)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>1.0, :stat_min=>0.0,
         :data_key=>'cafcontrols', :plot_labels=>first_chrom, :title=>'CAF Controls', :precision=>1)
@@ -4789,8 +4749,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       if options.clean_axes
         increment, nmin, nmax = writer.calculate_increments(nmin, nmax)
       end
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, 
-#        ystart_stat_boxes[curr_stat_box], nmax, nmin, 'N', first_chrom, 'Sample Size',0)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>nmax, :stat_min=>nmin,
         :data_key=>'N', :plot_labels=>first_chrom, :title=>'Sample Size', :precision=>0)
@@ -4800,8 +4758,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     if options.plot_power
       powmin = 0
       powmax = 100
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, 
-#        ystart_stat_boxes[curr_stat_box], powmax, powmin, 'power', first_chrom, 'Power',0)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>powmax,
         :stat_min=>powmin, :data_key=>'power', :plot_labels=>first_chrom, :title=>'Power', :precision=>0)     
@@ -4814,9 +4770,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       if options.clean_axes
         increment, caseconmin, caseconmax = writer.calculate_increments(caseconmin, caseconmax)
       end
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, 
-#        ystart_stat_boxes[curr_stat_box],
-#        caseconmax, caseconmin, 'cases', first_chrom, 'Cases',0)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>caseconmax,
         :stat_min=>caseconmin, :data_key=>'cases', :plot_labels=>first_chrom, :title=>'Cases', :precision=>0)
@@ -4826,8 +4779,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       if options.clean_axes
         increment, caseconmin, caseconmax = writer.calculate_increments(caseconmin, caseconmax)
       end
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, ystart_stat_boxes[curr_stat_box],
-#        caseconmax, caseconmin, 'controls', first_chrom, 'Controls',0)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>caseconmax,
         :stat_min=>caseconmin, :data_key=>'controls', :plot_labels=>first_chrom, :title=>'Controls', :precision=>0)
@@ -4858,6 +4809,19 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       curr_stat_box+=1
     end
 
+    options.additional_columns.each do |column|
+      cmin = chromlist.minscore[column].to_f
+      cmax = chromlist.maxscore[column].to_f
+      if options.clean_axes
+        increment, cmin, cmax = writer.calculate_increments(cmin, cmax)
+      end
+      writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
+        :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>cmax, :stat_min=>cmin,
+        :data_key=>column, :plot_labels=>first_chrom, :title=>column, :precision=>2)
+      curr_stat_box+=1
+    end  
+      
+      
     curr_half_box = 0
     if grouplist.plot_study? and options.plot_studynum
       studymax = chromlist.maxscore['study'].to_f
@@ -4865,9 +4829,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       if options.clean_axes
         increment, studymax, studymin = writer.calculate_increments(studymax, studymin)
       end
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, 
-#        ystart_half_boxes[curr_half_box],
-#        10, 0, 'study', first_chrom, 'Study #',0, options.rotate, 0.5)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_half_boxes[curr_half_box], :stat_max=>10,
         :stat_min=>0, :data_key=>'study', :plot_labels=>first_chrom, :title=>'Study #',
@@ -4888,9 +4849,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
 
     # plot p values if present
     if grouplist.plot_pvals? and options.plot_pval
-#      writer.draw_pvalue_plot(options.jitter, options.no_triangles, grouplist, current_chrom.snp_list,
-#        x_start, ystart_stat_boxes[curr_stat_box], chromlist.maxscore['pvalue'], pvalmin,
-#        chromlist.minscore['pvalue'],plot_labels, '', options.rotate)
       writer.draw_pvalue_plot(:jitter=>options.jitter, :no_triangles=>options.no_triangles, :grouplist=>grouplist,
         :snp_list=>current_chrom.snp_list, :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box],
         :stat_max=>chromlist.maxscore['pvalue'], :stat_min=>pvalmin, :original_min=>chromlist.minscore['pvalue'],
@@ -4905,9 +4863,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       if options.clean_axes
         increment, minbeta, maxbeta = writer.calculate_increments_include_zero(minbeta, maxbeta)
       end
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, 
-#        ystart_stat_boxes[curr_stat_box], maxbeta, minbeta, 'beta', plot_labels, options.effect_name,
-#        2, options.rotate)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>maxbeta,
         :stat_min=>minbeta, :data_key=>'beta', :plot_labels=>plot_labels, :title=>options.effect_name,
@@ -4944,8 +4899,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     end
 
     if grouplist.plot_maf?
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, 
-#      ystart_stat_boxes[curr_stat_box], 1.0, 0, 'maf', plot_labels, grouplist.mafcoltitle,2,  options.rotate)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>1.0,
         :stat_min=>0, :data_key=>'maf', :plot_labels=>plot_labels, :title=>grouplist.mafcoltitle,
@@ -4956,8 +4909,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     if options.plot_power
       powmin = 0
       powmax = 100
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, 
-#        ystart_stat_boxes[curr_stat_box], powmax, powmin, 'power', plot_labels, 'Power', 0, options.rotate)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>powmax,
         :stat_min=>powmin, :data_key=>'power', :plot_labels=>plot_labels, :title=>'Power',
@@ -4966,15 +4917,11 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     end
 
     if options.cafcasecontrol
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, ystart_stat_boxes[curr_stat_box],
-#        1, 0, 'cafcases', plot_labels, 'CAF Cases',1, options.rotate)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>1,
         :stat_min=>0, :data_key=>'cafcases', :plot_labels=>plot_labels, :title=>'CAF Cases',
         :precision=>1, :rotate=>options.rotate)  
       curr_stat_box+=1
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, ystart_stat_boxes[curr_stat_box],
-#        1, 0, 'cafcontrols', plot_labels, 'CAF Controls',1, options.rotate)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>1,
         :stat_min=>0, :data_key=>'cafcontrols', :plot_labels=>plot_labels, :title=>'CAF Controls',
@@ -4997,8 +4944,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       if options.clean_axes
         increment, caseconmin, caseconmax = writer.calculate_increments(caseconmin, caseconmax)
       end
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, ystart_stat_boxes[curr_stat_box],
-#        caseconmax, caseconmin, 'cases', plot_labels, 'Cases',0, options.rotate)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>caseconmax,
         :stat_min=>caseconmin, :data_key=>'cases', :plot_labels=>plot_labels, :title=>'Cases',
@@ -5009,8 +4954,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       if options.clean_axes
         increment, caseconmin, caseconmax = writer.calculate_increments(caseconmin, caseconmax)
       end
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, ystart_stat_boxes[curr_stat_box],
-#        caseconmax, caseconmin, 'controls', plot_labels, 'Controls',0, options.rotate)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>caseconmax,
         :stat_min=>caseconmin, :data_key=>'controls', :plot_labels=>plot_labels, :title=>'Controls',
@@ -5047,8 +4990,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       if options.clean_axes
         increment, studymax, studymin = writer.calculate_increments(studymax, studymin)
       end
-#      writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, ystart_half_boxes[curr_half_box],
-#        10, 0, 'study', plot_labels, 'Study #',0, options.rotate, 0.5)
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_half_boxes[curr_half_box], :stat_max=>10,
         :stat_min=>0, :data_key=>'study', :plot_labels=>first_chrom, :title=>'Study #',
@@ -5068,11 +5009,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
         :stat_max=>chromlist.maxscore['pvalue'], :stat_min=>pvalmin, :original_min=>chromlist.minscore['pvalue'],
         :first_plot=>first_chrom, :prefix_title=>grouplistkeys[i] + "\n", :rotate=>options.rotate,
         :clean_axis=>options.clean_axes)
-#      writer.draw_pvalue_plot(options.jitter, options.no_triangles,
-#        grouplisthash[grouplistkeys[i]], current_chrom.snp_list,
-#        x_start, ystart_stat_boxes[i], chromlist.maxscore['pvalue'],
-#        pvalmin, chromlist.minscore['pvalue'],
-#        first_chrom, grouplistkeys[i] + "\n", options.rotate)
     end
 
     # draw beta values on plots
@@ -5085,8 +5021,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
         if options.clean_axes
           increment, minbeta, maxbeta = writer.calculate_increments_include_zero(minbeta, maxbeta)
         end
-#        writer.draw_basic_plot(options.jitter, grouplist, current_chrom.snp_list, x_start, ystart_stat_boxes[i], maxbeta, minbeta,
-#          'beta', first_chrom, options.effect_name,2, options.rotate, 1, grouplistname + "\n")
         writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
           :x_start=>x_start, :y_start=>ystart_stat_boxes[i], :stat_max=>maxbeta,
           :stat_min=>minbeta, :data_key=>'beta', :plot_labels=>first_chrom, :title=>options.effect_name,
