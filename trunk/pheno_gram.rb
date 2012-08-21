@@ -360,6 +360,7 @@ class Arg
     options.color = 'random'
     options.pheno_spacing = 'alternative'
     options.rand_seed = 7
+    options.chr_only = false
     help_selected = false
     version_selected = false
     
@@ -373,6 +374,9 @@ class Arg
       end
       opts.on("-t [title]", "Main title for plot (enclose in quotes)") do |title|
         options.title = title
+      end
+      opts.on("-C", "--chrom-only", "Plot only chromosomes with positions") do |chrom_only|
+        options.chr_only = true
       end
       opts.on("-c [color_range]", "Options are random (default), web, or generator") do |color_range|
         options.color = color_range
@@ -1376,14 +1380,21 @@ class ChromosomePlotter < Plotter
 
     circle_start_x = @@circle_size*3
 
-    if params[:alt_spacing]==:alternative
+    if params[:chr_only] or !(params[:alt_spacing]==:alternative or arams[:alt_spacing]==:equal)
+      phenoboxes = get_pheno_boxes(total_chrom_y, chrom)
+      phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
+      phenoboxes.each do |box|
+        draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y, 
+          :chr_only=>true)
+      end      
+    elsif params[:alt_spacing]==:alternative
       phenoboxes = position_phenoboxes(:chrom=>chrom, :available_y=>available_y, :chrom_y=>total_chrom_y)
 
       phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
       phenoboxes.each do |box|
-        draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y)
+        draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y,
+          :chr_only=>false)
       end
-
     elsif params[:alt_spacing]==:equal
       orig_circle=@@circle_size
       phenoboxes = get_pheno_boxes_equal_spacing(available_y, total_chrom_y, chrom)
@@ -1393,38 +1404,41 @@ class ChromosomePlotter < Plotter
         draw_phenos_equal(canvas, box, circle_start_x, xbase, ybase + padding.to_f/2)
       end
       @@circle_size=orig_circle
-    else
-      phenoboxes = get_pheno_boxes(total_chrom_y, chrom)
-      phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
-      phenoboxes.each do |box|
-        draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y)
-      end
     end
+#    else
+#      phenoboxes = get_pheno_boxes(total_chrom_y, chrom)
+#      phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
+#      phenoboxes.each do |box|
+#        draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y)
+#      end
+#    end
   end
 
  
   # ybase is from start of chromosome drawing
   # need start of chromosome and start of bins
-  def self.draw_phenos(canvas, phenobox, start_x, xbase, ybase)
+  def self.draw_phenos(canvas, phenobox, start_x, xbase, ybase, params)
     
     y = phenobox.top_y - @@circle_size * 0.75
     x = start_x
     
     canvas.g.translate(xbase,ybase) do |draw|
       draw.line(0, phenobox.chrom_y, @@chrom_width, phenobox.chrom_y).styles(:stroke=>'black', :stroke_width=>1)
-      draw.line(@@chrom_width,phenobox.chrom_y,start_x,phenobox.top_y).styles(:stroke=>'black',:stroke_width=>1)
+      draw.line(@@chrom_width,phenobox.chrom_y,start_x,phenobox.top_y).styles(:stroke=>'black',:stroke_width=>1) unless params[:chr_only]
     end
     
-    phenobox.phenocolors.each_with_index do |color, i|
-      if i % @@num_phenos_row == 0
-        y += @@circle_size * 0.75
-        x = start_x
-      end
-      canvas.g.translate(xbase, ybase) do |draw|
-        draw.circle(@@circle_size.to_f/2, x, y).styles(:fill=>color, :stroke=>'black')
-      end
+    unless params[:chr_only]
+      phenobox.phenocolors.each_with_index do |color, i|
+        if i % @@num_phenos_row == 0
+          y += @@circle_size * 0.75
+          x = start_x
+        end
+        canvas.g.translate(xbase, ybase) do |draw|
+          draw.circle(@@circle_size.to_f/2, x, y).styles(:fill=>color, :stroke=>'black')
+        end
       
-      x += @@circle_size
+        x += @@circle_size
+      end
     end
     
   end
@@ -1570,8 +1584,7 @@ class Title < Plotter
     ypos = params[:ypos]
     canvas = params[:canvas]
     
-    font_size = @@circle_size * 3
-    
+    font_size = @@circle_size * 1.7
     canvas.g.translate(xcenter,ypos).text(0,0) do |write|
       write.tspan(title).styles(:font_size=>font_size, :text_anchor=>'middle')
     end
@@ -1646,6 +1659,9 @@ def draw_plot(genome, phenoholder, options)
   # chromosome will be 2 circles wide
   circle_size = 20
   num_circles_in_row=7
+  
+  num_circles_in_row=3 if options.chr_only
+  
   Plotter.set_circle(circle_size)
   Plotter.set_maxchrom(Chromosome.chromsize(1))
   chrom_width = circle_size * 1.5
@@ -1674,7 +1690,7 @@ def draw_plot(genome, phenoholder, options)
   # each row should be 2 circles high + 2 circle buffer on top
   phenotype_labels_total = circle_size * 2 * (phenotype_rows+1)
   phenotype_labels_y_start = total_y
-  total_y += phenotype_labels_total
+  total_y += phenotype_labels_total unless options.chr_only
   # total y for now
   width_in = 8
 
@@ -1701,19 +1717,21 @@ def draw_plot(genome, phenoholder, options)
     # draw each chromosome (first 12 on top row and then second 12 below)
     (1..12).each do |chr|
       ChromosomePlotter.plot_chrom(:canvas=>canvas, :chrom=>genome.chromosomes[chr], 
-        :xstart=>xstart, :ystart=>first_row_start, :height=>max_chrom_height, :alt_spacing=>alternative_pheno_spacing)
+        :xstart=>xstart, :ystart=>first_row_start, :height=>max_chrom_height, 
+        :alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only)
       xstart += chrom_box_width 
     end
   
     xstart = padded_width
     (13..24).each do |chr|
       ChromosomePlotter.plot_chrom(:canvas=>canvas, :chrom=>genome.chromosomes[chr], 
-        :xstart=>xstart, :ystart=>second_row_start, :height=>second_row_box_max, :alt_spacing=>alternative_pheno_spacing)    
+        :xstart=>xstart, :ystart=>second_row_start, :height=>second_row_box_max, 
+        :alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only)    
       xstart += chrom_box_width
     end
   
     PhenotypeLabels.draw(:canvas=>canvas, :xstart=>padded_width, :ystart=>phenotype_labels_y_start,
-      :phenoholder=>phenoholder, :pheno_row=>phenotypes_per_row, :xtotal=>xmax-padded_width)
+      :phenoholder=>phenoholder, :pheno_row=>phenotypes_per_row, :xtotal=>xmax-padded_width) unless options.chr_only
   
   end
 
