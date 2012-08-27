@@ -3360,7 +3360,7 @@ class SynthesisViewReader<FileReader
       lines = Array.new
       #file.each_line("\r") do |line|
       file.each_line("\n") do |line|
-        line.each("\r") do |splitline|
+        line.each_line("\r") do |splitline|
           lines << splitline unless splitline =~ /^\n$/
         end
       end
@@ -3756,6 +3756,12 @@ end
 # sets groups in the grouplist based on header columns
 # from Synthesis-View file
 def set_groups(glisthash, line, defaultkey, highlighted_group="")
+  
+  unless line =~ /\t/
+    puts "\nERROR:\tInput file must be tab-delimited\n"
+    exit
+  end
+  
   data = strip_and_split(line)
   groups = Hash.new
   grouporder = Array.new
@@ -4097,10 +4103,10 @@ SynthesisViewReader.mysql_support(true)
 begin
   require '/home/dudek/synthesisview/SNPpos'
   rescue Exception => e
-  puts
-  puts e
-  puts "\nNo MySQL support"
-  puts
+#  puts
+#  puts e
+#  puts "\nNo MySQL support"
+#  puts
   SynthesisViewReader.mysql_support(false)
 end
 
@@ -4109,8 +4115,8 @@ begin
   require './synthManhattan.rb'
   manhattan_support = true
 rescue Exception => e
-  puts e
-  puts "\nNo Manhattan plot support"
+#  puts e
+#  puts "\nNo Manhattan plot support"
   manhattan_support = false
 end
 
@@ -4147,6 +4153,7 @@ grouplisthash = Hash.new
 
 synth_reader.read_synthesisview_file(options.eaglefile, chromlist, grouplisthash, 
   options.highlighted_group)
+
 chromlist.sort_chroms!
 if options.rotate
   chromlist.reverse!
