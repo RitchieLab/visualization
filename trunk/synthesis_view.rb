@@ -863,21 +863,20 @@ class SNPList
   end
 
   # returns maximum number of iteractions for any SNP in list
+  # as all SNPs are included in the plot 
+  # just need to return the number of snp interactions which is 1 less than
+  # the total number of snps 
   def get_max_interactions
-    max_interaction = 0
-#    @ld_scores.values.each do |snp_combo_array|
-#      if snp_combo_array.length > max_interaction
-#        max_interaction = snp_combo_array.length
-#      end
-#    end
-    
-    @ld_scores.each_key do |snpname|
-      if @ld_scores[snpname].length > max_interaction
-        max_interaction = @ld_scores[snpname].length
-      end
-    end
-    
-    return max_interaction
+    return @snps.length-1
+#     max_interaction = 0
+#     
+#     @ld_scores.each_key do |snpname|
+#       if @ld_scores[snpname].length > max_interaction
+#         max_interaction = @ld_scores[snpname].length
+#       end
+#     end
+#     
+#     return max_interaction
   end
 
   # returns max position
@@ -1492,6 +1491,8 @@ class PlotWriter
   def get_ld_block_color(snp_combo, use_dprime=true)
 
     color = 'white'
+    return color unless snp_combo
+    
     if use_dprime then
       dprime = snp_combo.dprime
       lod_score = snp_combo.lod_score
@@ -1500,9 +1501,7 @@ class PlotWriter
       rsquared = snp_combo.rsquared
       color = get_color_from_score(rsquared, 0, use_dprime)
     end
-
     return color
-
   end
 
 
@@ -3016,10 +3015,10 @@ class PlotWriter
       y = y_current_start
       start_index = snp_index +1
       end_index = snp_list.included_snps.length-1
-      if snp_list.ld_scores.has_key?(snp.name)
         (start_index..end_index).each do |snp2_index|
           snp2 = snp_list.snps[snp2_index]
-          snp_combo = snp_list.ld_scores[snp.name][snp2.name]
+          snp_combo=nil
+          snp_combo = snp_list.ld_scores[snp.name][snp2.name] if snp_list.ld_scores[snp.name]
           block_color = get_ld_block_color(snp_combo, use_dprime)
           if use_block_stroke
             stroke_color = block_color
@@ -3030,7 +3029,6 @@ class PlotWriter
             :fill=>block_color)
             y += @box_size
          end
-       end
        x += @box_size
      end
    end
@@ -3097,7 +3095,7 @@ class PlotWriter
 
     labels_array.reverse_each do |label|
       @canvas.g.translate(x_start, y_start).text(current_x-2, current_y) do |text|
-        text.tspan(label).styles(:font_size=>font_size/1.3, :text_anchor=>'end')
+        text.tspan(sprintf "%.1f",label).styles(:font_size=>font_size/1.3, :text_anchor=>'end')
       end
       current_y+=legend_box_size
     end
@@ -4034,7 +4032,7 @@ end
     begin
       File.open(ldfile, "r") do |file|
         file.each_line  do |oline|
-          oline.each("\r") do |line|
+          oline.each_line("\r") do |line|
           next if line =~ /^\n$/
           if line =~ /LOD/
             next
@@ -4838,6 +4836,8 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       end
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_half_boxes[curr_half_box], :stat_max=>10,
+        :stat_min=>0, :data_key=>'study', :plot_labels=>first_chrom, :title=>'Study #',
+        :precision=>0,start=>ystart_half_boxes[curr_half_box], :stat_max=>10,
         :stat_min=>0, :data_key=>'study', :plot_labels=>first_chrom, :title=>'Study #',
         :precision=>0, :rotate=>options.rotate, :size_mult=>0.5)
     end
