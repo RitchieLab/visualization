@@ -19,6 +19,8 @@
 # features near SNPs.  Also can display LD information in a Haploview-like format.
 ###################################################################################
 
+ENV['MAGICK_CONFIGURE_PATH']='/gpfs/group/mdr23/usr/tools/etc/ImageMagick'
+
 # Requres rubygems
 begin
   require 'rubygems'
