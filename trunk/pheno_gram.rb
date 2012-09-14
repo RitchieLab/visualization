@@ -1,5 +1,8 @@
 #!/usr/bin/env ruby
 # Requres rubygems
+
+ENV['MAGICK_CONFIGURE_PATH'] = '/gpfs/group/mdr23/usr/tools/etc/ImageMagick'
+
 begin
   require 'rubygems'
 rescue Exception => e
