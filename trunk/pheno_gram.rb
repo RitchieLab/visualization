@@ -286,7 +286,7 @@ module ColorGen
                 (r * 0.2126729 + g * 0.7151522 + b * 0.0721750),
                 (r * 0.0193339 + g * 0.1191920 + b * 0.9503041))
     end
-      
+
     #def self.xyztolab(x,y,z)
     def self.xyztolab(xyz)
       x= xyz.x
@@ -364,6 +364,8 @@ class Arg
     options.pheno_spacing = 'alternative'
     options.rand_seed = 7
     options.chr_only = false
+    options.small_circles = false
+    options.circle_outline = false
     help_selected = false
     version_selected = false
     
@@ -381,7 +383,13 @@ class Arg
       opts.on("-C", "--chrom-only", "Plot only chromosomes with positions") do |chrom_only|
         options.chr_only = true
       end
-      opts.on("-c [color_range]", "Options are random (default), web, or generator") do |color_range|
+      opts.on("-S", "--small-circle", "Plot with smaller circles for phenotypes") do |small_circle|
+        options.small_circles = true
+      end
+      opts.on("-O", "--outline-circle", "Plot circles with black outline") do |outline_circle|
+        options.circle_outline = true
+      end
+      opts.on("-c [color_range]", "Options are random (default), web, generator or group") do |color_range|
         options.color = color_range
       end
       opts.on("-p [pheno_spacing]", "Options are standard or equal or alternative (default) ") do |pheno_spacing|
@@ -438,11 +446,12 @@ end
 
 
 class Phenotype
-  attr_accessor :name, :color
+  attr_accessor :name, :color, :sortnumber, :group
   
-  def initialize(n,c)
+  def initialize(n,s,g)
     @name = n
-    @color = c
+    @sortnumber = s
+    @group = g
   end
   
 end
@@ -452,21 +461,26 @@ class PhenotypeHolder
   attr_accessor :phenonames
   
   def initialize(params)
-    
+    @pheno_number = 1
     if params[:color]=='web'
       @colormaker = WebColorMaker.new
     elsif params[:color]=='generator'
       @colormaker = ColorGenColorMaker.new
+    elsif params[:color]=='group'
+      @colormaker = GroupColorMaker.new
     else
-      @colormaker = ColorMaker.new
+      @colormaker = RandomColorMaker.new
     end
     @phenonames = Hash.new
   end
   
-  def add_phenotype(name)
+  def add_phenotype(name, group)
     unless @phenonames.has_key?(name)
-      pheno = Phenotype.new(name, set_color)
+#      pheno = Phenotype.new(name, set_color(group))
+      pheno = Phenotype.new(name, @pheno_number, group)
+      @pheno_number += 1
       @phenonames[pheno.name] = pheno
+      @colormaker.add_group(group)
     end
     return @phenonames[name]
   end
@@ -475,8 +489,13 @@ class PhenotypeHolder
     return @phenonames[name]
   end
   
-  def set_color
-    return @colormaker.gen_html
+
+  def set_colors
+    @phenonames.each_value {|pheno| pheno.color = @colormaker.gen_html(pheno.group)}
+  end
+  
+  def set_color(groupname)
+    return @colormaker.gen_html(groupname)
   end
   
 end
@@ -498,6 +517,10 @@ class Genome
     (1..24).each do |i|
       puts "chrom #{i} has #{@chromosomes[i].snps.length} SNPs"
     end
+  end
+  
+  def pos_good?(pos, chr)
+    return @chromosomes[chr.to_i].pos_good?(pos)
   end
   
 end
@@ -591,6 +614,14 @@ class Chromosome
     @snpnames.sort!{|x,y| @snps[x].pos.to_i <=> @snps[y].pos.to_i}
   end
   
+  def pos_good?(pos)
+    if(pos.to_i <= @@chromsize[@number])
+      return true
+    else
+      return false
+    end
+  end
+  
 end
 
 class SNP
@@ -606,13 +637,85 @@ end
 
 
 class ColorMaker
-	
-  def initialize
-    @golden_rule_conjugate = 0.618033988749895
-    @h = rand
+  
+  def add_group(groupname)
   end
   
-# HSV values in [0..1[
+  def gen_html(groupname)
+    return "rgb(220,220,220)"
+  end
+  
+  def rgb_to_hsv(r,g,b)
+    # Input rgb values 1...255
+    # based on http://forums.devshed.com/c-programming-42/rgb-to-hsv-conversion-rountine-162526.html
+
+    r = r / 255.0
+    g = g / 255.0
+    b = b / 255.0
+    max = [r, g, b].max
+    min = [r, g, b].min
+    delta = max - min
+    v = max * 100
+
+    if (max != 0.0)
+      s = delta / max *100
+    else
+      s = 0.0
+    end
+
+    if (s == 0.0) 
+      h = 0.0
+    else
+      if (r == max)
+        h = (g - b) / delta
+      elsif (g == max)
+        h = 2 + (b - r) / delta
+      elsif (b == max)
+        h = 4 + (r - g) / delta
+      end
+
+      h *= 60.0
+
+      if (h < 0)
+        h += 360.0
+      end
+    end
+    return [h,s,v]
+  end
+  
+
+  def rgb_to_hsl(r,g,b,l_adjust=0.0)
+     r /= 255.to_f 
+     g /= 255.to_f
+     b /= 255.to_f
+     max = [r,g,b].max
+     min = [r,g,b].min
+    
+     l = (max+min)/2.to_f
+     
+     if(max==min)
+       h=s=0 # achromatic
+     else
+       d = max-min
+       s = l > 0.5 ? d / (2-max-min) : d / (max+min)
+       if max==r
+         h = (g - b) / d + (g < b ? 6 : 0)
+       elsif max==g         
+         h = (b - r) / d + 2
+       else
+         h = (r - g) / d + 4
+       end
+       h /= 6
+     end
+    
+    # l adjustment can make them brighter
+    l = l + (1-l)*l_adjust
+    
+    return [h*100.0,s*100.0,l*100.0]
+  end
+  
+  
+  # HSV values in [0..1[
 # returns [r, g, b] values from 0 to 255
 # adapted from http://martin.ankerl.com/2009/12/09/how-to-create-random-colors-programmatically/
   def hsv_to_rgb(h, s, v)
@@ -629,8 +732,18 @@ class ColorMaker
     r, g, b = v, p, q if h_i==5
     color_array=[(r*256).to_i, (g*256).to_i, (b*256).to_i]
   end
+    
+end
+
+
+class RandomColorMaker < ColorMaker
+	
+  def initialize
+    @golden_rule_conjugate = 0.618033988749895
+    @h = rand
+  end
   
-  def gen_html 
+  def gen_html(groupname) 
     @h += @golden_rule_conjugate
     @h %= 1
     color_array = hsv_to_rgb(@h, 0.8, 0.95)
@@ -640,7 +753,166 @@ class ColorMaker
 end
 
 
-class ColorGenColorMaker
+
+
+#class ColorRange
+#  attr_accessor :name, :start, :stop
+#  
+#  def initialize(n, first, fin)
+#    @start = ColorGen::RGB.new(first[0],first[1],first[2])
+#    @stop = ColorGen::RGB.new(fin[0],fin[1],fin[2])
+#    @name = n
+#    @curr_color = @start
+#  end
+#  
+#  def set_intervals(total_colors)
+#    tcolors = total_colors-1
+#    rint = @stop.red-@start.red
+#    gint = @stop.green-@start.green
+#    bint = @stop.blue-@start.blue
+#    
+#    @rstep = rint.to_f/tcolors
+#    @gstep = gint.to_f/tcolors
+#    @bstep = bint.to_f/tcolors
+#  end
+#  
+#  def get_color
+#    color = @curr_color.clone
+##    @curr_color[0] += @rstep
+##    @curr_color[1] += @gstep
+##    @curr_color[2] += @bstep
+#    
+#    @curr_color.red += @rstep
+#    @curr_color.green += @gstep
+#    @curr_color.blue += @bstep  
+#    
+#    return [color.red.round, color.green.round, color.blue.round]
+#  end
+#end
+
+
+class ColorRange
+  attr_accessor :name, :start, :maxlum
+  
+  def initialize(n, st, maxl=85)
+    @name = n
+    @start = st
+    @l_adjust=0
+    @maxlum=maxl
+  end
+  
+  def set_intervals(total_colors)
+    @l_adjust = (@maxlum.to_f - @start.luminance) / (total_colors-1) if total_colors > 1
+  end
+
+  # vary the luminescence from dark to light
+  def get_color
+    color = @start.clone
+    @start.luminance  = @start.luminance + @l_adjust
+    return [color.hue, color.saturation, color.luminance]
+  end
+  
+end
+
+
+class ColorList
+  attr_accessor :name
+  
+  def initialize(n, *c)
+    @colors = c
+    @curr_color = 0
+  end
+  
+  def get_color
+    colors = @colors[@curr_color]
+    if @curr_color < @colors.length
+      @curr_color += 1
+    else
+      @curr_color = 0
+    end
+        
+    return colors
+  end
+  
+end
+
+
+class GroupColorMaker < ColorMaker
+  
+  def initialize
+    # red, blue, gray, yellow, green, brown, purple, orange
+    # red 205,92,92 --> 139,0,0
+    # blue 135,206,235 --> 25,25,112
+    # gray 220,220,220 --> 47,79,79
+    # yellow 255,255,0 --> 250,250,210
+    # green 152,251,152 --> 0,100,0
+    # brown 245,222,179 --> 165,42,42
+    # purple 230,230,250 --> 128,0,128
+    # orange 255,160,122 --> 255,160,122
+    @color_ranges = Array.new
+#    @color_ranges << ColorRange.new('red', [205,92,92], [139,0,0])
+#    @color_ranges << ColorRange.new('blue', [135,206,235], [25,25,112])
+#    @color_ranges << ColorRange.new('gray', [220,220,220], [47,79,79])
+#    @color_ranges << ColorRange.new('yellow', [255,255,0], [250,250,210])
+#    @color_ranges << ColorRange.new('green',[152,251,152],[0,100,0])
+#    @color_ranges << ColorRange.new('brown',[245,222,179],[165,42,42])
+#    @color_ranges << ColorRange.new('purple',[230,230,250],[128,0,128])
+#    @color_ranges << ColorRange.new('orange',[255,160,122],[255,165,0])
+#    @color_ranges << ColorRange.new('aqua',[0,255,255],[0,206,209])
+  
+#    @color_ranges << ColorList.new('Oranges',[233,150,122],[250,128,114],[255,160,122],[255,165,0],[255,140,0],[255,127,80],[240,128,128],[255,99,71],[255,69,0],[255,0,0])
+#    @color_ranges << ColorList.new('Blues',[25,25,112],[0,0,128],[100,149,237],[72,61,139],[106,90,205],[123,104,238],[132,112,255],[0,0,205],[65,105,225],[0,0,255],[30,144,255])
+#    @color_ranges << ColorList.new('Greens',[102,205,170],[127,255,212],[0,100,0],[85,107,47],[143,188,143],[46,139,87],[60,179,113],[32,178,170],[152,251,152],[0,255,127],[124,252,0],[127,255,0],[0,250,154],[173,255,47],[50,205,50],[154,205,50],[34,139,34],[107,142,35])
+#    @color_ranges << ColorList.new('Yellow',[189,183,107],[240,230,140],[238,232,170],[250,250,210],[255,255,224],[255,255,0],[255,215,0],[238,221,130],[218,165,32],[184,134,11])
+#    @color_ranges << ColorList.new('Grays',[0,0,0],[49,79,79],[105,105,105],[112,138,144],[119,136,153],[190,190,190],[211,211,211])
+#    @color_ranges << ColorList.new('Pinks-Violets',[255,105,180],[255,20,147],[255,192,203],[255,182,193],[219,112,147],[176,48,96],[199,21,133],[208,32,144],[238,130,238],[221,160,221],[218,112,214],[186,85,211],[153,50,204],[148,0,211],[138,43,226],[160,32,240],[147,112,219],[216,191,216])   
+#    @color_ranges << ColorList.new('Browns',[188,143,143],[205,92,92],[139,69,19],[160,82,45],[205,133,63],[222,184,135],[245,245,220],[245,222,179],[244,164,96],[210,180,140],[210,105,30],[178,34,34],[165,42,42])
+#    @color_ranges << ColorList.new('Blue-Green',[0,191,255],[135,206,250],[135,206,250],[70,130,180],[176,196,222],[173,216,230],[176,224,230],[175,238,238],[0,206,209],[72,209,204],[64,224,208],[0,255,255],[224,255,255],[95,158,160])
+   
+    
+    @color_ranges << ColorRange.new('blue', ColorGen::HSL.new(67, 100, 50))
+    @color_ranges << ColorRange.new('red', ColorGen::HSL.new(0, 100, 50))
+    @color_ranges << ColorRange.new('yellow', ColorGen::HSL.new(17, 100, 50),90)
+    @color_ranges << ColorRange.new('gray', ColorGen::HSL.new(0, 0, 50),95)
+    @color_ranges << ColorRange.new('green', ColorGen::HSL.new(33.3, 100, 25))
+    @color_ranges << ColorRange.new('orange', ColorGen::HSL.new(6.7, 100, 50))
+    @color_ranges << ColorRange.new('purple', ColorGen::HSL.new(83.3, 100, 25))
+    @color_ranges << ColorRange.new('brown', ColorGen::HSL.new(7.2, 70, 22),80)
+    @color_ranges << ColorRange.new('pink-jeep', ColorGen::HSL.new(93.6, 72, 57)) 
+    
+    
+    @curr_group=0
+    @group_totals = Hash.new
+    @groups = Hash.new
+    @intervals_set=false    
+  end
+  
+  def add_group(g)
+    unless @groups.has_key?(g)
+      @curr_group = 0 if @curr_group == @color_ranges.length
+      @groups[g]=@color_ranges[@curr_group]
+      @group_totals[g]=0
+      @curr_group+=1
+    end
+    @group_totals[g]+=1
+  end
+  
+  def set_intervals
+    @groups.each_pair{|groupname, color_range| color_range.set_intervals(@group_totals[groupname])}
+    @intervals_set=true
+  end
+  
+  def gen_html(groupname)
+    set_intervals unless @intervals_set
+    hsl = @groups[groupname].get_color
+    return "hsl(#{hsl[0]}%,#{hsl[1]}%,#{hsl[2]}%)"
+  end
+  
+end
+
+
+
+class ColorGenColorMaker < ColorMaker
   
   def initialize
     @generator = ColorGen::ColorGenerator.new
@@ -688,7 +960,7 @@ class ColorGenColorMaker
     
   end
   
-  def gen_html
+  def gen_html(groupname)
     if @colors_used < @colors.length
       color = @colors[@colors_used]
       @colors_used += 1
@@ -702,7 +974,7 @@ end
 
 
 
-class WebColorMaker
+class WebColorMaker < ColorMaker
   
   def initialize
     @outer_loop=0
@@ -723,7 +995,7 @@ class WebColorMaker
   end
   
   
-  def gen_html
+  def gen_html(groupname)
     index = @outer_loop * 9 + @inner_loop_array[@inner_loop]
     @outer_loop+=1
     if @outer_loop == 24
@@ -750,6 +1022,11 @@ class FileHandler
     line.split(/\s/)
   end 
   
+  def strip_and_split_delim(line,delim)
+    line.rstrip!
+    line.split(/#{delim}/)
+  end 
+  
 end
 
 
@@ -762,7 +1039,7 @@ class PhenoGramFileReader < FileHandler
   
   def set_columns(headerline)
     @snpcol = @chromcol = @bpcol = @phenocol = nil
-    headers = strip_and_split(headerline)
+    headers = strip_and_split_delim(headerline, "\t")
     
     headers.each_with_index do |header, i|
       if header =~ /^snp$/i
@@ -773,43 +1050,81 @@ class PhenoGramFileReader < FileHandler
         @bpcol = i
       elsif header =~ /^pheno/i
         @phenocol = i
+      elsif header =~ /^group$/i
+        @groupcol = i
       end
     end
-    
+
     unless @chromcol and @bpcol and @phenocol
       raise 'Input file must include chrom, pos, phenotype columns'
     end
     
   end
   
+  def chr_good?(chrnum)
+    if chrnum == "X" || chrnum == "Y"
+      return true
+    end
+    
+    if chrnum.to_i >=1 and chrnum.to_i <=24
+      return true
+    end
+    
+    return false
+  end
+  
+  
   def parse_file(filename, genome, phenoholder)
     open(filename)
-    set_columns(@file.gets)
+    lines = Array.new
+    # read in all lines and split to accommodate Mac files
+    while oline=@file.gets
+      oline.each_line("\r") {|line| lines << line}
+    end
+    close
+
+    set_columns(lines.shift)
+    group = 'default'
     
-    while line=@file.gets
-      data = strip_and_split(line)
-      # add SNP info 
-      pheno = phenoholder.add_phenotype(data[@phenocol])
+    lines.each do |line|
+      data = strip_and_split_delim(line,"\t")
+      # add SNP info
+      
+      data[@chromcol]="23" if data[@chromcol] =~ /^x/i
+      data[@chromcol]="24" if data[@chromcol] =~ /^y/i
+      
+      unless chr_good?(data[@chromcol])
+        raise "Problem in #{filename} with line:\n#{line}\n#{data[@chromcol]} is not a valid chromsome number"
+      end
+      
+      unless genome.pos_good?(data[@bpcol], data[@chromcol])
+        raise "Problem in #{filename} with line:\n#{line}\nPosition outside chromosome boundaries"
+      end
+    
+      group = data[@groupcol] if @groupcol
+      pheno = phenoholder.add_phenotype(data[@phenocol], group)
 
       if @snpcol
         name = data[@snpcol]
       else
         name = data[@chromcol] + "." + data[@bpcol]
       end
-      
+
       genome.add_snp(:name => name, :chr=>data[@chromcol], :pos=>data[@bpcol],
         :pheno=>pheno)
     end  
-    close   
+    phenoholder.set_colors
   end 
 end
 
 class Plotter
   @@circle_size=0
   @@maxchrom=0
+  @@drawn_circle_size=0
   
-  def self.set_circle(n)
+  def self.set_circle(n, small_circle=false)
     @@circle_size = n
+    small_circle ? @@drawn_circle_size = @@circle_size/2 : @@drawn_circle_size=@@circle_size
   end
   
   def self.set_maxchrom(n)
@@ -851,23 +1166,24 @@ class PhenoBox < Plotter
   end
   
   def estimate_height
-    return (@phenocolors.length.to_f/@@circles_per_row).ceil * @@circle_size
+  est = (@phenocolors.length.to_f/@@circles_per_row).ceil * @@drawn_circle_size
+    return (@phenocolors.length.to_f/@@circles_per_row).ceil * @@drawn_circle_size
   end
   
   def set_default_boundaries(center)
     @chrom_y = center
     
     if @up
-      adjust = -@@circle_size
+      adjust = -@@drawn_circle_size
     else
-      adjust = @@circle_size
+      adjust = @@drawn_circle_size
     end
     
     @top_y = center+adjust.to_f/4
     if @phenocolors.length <= @@circles_per_row
-      @bottom_y = @top_y + @@circle_size
+      @bottom_y = @top_y + @@drawn_circle_size
     else # each row will overlap by 1/4 of a circle on one above
-      @bottom_y = @top_y + @@circle_size * 0.75 * @phenocolors.length/@@circles_per_row
+      @bottom_y = @top_y + @@drawn_circle_size + @@drawn_circle_size * 0.75 * @phenocolors.length/@@circles_per_row
     end
     @height = @bottom_y - @top_y 
   end
@@ -876,9 +1192,9 @@ class PhenoBox < Plotter
     @chrom_y = chrom_y
     @top_y = y
     if @phenocolors.length <= @@circles_per_row
-      @bottom_y = @top_y + @@circle_size
+      @bottom_y = @top_y + @@drawn_circle_size
     else # each row will overlap by 1/4 of a circle on one above
-      @bottom_y = @top_y + @@circle_size * 0.75 * @phenocolors.length/@@circles_per_row
+      @bottom_y = @top_y + @@drawn_circle_size + @@drawn_circle_size * 0.75 * @phenocolors.length/@@circles_per_row
     end   
     @height = @bottom_y - @top_y
   end
@@ -889,9 +1205,9 @@ class PhenoBox < Plotter
     @chrom_y = center
     @top_y = center#+adjust.to_f/4
     if @phenocolors.length <= @@circles_per_row
-      @bottom_y = @top_y + @@circle_size
+      @bottom_y = @top_y + @@drawn_circle_size
     else # each row will overlap by 1/4 of a circle on one above
-      @bottom_y = @top_y + @@circle_size * 0.75 * @phenocolors.length/@@circles_per_row
+      @bottom_y = @top_y + @@drawn_circle_size + @@drawn_circle_size * 0.75 * @phenocolors.length/@@circles_per_row
     end
     @height = @bottom_y - @top_y
   end
@@ -1159,7 +1475,6 @@ class PhenoBinHolder
     if small_bins.empty? or large_bins.empty?
       return 
     end
-
     if total_deficit > total_excess
       fraction = 1.0
     else
@@ -1204,15 +1519,21 @@ end
 
 class ChromosomePlotter < Plotter
   @@chrom_width = 0
-  @@num_phenos_row = 6
+  @@drawn_circles_per_row=@@num_phenos_row = 6
+  @@circle_outline = 'black'
   
   def self.set_chrom_width(w)
     @@chrom_width = w
   end
   
-  def self.set_phenos_row(p)
+  def self.set_circle_outline(color)
+    @@circle_outline=color
+  end
+  
+  def self.set_phenos_row(p, small_drawn_circles=false)
     @@num_phenos_row = p
-    PhenoBox.set_circles_per_row(p)
+    small_drawn_circles ? @@drawn_circles_per_row = p*2-1 : @@drawn_circles_per_row = p
+    PhenoBox.set_circles_per_row(@@drawn_circles_per_row)
   end
   
   def self.init_phenobinholder(params)
@@ -1229,7 +1550,7 @@ class ChromosomePlotter < Plotter
   # maintains relative location along chromosome
   def self.position_phenoboxes(params)
     
-    totaly = params[:available_y]
+    asbsolutey=totaly = params[:available_y]
     totalchromy = params[:chrom_y]
     chrom = params[:chrom]
 
@@ -1238,9 +1559,9 @@ class ChromosomePlotter < Plotter
     binholder.add_chrom(chrom)
 
     # check to see if can shrink the plotting area to the chromosome only
-    phenobox_offset = -((totaly-totalchromy.to_f)/2)
+    orig_phenobox_offset = phenobox_offset = -((totaly-totalchromy.to_f)/2)
     estimated_tot=binholder.estimate_height_needed
-    
+
     if estimated_tot < totalchromy
       params[:available_y] = params[:chrom_y]
       binholder=init_phenobinholder(params)
@@ -1256,7 +1577,7 @@ class ChromosomePlotter < Plotter
       binholder.add_chrom(chrom)
       phenobox_offset = (totalchromy-estimated_tot.to_f)/2        
     end
-    
+
     binholder.set_pheno_positions
     
     # adjust size of bins
@@ -1272,9 +1593,23 @@ class ChromosomePlotter < Plotter
     # place phenoboxes in an array with locations relative to 
     # the absolute base position
     phenoboxes = binholder.get_box_array(phenobox_offset,chrom.size,totalchromy)
-    phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
-    adjust_collisions(phenoboxes, totaly)
     
+    return phenoboxes if phenoboxes.empty?
+    
+    
+    phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
+    adjust_collisions(phenoboxes, totaly)   
+    adjust_all=0   
+    # alter again if bottom is past allowed space and shift everything up
+   # if phenoboxes.last.bottom_y > asbsolutey+orig_phenobox_offset
+      adjust_all = phenoboxes.last.bottom_y - (asbsolutey+orig_phenobox_offset) if phenoboxes.last.bottom_y > asbsolutey+orig_phenobox_offset
+   # end
+    
+    phenoboxes.each do |pbox|
+      pbox.top_y -= adjust_all
+      pbox.bottom_y -= adjust_all
+    end
+
     return phenoboxes
   end
 
@@ -1382,14 +1717,14 @@ class ChromosomePlotter < Plotter
       :end_chrom_y=>end_chrom_y, :xbase=>xbase, :ybase=>ybase, :chromnum=>chrom.display_num)
 
     circle_start_x = @@circle_size*3
-
-    if params[:chr_only] or !(params[:alt_spacing]==:alternative or arams[:alt_spacing]==:equal)
+    
+    if params[:chr_only] or !(params[:alt_spacing]==:alternative or params[:alt_spacing]==:equal)
       phenoboxes = get_pheno_boxes(total_chrom_y, chrom)
       phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
       phenoboxes.each do |box|
         draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y, 
-          :chr_only=>true)
-      end      
+          :chr_only=>params[:chr_only])
+      end
     elsif params[:alt_spacing]==:alternative
       phenoboxes = position_phenoboxes(:chrom=>chrom, :available_y=>available_y, :chrom_y=>total_chrom_y)
 
@@ -1408,13 +1743,6 @@ class ChromosomePlotter < Plotter
       end
       @@circle_size=orig_circle
     end
-#    else
-#      phenoboxes = get_pheno_boxes(total_chrom_y, chrom)
-#      phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
-#      phenoboxes.each do |box|
-#        draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y)
-#      end
-#    end
   end
 
  
@@ -1422,7 +1750,7 @@ class ChromosomePlotter < Plotter
   # need start of chromosome and start of bins
   def self.draw_phenos(canvas, phenobox, start_x, xbase, ybase, params)
     
-    y = phenobox.top_y - @@circle_size * 0.75
+    y = phenobox.top_y - @@drawn_circle_size * 0.75
     x = start_x
     
     canvas.g.translate(xbase,ybase) do |draw|
@@ -1432,20 +1760,19 @@ class ChromosomePlotter < Plotter
     
     unless params[:chr_only]
       phenobox.phenocolors.each_with_index do |color, i|
-        if i % @@num_phenos_row == 0
-          y += @@circle_size * 0.75
+        if i % @@drawn_circles_per_row == 0
+          y += @@drawn_circle_size * 0.75
           x = start_x
         end
         canvas.g.translate(xbase, ybase) do |draw|
-          draw.circle(@@circle_size.to_f/2, x, y).styles(:fill=>color, :stroke=>'black')
+          draw.circle(@@drawn_circle_size.to_f/2, x, y).styles(:fill=>color, :stroke=>@@circle_outline)
         end
       
-        x += @@circle_size
+        x += @@drawn_circle_size
       end
     end
     
   end
-  
   
   # ybase is from start of chromosome drawing
   def self.draw_phenos_equal(canvas, phenobox, start_x, xbase, ybase)
@@ -1612,24 +1939,34 @@ class PhenotypeLabels < Plotter
     radius = @@circle_size.to_f/2
     y = 0
     x = 0
-    i=0
     
-    phenokeys = phenoholder.phenonames.keys.sort{|a,b| a.capitalize <=> b.capitalize}
+    phenokeys = phenoholder.phenonames.keys.sort{|a,b| phenoholder.phenonames[a].sortnumber <=> phenoholder.phenonames[b].sortnumber}
     
-    phenokeys.each do |key|
-      pheno = phenoholder.phenonames[key]
-      if i % phenos_per_row == 0
-        x = 0
+    phenos_per_column = phenokeys.length / phenos_per_row 
+    phenos_column_rem = phenokeys.length % phenos_per_row 
+    curr_pheno = 0
+    
+    phenos_per_row.times do |col|
+      phenos_to_do = phenos_per_column
+      if phenos_column_rem > 0
+        phenos_to_do += 1
+        phenos_column_rem -= 1
+      end
+      
+      phenos_to_do.times do |row|
+        pheno = phenoholder.phenonames[phenokeys[curr_pheno]]
+        curr_pheno += 1
+        canvas.g.translate(xstart,ystart) do |draw|
+          draw.circle(radius, x, y).styles(:fill=>pheno.color, :stroke=>'black')
+        end
+        canvas.g.translate(xstart,ystart).text(x+@@circle_size*1.5,y+@@circle_size.to_f/4) do |text|
+          text.tspan(pheno.name).styles(:font_size=>22)
+        end
         y += @@circle_size * 2
       end
-      canvas.g.translate(xstart,ystart) do |draw|
-        draw.circle(radius, x, y).styles(:fill=>pheno.color, :stroke=>'black')
-      end
-      canvas.g.translate(xstart,ystart).text(x+@@circle_size*1.5,y+@@circle_size.to_f/4) do |text|
-        text.tspan(pheno.name).styles(:font_size=>22)
-      end
+      
       x += pheno_space
-      i += 1
+      y = 0
     end
   end
 end
@@ -1664,14 +2001,14 @@ def draw_plot(genome, phenoholder, options)
   num_circles_in_row=7
   
   num_circles_in_row=3 if options.chr_only
-  
-  Plotter.set_circle(circle_size)
+  Plotter.set_circle(circle_size, options.small_circles)
   Plotter.set_maxchrom(Chromosome.chromsize(1))
   chrom_width = circle_size * 1.5
   chrom_circles_width = circle_size * num_circles_in_row
   chrom_box_width = chrom_circles_width + chrom_width
   ChromosomePlotter.set_chrom_width(chrom_width)
-  ChromosomePlotter.set_phenos_row(num_circles_in_row-1)
+  ChromosomePlotter.set_phenos_row(num_circles_in_row-1, options.small_circles)
+  ChromosomePlotter.set_circle_outline('none') unless options.circle_outline
   title_margin = circle_size * 7
   first_row_start = title_margin
 
@@ -1746,7 +2083,12 @@ def draw_plot(genome, phenoholder, options)
 
   img.write(outfile)
 
-  print " Created #{outfile}\n\n"
+  print " Created #{outfile}\n\n" 
+#  smallfile = options.out_name + '.small.' + options.imageformat
+#  smallimg = img.scale(0.5)
+#  smallimg.write(smallfile)
+#  print " Created #{smallfile}\n\n"
+  
 end
 
 
@@ -1758,7 +2100,13 @@ genome = Genome.new
 phenoholder = PhenotypeHolder.new(:color=>options.color)
 filereader = PhenoGramFileReader.new
 
-filereader.parse_file(options.input, genome, phenoholder)
+begin
+  filereader.parse_file(options.input, genome, phenoholder)
+rescue Exception => e
+  puts "ERROR:"
+  puts e.message
+  exit(1)
+end
 
 draw_plot(genome, phenoholder, options)
 
