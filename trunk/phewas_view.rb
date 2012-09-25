@@ -181,7 +181,7 @@ class Arg
       opts.on("-g [gene_name]", "Gene to display in center of sun plot from input file") do |gene_name|
         options.genename = gene_name
       end
-      opts.on("-L", "--large-text", "Use larger text") do |large_text|
+      opts.on("-F", "--large-text", "Use larger text") do |large_text|
         options.largetext = true
       end
       opts.on("-G", "Include gene name along with SNP when SNP is selected for sun plot") do |gene|
@@ -282,6 +282,7 @@ Usage: phewas_view.rb [options]
     -g [gene_name]                   Gene to display in center of sun plot from input file
     -G                               Include gene name along with SNP when SNP is selected for 
                                      sun plot
+    -F                               Plot with larger text
     -E                               Include ancestry as description of result for sun plot
     -m, --maxp [max_p_value]         Choose a p value threshold, p values less significant will 
                                      not be plotted
