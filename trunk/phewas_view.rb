@@ -12,7 +12,9 @@
 #    GNU General Public License for more details. <http://www.gnu.org/licenses/>
 ###################################################################################
 
-# Requres rubygems
+ENV['MAGICK_CONFIGURE_PATH']='/gpfs/group/mdr23/usr/tools/etc/ImageMagick'
+
+# Requires rubygems
 begin
   require 'rubygems'
 rescue Exception => e
