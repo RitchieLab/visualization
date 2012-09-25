@@ -3008,13 +3008,13 @@ def draw_sun(options)
   print "\n\tDrawing #{outfile}..."
   STDOUT.flush
   img = rvg.draw
-#  img.write(outfile)
+  img.write(outfile)
   print " Created #{outfile}\n\n"
-  
-  smallfile = options.out_name + '.small.' + options.imageformat
-  smallimg = img.scale(0.5)
-  smallimg.write(smallfile)
-  print " Created #{smallfile}\n\n"
+#  
+#  smallfile = options.out_name + '.small.' + options.imageformat
+#  smallimg = img.scale(0.5)
+#  smallimg.write(smallfile)
+#  print " Created #{smallfile}\n\n"
   
   
 end
