@@ -328,9 +328,7 @@ require 'optparse'
 require 'ostruct'
 include Magick
 
-RVG::dpi=600
-
-Version = '0.3.0'
+Version = '0.3.1'
 Name = 'pheno_gram.rb'
 
 # check for windows and select alternate font based on OS
@@ -345,7 +343,7 @@ else
   Font_phenotype_names = "Helvetica"
 end
 
-ChromStyle = {:stroke=>'darkgray',:stroke_width=>2, :fill=>'none'}
+
 
 #############################################################################
 #
@@ -366,6 +364,9 @@ class Arg
     options.chr_only = false
     options.small_circles = false
     options.circle_outline = false
+    options.highres = false
+    options.transparent_lines = false
+    options.thin_lines = false
     help_selected = false
     version_selected = false
     
@@ -392,6 +393,9 @@ class Arg
       opts.on("-c [color_range]", "Options are random (default), web, generator or group") do |color_range|
         options.color = color_range
       end
+      opts.on("-z", "--high-res", "Set resolution to 1200 dpi") {|hres| options.highres=true}
+      opts.on("-T", "--trans-lines", "Make lines on chromosome more transparent") {|trans| options.transparent_lines=true}
+      opts.on("-n", "--thin-lines", "Make lines across chromosomes thinner") {|thin| options.thin_lines=true}
       opts.on("-p [pheno_spacing]", "Options are standard or equal or alternative (default) ") do |pheno_spacing|
         options.pheno_spacing = pheno_spacing
       end
@@ -1723,7 +1727,7 @@ class ChromosomePlotter < Plotter
       phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
       phenoboxes.each do |box|
         draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y, 
-          :chr_only=>params[:chr_only])
+          :chr_only=>params[:chr_only], :transparent=>params[:transparent])
       end
     elsif params[:alt_spacing]==:alternative
       phenoboxes = position_phenoboxes(:chrom=>chrom, :available_y=>available_y, :chrom_y=>total_chrom_y)
@@ -1753,8 +1757,10 @@ class ChromosomePlotter < Plotter
     y = phenobox.top_y - @@drawn_circle_size * 0.75
     x = start_x
     
+    params[:transparent] ? opacity = 0.05 : opacity = 1.0
+
     canvas.g.translate(xbase,ybase) do |draw|
-      draw.line(0, phenobox.chrom_y, @@chrom_width, phenobox.chrom_y).styles(:stroke=>'black', :stroke_width=>1)
+      draw.line(0, phenobox.chrom_y, @@chrom_width, phenobox.chrom_y).styles(:stroke=>'black', :stroke_width=>1, :stroke_opacity=>opacity)
       draw.line(@@chrom_width,phenobox.chrom_y,start_x,phenobox.top_y).styles(:stroke=>'black',:stroke_width=>1) unless params[:chr_only]
     end
     
@@ -1871,21 +1877,25 @@ class ChromosomePlotter < Plotter
     ybase = params[:ybase]
     number = params[:chromnum]
     centromere_offset = @@circle_size.to_f/2
+    stroke_width = @@circle_size / 10
+    stroke_width = 1 if stroke_width < 1
     tpath = "M0,#{start_chrom_y} C0,#{start_chrom_y-@@circle_size/2} #{@@chrom_width},#{start_chrom_y-@@circle_size/2} #{@@chrom_width},#{start_chrom_y}"
     bpath = "M0,#{end_chrom_y} C0,#{end_chrom_y+@@circle_size/2} #{@@chrom_width},#{end_chrom_y+@@circle_size/2} #{@@chrom_width},#{end_chrom_y}"
 
+    chrom_style = {:stroke=>'darkgray',:stroke_width=>stroke_width, :fill=>'none'}
+    
     canvas.g.translate(xbase,ybase) do |draw|
-      draw.line(0,start_chrom_y,0,centromere_y-centromere_offset).styles(:stroke=>'darkgray',:stroke_width=>2)
-      draw.line(0,centromere_y-centromere_offset,centromere_offset.to_f/2,centromere_y).styles(:stroke=>'darkgray',:stroke_width=>2)
-      draw.line(centromere_offset.to_f/2,centromere_y,0,centromere_y+centromere_offset).styles(:stroke=>'darkgray',:stroke_width=>2)
-      draw.line(0,centromere_y+centromere_offset,0,end_chrom_y).styles(:stroke=>'darkgray',:stroke_width=>2)
-      draw.path(tpath).styles(ChromStyle)
+      draw.line(0,start_chrom_y,0,centromere_y-centromere_offset).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
+      draw.line(0,centromere_y-centromere_offset,centromere_offset.to_f/2,centromere_y).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
+      draw.line(centromere_offset.to_f/2,centromere_y,0,centromere_y+centromere_offset).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
+      draw.line(0,centromere_y+centromere_offset,0,end_chrom_y).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
+      draw.path(tpath).styles(chrom_style)
       
-      draw.line(@@chrom_width,start_chrom_y,@@chrom_width,centromere_y-centromere_offset).styles(:stroke=>'darkgray',:stroke_width=>2)
-      draw.line(@@chrom_width,centromere_y-centromere_offset,@@chrom_width-centromere_offset.to_f/2,centromere_y).styles(:stroke=>'darkgray',:stroke_width=>2)
-      draw.line(@@chrom_width-centromere_offset.to_f/2,centromere_y,@@chrom_width,centromere_y+centromere_offset).styles(:stroke=>'darkgray',:stroke_width=>2)
-      draw.line(@@chrom_width,centromere_y+centromere_offset,@@chrom_width,end_chrom_y).styles(:stroke=>'darkgray',:stroke_width=>2)
-      draw.path(bpath).styles(ChromStyle)
+      draw.line(@@chrom_width,start_chrom_y,@@chrom_width,centromere_y-centromere_offset).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
+      draw.line(@@chrom_width,centromere_y-centromere_offset,@@chrom_width-centromere_offset.to_f/2,centromere_y).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
+      draw.line(@@chrom_width-centromere_offset.to_f/2,centromere_y,@@chrom_width,centromere_y+centromere_offset).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
+      draw.line(@@chrom_width,centromere_y+centromere_offset,@@chrom_width,end_chrom_y).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
+      draw.path(bpath).styles(chrom_style)
       
     end
     
@@ -1997,7 +2007,8 @@ def draw_plot(genome, phenoholder, options)
   # a circle will be 5Y in height
   # max chrom size (1) will be 40 circles (or 200Y) in height
   # chromosome will be 2 circles wide
-  circle_size = 20
+  options.thin_lines ? circle_size = 80 : circle_size = 20
+
   num_circles_in_row=7
   
   num_circles_in_row=3 if options.chr_only
@@ -2047,6 +2058,19 @@ def draw_plot(genome, phenoholder, options)
   inches_ratio = height_in/width_in.to_f
   coord_ratio = ymax/xmax.to_f
 
+#xmax *=2
+#ymax *=2
+#start*=2
+#first_row_start*=2
+#max_chrom_height*=2
+#chrom_box_width*=2
+#padded_width*=2
+#circle_size*=2
+#title_margin*=2
+#phenotype_labels_y_start*=2
+
+  
+  
   rvg=RVG.new(width_in.in, height_in.in).viewbox(0,0,xmax,ymax) do |canvas|
     canvas.background_fill = 'rgb(255,255,255)'
     xstart = padded_width
@@ -2058,7 +2082,8 @@ def draw_plot(genome, phenoholder, options)
     (1..12).each do |chr|
       ChromosomePlotter.plot_chrom(:canvas=>canvas, :chrom=>genome.chromosomes[chr], 
         :xstart=>xstart, :ystart=>first_row_start, :height=>max_chrom_height, 
-        :alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only)
+        :alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only,
+        :transparent=>options.transparent_lines)
       xstart += chrom_box_width 
     end
   
@@ -2066,7 +2091,8 @@ def draw_plot(genome, phenoholder, options)
     (13..24).each do |chr|
       ChromosomePlotter.plot_chrom(:canvas=>canvas, :chrom=>genome.chromosomes[chr], 
         :xstart=>xstart, :ystart=>second_row_start, :height=>second_row_box_max, 
-        :alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only)    
+        :alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only,
+        :transparent=>options.transparent_lines)    
       xstart += chrom_box_width
     end
   
@@ -2094,6 +2120,7 @@ end
 
 options = Arg.parse(ARGV)
 
+options.highres ? RVG::dpi=1800 : RVG::dpi=600
 srand(options.rand_seed)
 
 genome = Genome.new
