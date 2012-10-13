@@ -14,6 +14,7 @@
 
 ENV['MAGICK_CONFIGURE_PATH']='/gpfs/group/mdr23/usr/tools/etc/ImageMagick'
 
+
 # Requires rubygems
 begin
   require 'rubygems'
@@ -44,7 +45,9 @@ Version = '0.20'
 
 # check for windows and select alternate font based on OS
 Font_family_style = RUBY_PLATFORM =~ /mswin/ ? "Verdana" : "Times"
-Font_plot_family = RUBY_PLATFORM =~ /darwin/ ? "Arial" : "Helvetica"
+Font_plot_family = RUBY_PLATFORM =~ /darwin/ ? "Helvetica" : "Helvetica"
+
+#Font_plot_family = 'Helvetica'
 
 #Font_phenotype_names = RUBY_PLATFORM =~ /darwin/ ? "Geneva" : "Helvetica"
 
@@ -1533,17 +1536,9 @@ class SunResultFileReader < FileReader
         snpname = data[@snpcol].downcase
         if data[@pvalcol].to_f <= p_cut
           if snpname.downcase == restrict_name# and data[@pvalcol].to_f <= p_cut
-#            if @substudycol
-#              resultname = data[@phenocol]
-#              resultname += ':' + data[@phenolongcol] if @phenolongcol
-#              resultname +=  ':' + data[@substudycol]
-#            else
-#              resultname = data[@phenocol]
-#              resultname += ' ' + data[@phenolongcol] if @phenolongcol
               resultname = ''
               @label_columns.each {|col| resultname += ':' + data[col] if data[col]}
-              resultname.slice!(0)
-#            end           
+              resultname.slice!(0)        
             genename = data[@genecol] if @genecol && data[@genecol]=~/[a-zA-Z0-9]/
           elsif data[@phenocol].downcase == restrict_name
             resultname = snpname
@@ -1568,7 +1563,8 @@ class SunResultFileReader < FileReader
           
           if resultholder.appendeth && @ethcol
             resultname += ' (' + data[@ethcol] + ')'
-          end          
+          end
+          resultname.gsub!('"','')          
           resultholder.add_score(resultname, data[@pvalcol].to_f, betaval);
         end # p-value <= p_cut
         end
@@ -1706,6 +1702,7 @@ class RadialPlotter
     total_radii = params[:total_radii]
     use_beta = params[:use_beta] || false
     gene_name = params[:gene_name]
+    largetext = params[:largetext]
     
     midy = (ystart+yend)/2
 
@@ -1772,7 +1769,8 @@ class RadialPlotter
       elsif rotation >= 180 and rotation < 220
         y_shift -= line_size * (220-rotation)/20 * (@font_size_multiple*y_correction-1.0)
       elsif rotation == 0
-        y_shift -= line_size * 0.18 * @font_size_multiple
+        largetext ? y_shift -= line_size * (120-rotation)/120 * (@font_size_multiple*2-1.0) : y_shift -= line_size * 0.18 * @font_size_multiple
+puts "y_shift=#{y_shift}"        
       elsif rotation <= 40
          y_shift -= line_size * (40-rotation)/120 * (@font_size_multiple*2-1.0)
         # adjust it based on length of line size at that position
@@ -2847,7 +2845,6 @@ def draw_sun(options)
   if options.snpid =~ /\w/
     resultholder.center_name = options.snpid
     resultholder.phenorequired = false
-    puts "options.labelgene=#{options.labelgene}"
     resultholder.appendgene = options.labelgene
   elsif options.phenoname =~ /\w/
     resultholder.center_name = options.phenoname
@@ -2884,11 +2881,14 @@ def draw_sun(options)
 
   plotter = RadialPlotter.new
   plotter.line_size = radius_size
-
+  yside_mult = 1.45
+  title_height_mult = 1
+puts "total_values=#{total_values}"  
   if total_values > 70
     total_radii = 44
     plotter.radius = 8
     if options.largetext
+      yside_mult = 1.2
       plotter.font_size_multiple *= 1.8
       title_size_fit = 63
       title_adjustment = 0.009 * plotter.font_size_multiple
@@ -2902,6 +2902,7 @@ def draw_sun(options)
     plotter.radius = 6
     title_size_fit = 75
     if options.largetext
+      yside_mult = 1.22
       plotter.font_size_multiple = 1.65
       title_size_fit = 53
       title_adjustment = 0.014 * plotter.font_size_multiple
@@ -2913,14 +2914,14 @@ def draw_sun(options)
   elsif total_values > 30
     total_radii = 20
     plotter.radius = 4
-    title_size_fit = 50
     if options.largetext
+      yside_mult = 1.25
       plotter.font_size_multiple = 1.5
-      title_size_fit = 36
+      title_size_fit = 34
       title_adjustment = 0.016 * plotter.font_size_multiple
     else
-      plotter.font_size_multiple = 1.1
-      title_size_fit = 50
+      plotter.font_size_multiple = 1.05
+      title_size_fit = 48
       title_adjustment = 0.019 * plotter.font_size_multiple
     end
   elsif total_values > 20
@@ -2928,6 +2929,8 @@ def draw_sun(options)
     plotter.radius = 4
     title_size_fit = 50
     if options.largetext
+      title_height_mult = 1.1
+      yside_mult = 1.3
       plotter.font_size_multiple = 1.5
       title_size_fit = 27
       title_adjustment = 0.017 * plotter.font_size_multiple
@@ -2940,6 +2943,8 @@ def draw_sun(options)
     total_radii = 12
     plotter.radius = 2
     if options.largetext
+      title_height_mult = 1.2
+      yside_mult = 1.35
       plotter.font_size_multiple = 1.3
       title_size_fit = 20
       title_adjustment = 0.027 * plotter.font_size_multiple
@@ -2954,6 +2959,8 @@ def draw_sun(options)
     plotter.radius = 2
     title_size_fit = 25
     if options.largetext
+      title_height_mult = 1.25
+      yside_mult = 1.4
       plotter.font_size_multiple = 1.3
       title_size_fit = 17
       title_adjustment = 0.028 * plotter.font_size_multiple
@@ -2963,11 +2970,10 @@ def draw_sun(options)
       title_adjustment = 0.032 * plotter.font_size_multiple
     end
   end
-
+ 
   xside_end_addition = 0
-  if options.beta
-    resultholder.max_title_length += 2
-  end
+  resultholder.max_title_length += 2 if options.beta
+  resultholder.max_title_length += 3 if options.include_eth
 
   # add some space on both sides outside of plot
   if resultholder.max_title_length > title_size_fit
@@ -2981,13 +2987,12 @@ def draw_sun(options)
 
   # set space for the main title
   y_title_start = ymax
-  title_height_mult = 1
   yside = plotter.add_space_for_title(yside, 0.016*title_height_mult)
   ymax = plotter.calculate_coordinate(yside);
 
   y_plot_start = ymax
   # add vertical space for the main circle plot (which should be the same as plot width)
-  yside += plotter.calculate_plot_width(total_radii, 0)/1.5
+  yside += plotter.calculate_plot_width(total_radii, 0)/yside_mult
   ymax += plotter.calculate_coordinate(yside)
   
   rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
@@ -3001,7 +3006,8 @@ def draw_sun(options)
 
     plotter.draw_main_plot(:center_name=>resultholder.center_name, :reslist=>resultholder.results,
       :midx=>xmax/2, :ystart=>y_plot_start, :yend=>ymax, :p_thresh=>p_val_thresh, 
-      :total_radii=>total_radii, :use_beta=>options.beta, :gene_name=>resultholder.gene_name)
+      :total_radii=>total_radii, :use_beta=>options.beta, :gene_name=>resultholder.gene_name,
+      :largetext=>options.largetext)
   end #end RVG.new
 
   # produce output file
