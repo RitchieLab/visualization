@@ -3,6 +3,8 @@
 
 ENV['MAGICK_CONFIGURE_PATH'] = '/gpfs/group/mdr23/usr/tools/etc/ImageMagick'
 
+Font_family = 'Verdana'
+
 begin
   require 'rubygems'
 rescue Exception => e
@@ -328,17 +330,17 @@ require 'optparse'
 require 'ostruct'
 include Magick
 
-Version = '0.3.1'
+Version = '0.3.2'
 Name = 'pheno_gram.rb'
 
 # check for windows and select alternate font based on OS
 Font_family_style = RUBY_PLATFORM =~ /mswin/ ? "Verdana" : "Times"
-Font_plot_family = RUBY_PLATFORM =~ /darwin/ ? "Arial" : "Helvetica"
+Font_plot_family = RUBY_PLATFORM =~ /darwin/ ? "Verdana" : "Helvetica"
 
 if RUBY_PLATFORM =~ /darwin/
   Font_phenotype_names = "Geneva"
 elsif RUBY_PLATFORM =~ /mswin/
-  Font_phenotype_names = "Arial"
+  Font_phenotype_names = "Verdana"
 else
   Font_phenotype_names = "Helvetica"
 end
@@ -366,6 +368,7 @@ class Arg
     options.circle_outline = false
     options.highres = false
     options.transparent_lines = false
+    options.thickness_mult = 1
     options.thin_lines = false
     help_selected = false
     version_selected = false
@@ -396,6 +399,7 @@ class Arg
       opts.on("-z", "--high-res", "Set resolution to 1200 dpi") {|hres| options.highres=true}
       opts.on("-T", "--trans-lines", "Make lines on chromosome more transparent") {|trans| options.transparent_lines=true}
       opts.on("-n", "--thin-lines", "Make lines across chromosomes thinner") {|thin| options.thin_lines=true}
+      opts.on("-B", "--thick_boundary", "Increase thickness of chromosome boundary") {|thick| options.thickness_mult=2}
       opts.on("-p [pheno_spacing]", "Options are standard or equal or alternative (default) ") do |pheno_spacing|
         options.pheno_spacing = pheno_spacing
       end
@@ -1718,7 +1722,8 @@ class ChromosomePlotter < Plotter
     centromere_y = total_chrom_y * (centromere/chrom.size.to_f) + start_chrom_y
     
     draw_chr(:canvas=>canvas, :centromere_y=>centromere_y, :start_chrom_y=>start_chrom_y, 
-      :end_chrom_y=>end_chrom_y, :xbase=>xbase, :ybase=>ybase, :chromnum=>chrom.display_num)
+      :end_chrom_y=>end_chrom_y, :xbase=>xbase, :ybase=>ybase, :chromnum=>chrom.display_num,
+      :thickness_mult=>params[:thickness_mult])
 
     circle_start_x = @@circle_size*3
     
@@ -1876,8 +1881,9 @@ class ChromosomePlotter < Plotter
     xbase = params[:xbase]
     ybase = params[:ybase]
     number = params[:chromnum]
+    line_thickness = params[:thickness_mult] || 1
     centromere_offset = @@circle_size.to_f/2
-    stroke_width = @@circle_size / 10
+    stroke_width = @@circle_size / 10 * line_thickness
     stroke_width = 1 if stroke_width < 1
     tpath = "M0,#{start_chrom_y} C0,#{start_chrom_y-@@circle_size/2} #{@@chrom_width},#{start_chrom_y-@@circle_size/2} #{@@chrom_width},#{start_chrom_y}"
     bpath = "M0,#{end_chrom_y} C0,#{end_chrom_y+@@circle_size/2} #{@@chrom_width},#{end_chrom_y+@@circle_size/2} #{@@chrom_width},#{end_chrom_y}"
@@ -2083,7 +2089,7 @@ def draw_plot(genome, phenoholder, options)
       ChromosomePlotter.plot_chrom(:canvas=>canvas, :chrom=>genome.chromosomes[chr], 
         :xstart=>xstart, :ystart=>first_row_start, :height=>max_chrom_height, 
         :alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only,
-        :transparent=>options.transparent_lines)
+        :transparent=>options.transparent_lines, :thickness_mult=>options.thickness_mult)
       xstart += chrom_box_width 
     end
   
@@ -2092,7 +2098,7 @@ def draw_plot(genome, phenoholder, options)
       ChromosomePlotter.plot_chrom(:canvas=>canvas, :chrom=>genome.chromosomes[chr], 
         :xstart=>xstart, :ystart=>second_row_start, :height=>second_row_box_max, 
         :alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only,
-        :transparent=>options.transparent_lines)    
+        :transparent=>options.transparent_lines, :thickness_mult=>options.thickness_mult)    
       xstart += chrom_box_width
     end
   
