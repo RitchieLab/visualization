@@ -440,8 +440,8 @@ class Arg
     if !options.input
       help_string = opts.help
       puts "\n",help_string,"\n"
-      puts "\nExamples: #{Name}.rb -i pheno_input.txt -o new_plot -t \"New Image\"\n"
-      puts "          #{Name}.rb -i pheno_input.txt -f jpg\n"
+      puts "\nExamples: #{Name} -i pheno_input.txt -o new_plot -t \"New Image\"\n"
+      puts "          #{Name} -i pheno_input.txt -f jpg\n"
       print "\n"
       exit(1)
     end
