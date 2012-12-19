@@ -5,6 +5,10 @@ ENV['MAGICK_CONFIGURE_PATH'] = '/gpfs/group/mdr23/usr/tools/etc/ImageMagick'
 
 Font_family = 'Verdana'
 
+SNPDefaultColor = 'black'
+
+$color_column_included = false
+
 begin
   require 'rubygems'
 rescue Exception => e
@@ -518,7 +522,7 @@ class Genome
   
   def add_snp(params)
     @chromosomes[params[:chr].to_i].add_snp(:name=>params[:name], :pos=>params[:pos],
-      :pheno=>params[:pheno], :chr=>params[:chr])
+      :pheno=>params[:pheno], :chr=>params[:chr], :snpcolor=>params[:snpcolor])
   end
   
   def snps_per_chrom
@@ -565,9 +569,9 @@ class Chromosome
   # sizes taken from ensembl
   @@chromsize = Array.new
   @@chromsize << 0
-  @@chromsize << 249250621
+  @@chromsize << 249239465 
   @@chromsize << 243199373
-  @@chromsize << 198022430
+  @@chromsize << 199411731
   @@chromsize << 191154276
   @@chromsize << 180915260
   @@chromsize << 171115067
@@ -581,7 +585,7 @@ class Chromosome
   @@chromsize << 107349540
   @@chromsize << 102531392
   @@chromsize << 90354753
-  @@chromsize << 81195210
+  @@chromsize << 81195210 
   @@chromsize << 78077248
   @@chromsize << 59128983
   @@chromsize << 63025520
@@ -616,6 +620,7 @@ class Chromosome
       @snpnames << params[:name]
     end
     snp.phenos << params[:pheno]
+    snp.linecolors[params[:snpcolor]]=1
   end
   
   def sort_snps!
@@ -633,12 +638,13 @@ class Chromosome
 end
 
 class SNP
-  attr_accessor :chrom, :pos, :phenos
+  attr_accessor :chrom, :pos, :phenos, :linecolors
   
   def initialize(c,p)
     @chrom = c
     @pos = p
     @phenos = Array.new
+    @linecolors = Hash.new
   end
   
 end
@@ -1043,10 +1049,11 @@ class PhenoGramFileReader < FileHandler
 
   def open(filename)
     @file = File.new(filename, "r")
+    @snpcolors = ['blue','red','green','orange','purple','pink']
   end
   
   def set_columns(headerline)
-    @snpcol = @chromcol = @bpcol = @phenocol = nil
+    @snpcol = @chromcol = @bpcol = @phenocol = @snpcolorcol = nil
     headers = strip_and_split_delim(headerline, "\t")
     
     headers.each_with_index do |header, i|
@@ -1054,12 +1061,16 @@ class PhenoGramFileReader < FileHandler
         @snpcol = i
       elsif header =~ /^chrom|^chr$/i
         @chromcol = i
+      elsif header =~ /poscolor|snpcolor/i
+        @snpcolorcol = i
+        $color_column_included = true
       elsif header =~ /^bp|^pos/i
         @bpcol = i
       elsif header =~ /^pheno/i
         @phenocol = i
       elsif header =~ /^group$/i
         @groupcol = i
+
       end
     end
 
@@ -1090,25 +1101,22 @@ class PhenoGramFileReader < FileHandler
       oline.each_line("\r") {|line| lines << line}
     end
     close
-
+    
     set_columns(lines.shift)
     group = 'default'
     
     lines.each do |line|
+      next unless line =~ /\w/
       data = strip_and_split_delim(line,"\t")
       # add SNP info
       
       data[@chromcol]="23" if data[@chromcol] =~ /^x/i
       data[@chromcol]="24" if data[@chromcol] =~ /^y/i
+
+      raise "Problem in #{filename} with line:\n#{line}\n#{data[@chromcol]} is not a valid chromsome number" unless chr_good?(data[@chromcol])
       
-      unless chr_good?(data[@chromcol])
-        raise "Problem in #{filename} with line:\n#{line}\n#{data[@chromcol]} is not a valid chromsome number"
-      end
-      
-      unless genome.pos_good?(data[@bpcol], data[@chromcol])
-        raise "Problem in #{filename} with line:\n#{line}\nPosition outside chromosome boundaries"
-      end
-    
+      raise "Problem in #{filename} with line:\n#{line}\nPosition outside chromosome boundaries" unless genome.pos_good?(data[@bpcol], data[@chromcol])
+
       group = data[@groupcol] if @groupcol
       pheno = phenoholder.add_phenotype(data[@phenocol], group)
 
@@ -1117,9 +1125,13 @@ class PhenoGramFileReader < FileHandler
       else
         name = data[@chromcol] + "." + data[@bpcol]
       end
-
-      genome.add_snp(:name => name, :chr=>data[@chromcol], :pos=>data[@bpcol],
-        :pheno=>pheno)
+      if @snpcolorcol
+        snpcolor = @snpcolors[data[@snpcolorcol].to_i-1]
+      else
+        snpcolor = SNPDefaultColor
+      end
+      genome.add_snp(:name => name, :chr=>data[@chromcol], :pos=>data[@bpcol].to_i,
+        :pheno=>pheno, :snpcolor=>snpcolor)
     end  
     phenoholder.set_colors
   end 
@@ -1152,7 +1164,8 @@ class Circle
 end
 
 class PhenoBox < Plotter
-  attr_accessor :top_y, :bottom_y, :circles, :phenocolors, :chrom_y, :height, :up
+  attr_accessor :top_y, :bottom_y, :circles, :phenocolors, :chrom_y, :height, 
+    :up, :line_colors
   @@circles_per_row = 0
   
   def self.set_circles_per_row(c)
@@ -1163,6 +1176,7 @@ class PhenoBox < Plotter
     @circles = Array.new
     @phenocolors = Array.new
     @up = true
+    @line_colors = Array.new
   end
   
   def add_circle(x,y,color)
@@ -1173,8 +1187,12 @@ class PhenoBox < Plotter
     @phenocolors << p
   end
   
+  def add_line_color(color)
+    @line_colors << color
+  end
+  
   def estimate_height
-  est = (@phenocolors.length.to_f/@@circles_per_row).ceil * @@drawn_circle_size
+#  est = (@phenocolors.length.to_f/@@circles_per_row).ceil * @@drawn_circle_size
     return (@phenocolors.length.to_f/@@circles_per_row).ceil * @@drawn_circle_size
   end
   
@@ -1253,7 +1271,7 @@ class PhenoBin
     return @actual_height-@height_needed
   end
   
-  def add_phenotype_snp(pos, col)
+  def add_phenotype_snp(pos, col, linecolors)
     if @boxpos.has_key?(pos)
       pbox = @boxpos[pos]
     else
@@ -1263,6 +1281,7 @@ class PhenoBin
     end
     
     pbox.add_phenocolor(col)
+    linecolors.each {|color| pbox.add_line_color(color)}
   end
   
   def bp_from_y(y)
@@ -1321,25 +1340,62 @@ class PhenoBinHolder
   end
   
   def get_box_array(y_from_top, chrom_size, total_chrom_y)
-    phenoboxes = Array.new
+    final_phenoboxes = Array.new
     bin_y = y_from_top
     @phenobins.each do |pbin|
+      phenoboxes = Array.new
+      boxes_total = 0
       pbin.boxpos.each_pair do |pos, phenobox|
         phenobox.top_y = bin_y + phenobox.top_y
         phenobox.bottom_y = bin_y + phenobox.bottom_y
         phenobox.chrom_y = pos.to_f / chrom_size * total_chrom_y
         phenoboxes << phenobox
+        boxes_total +=1
       end
+      
+      phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
+      
+      # spread out phenoboxes throughout the bin if any collisions
+      # if too many boxes for bin just arrange along as spread out as possible
+      # if space and collisions again just spread out
+      # if space and no collisions don't change top_y, bottom_y
+      spread_boxes = false
+      if pbin.height_needed > pbin.actual_height
+        spread_boxes = true
+      else
+        j=phenoboxes.length-1
+        for i in 1..j
+          if phenoboxes[i].top_y < phenoboxes[i-1].bottom_y
+            spread_boxes=true
+            break
+          end
+        end
+      end
+      
+      if spread_boxes
+        y_spread = pbin.actual_height / boxes_total.to_f
+        phenoboxes.clear
+        y_pos = 0
+        pbin.boxpos.each_pair do |pos, phenobox|
+          phenobox.top_y = bin_y + y_pos
+          phenobox.bottom_y = bin_y + (phenobox.bottom_y - phenobox.top_y) + y_pos
+          phenobox.chrom_y = pos.to_f / chrom_size * total_chrom_y
+          y_pos += y_spread
+          phenoboxes << phenobox
+        end      
+      end
+      
       bin_y += pbin.actual_height
+      final_phenoboxes.push(*phenoboxes)
     end
-    return phenoboxes
+    return final_phenoboxes
   end
   
   # adds a phenotype to appropriate bin
-  def add_phenotype_snp(position, color)
+  def add_phenotype_snp(position, color, linecolors)
     @phenobins.each do |pb|
       if position.to_i >= pb.startbase and position.to_i < pb.endbase
-        pb.add_phenotype_snp(position, color)
+        pb.add_phenotype_snp(position, color, linecolors)
         return
       end
     end
@@ -1518,7 +1574,7 @@ class PhenoBinHolder
   def add_chrom(chrom)
     chrom.snps.each_value do |snp|
       snp.phenos.each do |pheno|
-        add_phenotype_snp(snp.pos, pheno.color)
+        add_phenotype_snp(snp.pos, pheno.color, snp.linecolors.keys)
       end
     end
   end
@@ -1558,10 +1614,10 @@ class ChromosomePlotter < Plotter
   # maintains relative location along chromosome
   def self.position_phenoboxes(params)
     
-    asbsolutey=totaly = params[:available_y]
+    absolutey=totaly = params[:available_y]
     totalchromy = params[:chrom_y]
     chrom = params[:chrom]
-
+   
     binholder=init_phenobinholder(params)
     # add phenotypes to the bins
     binholder.add_chrom(chrom)
@@ -1578,7 +1634,6 @@ class ChromosomePlotter < Plotter
       phenobox_offset = 0
     elsif estimated_tot < totaly
       adjustedy = estimated_tot
-      
       params[:available_y] = adjustedy
       binholder=init_phenobinholder(params)
       totaly = adjustedy
@@ -1602,29 +1657,29 @@ class ChromosomePlotter < Plotter
     # the absolute base position
     phenoboxes = binholder.get_box_array(phenobox_offset,chrom.size,totalchromy)
     
-    return phenoboxes if phenoboxes.empty?
+    return phenoboxes if phenoboxes.empty? 
     
     
-    phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
-    adjust_collisions(phenoboxes, totaly)   
-    adjust_all=0   
-    # alter again if bottom is past allowed space and shift everything up
-   # if phenoboxes.last.bottom_y > asbsolutey+orig_phenobox_offset
-      adjust_all = phenoboxes.last.bottom_y - (asbsolutey+orig_phenobox_offset) if phenoboxes.last.bottom_y > asbsolutey+orig_phenobox_offset
-   # end
-    
-    phenoboxes.each do |pbox|
-      pbox.top_y -= adjust_all
-      pbox.bottom_y -= adjust_all
-    end
+#    adjust_collisions(phenoboxes, totaly, phenobox_offset)   
+#    adjust_all=0   
+#    # alter again if bottom is past allowed space and shift everything up
+#   # if phenoboxes.last.bottom_y > absolutey+orig_phenobox_offset
+#    adjust_all = phenoboxes.last.bottom_y - (absolutey+orig_phenobox_offset) if phenoboxes.last.bottom_y > absolutey+orig_phenobox_offset
+#   # end
+#    
+#    puts "adjust_all=#{adjust_all}"
+#    
+#    phenoboxes.each do |pbox|
+#      pbox.top_y -= adjust_all
+#      pbox.bottom_y -= adjust_all
+#    end
 
     return phenoboxes
   end
 
 
   # move the boxes for collisions
-  def self.adjust_collisions(phenoboxes, available_y)
-    
+  def self.adjust_collisions(phenoboxes, available_y, offset)
     total_boxes = phenoboxes.length
     last_index = total_boxes-1
     notdone = true
@@ -1635,7 +1690,7 @@ class ChromosomePlotter < Plotter
       for i in (0..last_index)
         for j in (i+1..last_index)
           if phenoboxes[i].bottom_y > phenoboxes[j].top_y
-            move_boxes(phenoboxes, available_y, i, j)
+            move_boxes(phenoboxes, available_y, i, j, offset)
             notdone=true
           end
         end
@@ -1668,35 +1723,38 @@ class ChromosomePlotter < Plotter
   end
   
   
-  def self.move_boxes(phenoboxes, available_y, i, j)
+  def self.move_boxes(phenoboxes, available_y, i, j, offset)
     last_index = phenoboxes.length-1
     # check for room on top and bottom 
     toproom=bottomroom=false
-    if i==0 or (phenoboxes[i].top_y - phenoboxes[i].height > phenoboxes[i-1].bottom_y)
+    if (i==0 or (phenoboxes[i].top_y - phenoboxes[i].height > phenoboxes[i-1].bottom_y)) and
+        phenoboxes[0].top_y > offset
       toproom=true
     end
-    if j==last_index or (phenoboxes[j].bottom_y+phenoboxes[j].height < phenoboxes[j].top_y)
+    if (j==last_index or (phenoboxes[j].bottom_y+phenoboxes[j].height < phenoboxes[j].top_y)) and
+        phenoboxes.last.top_y < available_y + offset
       bottomroom=true
     end
     # move in direction with more space available
     # use xor to move in direction when only one available
-    if (toproom and bottomroom) or (!toproom and !bottomroom)
-      topdist = phenoboxes[i].top_y.to_f / i
-      bottomdist = (available_y.to_f - phenoboxes[j].bottom_y)/(last_index-j)
+    # when both are ok or neither is, move in direction of more available space
+    if (toproom and bottomroom)# or (!toproom and !bottomroom)
+      topdist = (phenoboxes[i].top_y.to_f - offset) / i
+#      bottomdist = (available_y.to_f - phenoboxes[j].bottom_y)/(last_index-j)
+      bottomdist = (available_y.to_f - phenoboxes[j].bottom_y-offset)/(last_index-j)
       if topdist > bottomdist
         shift_boxes(phenoboxes,i,true)
       else
         shift_boxes(phenoboxes,j,false)
       end
-      
-    # when both are ok or neither is, move in direction of more available space
     elsif toproom
       # shift top box up
       shift_boxes(phenoboxes, i, true)
-    else
+    elsif bottomroom
       # shift lower box down
       shift_boxes(phenoboxes, j, false)
     end   
+    # when no room do nothing
   end
   
   
@@ -1748,7 +1806,8 @@ class ChromosomePlotter < Plotter
       # sort by y location
       phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
       phenoboxes.each do |box|
-        draw_phenos_equal(canvas, box, circle_start_x, xbase, ybase + padding.to_f/2)
+        draw_phenos_equal(canvas, box, circle_start_x, xbase, ybase + padding.to_f/2, 
+          :chr_only=>params[:chr_only])
       end
       @@circle_size=orig_circle
     end
@@ -1762,11 +1821,17 @@ class ChromosomePlotter < Plotter
     y = phenobox.top_y - @@drawn_circle_size * 0.75
     x = start_x
     
-    params[:transparent] ? opacity = 0.05 : opacity = 1.0
+    unless $color_column_included
+      params[:transparent] ? opacity = 0.05 : opacity = 1.0
+    else
+      params[:transparent] ? opacity = 0.55 : opacity = 1.0
+    end
 
-    canvas.g.translate(xbase,ybase) do |draw|
-      draw.line(0, phenobox.chrom_y, @@chrom_width, phenobox.chrom_y).styles(:stroke=>'black', :stroke_width=>1, :stroke_opacity=>opacity)
-      draw.line(@@chrom_width,phenobox.chrom_y,start_x,phenobox.top_y).styles(:stroke=>'black',:stroke_width=>1) unless params[:chr_only]
+    phenobox.line_colors.each do |linecolor|
+      canvas.g.translate(xbase,ybase) do |draw|
+        draw.line(0, phenobox.chrom_y, @@chrom_width, phenobox.chrom_y).styles(:stroke=>linecolor, :stroke_width=>1, :stroke_opacity=>opacity)
+        draw.line(@@chrom_width,phenobox.chrom_y,start_x,phenobox.top_y).styles(:stroke=>linecolor,:stroke_width=>1) unless params[:chr_only]
+      end
     end
     
     unless params[:chr_only]
@@ -1778,7 +1843,6 @@ class ChromosomePlotter < Plotter
         canvas.g.translate(xbase, ybase) do |draw|
           draw.circle(@@drawn_circle_size.to_f/2, x, y).styles(:fill=>color, :stroke=>@@circle_outline)
         end
-      
         x += @@drawn_circle_size
       end
     end
@@ -1786,14 +1850,16 @@ class ChromosomePlotter < Plotter
   end
   
   # ybase is from start of chromosome drawing
-  def self.draw_phenos_equal(canvas, phenobox, start_x, xbase, ybase)
+  def self.draw_phenos_equal(canvas, phenobox, start_x, xbase, ybase, params)
     
     y = phenobox.top_y - @@circle_size * 0.75
     x = start_x
     
-    canvas.g.translate(xbase,ybase) do |draw|
-      draw.line(0, phenobox.chrom_y, @@chrom_width, phenobox.chrom_y).styles(:stroke=>'black', :stroke_width=>1)
-      draw.line(@@chrom_width,phenobox.chrom_y,start_x,phenobox.top_y).styles(:stroke=>'black',:stroke_width=>1)
+    phenobox.line_colors.each do |linecolor|
+      canvas.g.translate(xbase,ybase) do |draw|
+        draw.line(0, phenobox.chrom_y, @@chrom_width, phenobox.chrom_y).styles(:stroke=>linecolor, :stroke_width=>1)
+        draw.line(@@chrom_width,phenobox.chrom_y,start_x,phenobox.top_y).styles(:stroke=>linecolor,:stroke_width=>1) unless params[:chr_only]
+      end
     end
     
     phenobox.phenocolors.each_with_index do |color, i|
@@ -1824,9 +1890,8 @@ class ChromosomePlotter < Plotter
       else
         phenobox.up = false
       end
-      snp.phenos.each do |pheno|
-        phenobox.add_phenocolor(pheno.color)
-      end
+      snp.phenos.each { |pheno| phenobox.add_phenocolor(pheno.color)}
+      snp.linecolors.each_key {|col| phenobox.add_line_color(col)}
       phenobox.set_default_boundaries(y_offset)
       pheno_boxes << phenobox
     end
@@ -1861,9 +1926,8 @@ class ChromosomePlotter < Plotter
       pos_fraction = snp.pos.to_f/chrom.size
       y_offset = pos_fraction * total_chrom_y + chrom_offset
       phenobox = PhenoBox.new
-      snp.phenos.each do |pheno|
-        phenobox.add_phenocolor(pheno.color)
-      end
+      snp.phenos.each { |pheno| phenobox.add_phenocolor(pheno.color)}
+      snp.linecolors.each_key {|col| phenobox.add_line_color(col)}
       phenobox.set_even_boundaries(y_offset, y)
       pheno_boxes << phenobox
       y += y_per_snp
@@ -2063,19 +2127,6 @@ def draw_plot(genome, phenoholder, options)
 
   inches_ratio = height_in/width_in.to_f
   coord_ratio = ymax/xmax.to_f
-
-#xmax *=2
-#ymax *=2
-#start*=2
-#first_row_start*=2
-#max_chrom_height*=2
-#chrom_box_width*=2
-#padded_width*=2
-#circle_size*=2
-#title_margin*=2
-#phenotype_labels_y_start*=2
-
-  
   
   rvg=RVG.new(width_in.in, height_in.in).viewbox(0,0,xmax,ymax) do |canvas|
     canvas.background_fill = 'rgb(255,255,255)'
