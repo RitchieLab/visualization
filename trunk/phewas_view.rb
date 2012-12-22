@@ -1769,8 +1769,7 @@ class RadialPlotter
       elsif rotation >= 180 and rotation < 220
         y_shift -= line_size * (220-rotation)/20 * (@font_size_multiple*y_correction-1.0)
       elsif rotation == 0
-        largetext ? y_shift -= line_size * (120-rotation)/120 * (@font_size_multiple*2-1.0) : y_shift -= line_size * 0.18 * @font_size_multiple
-puts "y_shift=#{y_shift}"        
+        largetext ? y_shift -= line_size * (120-rotation)/120 * (@font_size_multiple*2-1.0) : y_shift -= line_size * 0.18 * @font_size_multiple       
       elsif rotation <= 40
          y_shift -= line_size * (40-rotation)/120 * (@font_size_multiple*2-1.0)
         # adjust it based on length of line size at that position
@@ -2883,7 +2882,7 @@ def draw_sun(options)
   plotter.line_size = radius_size
   yside_mult = 1.45
   title_height_mult = 1
-puts "total_values=#{total_values}"  
+
   if total_values > 70
     total_radii = 44
     plotter.radius = 8

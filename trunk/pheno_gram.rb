@@ -334,7 +334,7 @@ require 'optparse'
 require 'ostruct'
 include Magick
 
-Version = '0.3.2'
+Version = '0.3.4'
 Name = 'pheno_gram.rb'
 
 # check for windows and select alternate font based on OS
@@ -522,7 +522,8 @@ class Genome
   
   def add_snp(params)
     @chromosomes[params[:chr].to_i].add_snp(:name=>params[:name], :pos=>params[:pos],
-      :pheno=>params[:pheno], :chr=>params[:chr], :snpcolor=>params[:snpcolor])
+      :pheno=>params[:pheno], :chr=>params[:chr], :snpcolor=>params[:snpcolor], 
+      :endpos=>params[:endpos])
   end
   
   def snps_per_chrom
@@ -538,7 +539,9 @@ class Genome
 end
 
 class Chromosome
-  attr_accessor :number, :snps, :snpnames, :centromere, :size, :display_num
+  attr_accessor :number, :snps, :snpnames, :centromere, :size, 
+    :display_num
+  
   @@centromeres = Array.new
   @@centromeres << 0
   @@centromeres << 124496354 #Array.new(121535434, 124535434) 
@@ -587,7 +590,7 @@ class Chromosome
   @@chromsize << 90354753
   @@chromsize << 81195210 
   @@chromsize << 78077248
-  @@chromsize << 59128983
+  @@chromsize << 64705560
   @@chromsize << 63025520
   @@chromsize << 48129895
   @@chromsize << 51304566
@@ -612,11 +615,12 @@ class Chromosome
     @snpnames = Array.new
     @centromere = @@centromeres[n]
     @size = @@chromsize[n]
+    @centromere_triangle=Array.new
   end
   
   def add_snp(params)
     unless snp = @snps[params[:name]]
-      snp = @snps[params[:name]] = SNP.new(params[:chr], params[:pos])
+      snp = @snps[params[:name]] = SNP.new(params[:chr], params[:pos], params[:endpos])
       @snpnames << params[:name]
     end
     snp.phenos << params[:pheno]
@@ -638,11 +642,12 @@ class Chromosome
 end
 
 class SNP
-  attr_accessor :chrom, :pos, :phenos, :linecolors
+  attr_accessor :chrom, :pos, :phenos, :linecolors, :endpos
   
-  def initialize(c,p)
+  def initialize(c,p,e=nil)
     @chrom = c
     @pos = p
+    e ? @endpos=e : @endpos = @pos
     @phenos = Array.new
     @linecolors = Hash.new
   end
@@ -1053,7 +1058,7 @@ class PhenoGramFileReader < FileHandler
   end
   
   def set_columns(headerline)
-    @snpcol = @chromcol = @bpcol = @phenocol = @snpcolorcol = nil
+    @snpcol = @chromcol = @bpcol = @phenocol = @snpcolorcol = @bpendcol = nil
     headers = strip_and_split_delim(headerline, "\t")
     
     headers.each_with_index do |header, i|
@@ -1064,8 +1069,10 @@ class PhenoGramFileReader < FileHandler
       elsif header =~ /poscolor|snpcolor/i
         @snpcolorcol = i
         $color_column_included = true
-      elsif header =~ /^bp|^pos/i
+      elsif header =~ /^bp|^pos|^start/i
         @bpcol = i
+      elsif header =~ /^end/
+        @bpendcol = i
       elsif header =~ /^pheno/i
         @phenocol = i
       elsif header =~ /^group$/i
@@ -1103,8 +1110,7 @@ class PhenoGramFileReader < FileHandler
     close
     
     set_columns(lines.shift)
-    group = 'default'
-    
+    group = 'default'  
     lines.each do |line|
       next unless line =~ /\w/
       data = strip_and_split_delim(line,"\t")
@@ -1130,8 +1136,14 @@ class PhenoGramFileReader < FileHandler
       else
         snpcolor = SNPDefaultColor
       end
+      if @bpendcol
+        endbp = data[@bpendcol].to_i
+      else
+        endbp = data[@bpcol].to_i
+      end
+      
       genome.add_snp(:name => name, :chr=>data[@chromcol], :pos=>data[@bpcol].to_i,
-        :pheno=>pheno, :snpcolor=>snpcolor)
+        :pheno=>pheno, :snpcolor=>snpcolor, :endpos=>endbp)
     end  
     phenoholder.set_colors
   end 
@@ -1165,7 +1177,7 @@ end
 
 class PhenoBox < Plotter
   attr_accessor :top_y, :bottom_y, :circles, :phenocolors, :chrom_y, :height, 
-    :up, :line_colors
+    :up, :line_colors, :chrom_end_y, :endpos
   @@circles_per_row = 0
   
   def self.set_circles_per_row(c)
@@ -1196,8 +1208,9 @@ class PhenoBox < Plotter
     return (@phenocolors.length.to_f/@@circles_per_row).ceil * @@drawn_circle_size
   end
   
-  def set_default_boundaries(center)
+  def set_default_boundaries(center, end_y)
     @chrom_y = center
+    @chrom_end_y = end_y
     
     if @up
       adjust = -@@drawn_circle_size
@@ -1214,8 +1227,9 @@ class PhenoBox < Plotter
     @height = @bottom_y - @top_y 
   end
 
-  def set_even_boundaries(chrom_y, y)
+  def set_even_boundaries(chrom_y, y, chrom_end_y)
     @chrom_y = chrom_y
+    @chrom_end_y = chrom_end_y
     @top_y = y
     if @phenocolors.length <= @@circles_per_row
       @bottom_y = @top_y + @@drawn_circle_size
@@ -1271,17 +1285,23 @@ class PhenoBin
     return @actual_height-@height_needed
   end
   
-  def add_phenotype_snp(pos, col, linecolors)
+  def add_phenotype_snp(pos, endpos, col)
     if @boxpos.has_key?(pos)
       pbox = @boxpos[pos]
     else
       pbox = PhenoBox.new
+      pbox.endpos = endpos
       @boxpos[pos]=pbox
       @boxes << pos
     end
     
     pbox.add_phenocolor(col)
-    linecolors.each {|color| pbox.add_line_color(color)}
+#    linecolors.each {|color| pbox.add_line_color(color)}
+  end
+  
+  def add_linecolors(pos,linecolors)
+    pbox = @boxpos[pos]
+    linecolors.each{|color| pbox.add_line_color(color)}
   end
   
   def bp_from_y(y)
@@ -1349,6 +1369,7 @@ class PhenoBinHolder
         phenobox.top_y = bin_y + phenobox.top_y
         phenobox.bottom_y = bin_y + phenobox.bottom_y
         phenobox.chrom_y = pos.to_f / chrom_size * total_chrom_y
+        phenobox.chrom_end_y = phenobox.endpos.to_f / chrom_size * total_chrom_y
         phenoboxes << phenobox
         boxes_total +=1
       end
@@ -1380,6 +1401,7 @@ class PhenoBinHolder
           phenobox.top_y = bin_y + y_pos
           phenobox.bottom_y = bin_y + (phenobox.bottom_y - phenobox.top_y) + y_pos
           phenobox.chrom_y = pos.to_f / chrom_size * total_chrom_y
+          phenobox.chrom_end_y = phenobox.endpos.to_f / chrom_size * total_chrom_y
           y_pos += y_spread
           phenoboxes << phenobox
         end      
@@ -1392,11 +1414,11 @@ class PhenoBinHolder
   end
   
   # adds a phenotype to appropriate bin
-  def add_phenotype_snp(position, color, linecolors)
+  def add_phenotype_snp(position, endpos, color, linecolors)
     @phenobins.each do |pb|
       if position.to_i >= pb.startbase and position.to_i < pb.endbase
-        pb.add_phenotype_snp(position, color, linecolors)
-        return
+        pb.add_phenotype_snp(position, endpos, color)
+        return pb
       end
     end
   end
@@ -1573,9 +1595,11 @@ class PhenoBinHolder
  
   def add_chrom(chrom)
     chrom.snps.each_value do |snp|
+      pb=nil
       snp.phenos.each do |pheno|
-        add_phenotype_snp(snp.pos, pheno.color, snp.linecolors.keys)
+        pb=add_phenotype_snp(snp.pos, snp.endpos, pheno.color, snp.linecolors.keys)
       end
+      pb.add_linecolors(snp.pos, snp.linecolors.keys)
     end
   end
 
@@ -1640,19 +1664,14 @@ class ChromosomePlotter < Plotter
       binholder.add_chrom(chrom)
       phenobox_offset = (totalchromy-estimated_tot.to_f)/2        
     end
-
-    binholder.set_pheno_positions
-    
+    binholder.set_pheno_positions  
     # adjust size of bins
     binholder.total_bins 
-
     # remap the phenotypes to the bins
     binholder.adjust_phenos
-
     # change bp on bins so top of bin in bp matches first pheno/
     # and bottom of bin in bp matches last pheno
     binholder.adjust_bp
-
     # place phenoboxes in an array with locations relative to 
     # the absolute base position
     phenoboxes = binholder.get_box_array(phenobox_offset,chrom.size,totalchromy)
@@ -1775,13 +1794,7 @@ class ChromosomePlotter < Plotter
     canvas = params[:canvas]
     xbase = params[:xstart]
     ybase = params[:ystart]
-    
-    centromere = chrom.centromere
-    centromere_y = total_chrom_y * (centromere/chrom.size.to_f) + start_chrom_y
-    
-    draw_chr(:canvas=>canvas, :centromere_y=>centromere_y, :start_chrom_y=>start_chrom_y, 
-      :end_chrom_y=>end_chrom_y, :xbase=>xbase, :ybase=>ybase, :chromnum=>chrom.display_num,
-      :thickness_mult=>params[:thickness_mult])
+
 
     circle_start_x = @@circle_size*3
     
@@ -1811,6 +1824,14 @@ class ChromosomePlotter < Plotter
       end
       @@circle_size=orig_circle
     end
+    
+    centromere = chrom.centromere
+    centromere_y = total_chrom_y * (centromere/chrom.size.to_f) + start_chrom_y
+    draw_chr(:canvas=>canvas, :centromere_y=>centromere_y, :start_chrom_y=>start_chrom_y, 
+      :end_chrom_y=>end_chrom_y, :xbase=>xbase, :ybase=>ybase, :chromnum=>chrom.display_num,
+      :thickness_mult=>params[:thickness_mult], :chr_only=>params[:chr_only])
+    
+    
   end
 
  
@@ -1829,7 +1850,12 @@ class ChromosomePlotter < Plotter
 
     phenobox.line_colors.each do |linecolor|
       canvas.g.translate(xbase,ybase) do |draw|
-        draw.line(0, phenobox.chrom_y, @@chrom_width, phenobox.chrom_y).styles(:stroke=>linecolor, :stroke_width=>1, :stroke_opacity=>opacity)
+        if phenobox.chrom_end_y - phenobox.chrom_y <= 1.0
+          draw.line(0, phenobox.chrom_y, @@chrom_width, phenobox.chrom_y).styles(:stroke=>linecolor, :stroke_width=>1, :stroke_opacity=>opacity)
+        else
+          draw.rect(@@chrom_width, phenobox.chrom_end_y-phenobox.chrom_y,0, phenobox.chrom_y).styles(:stroke=>linecolor, 
+            :stroke_width=>1, :stroke_opacity=>opacity, :fill_opacity=>opacity, :fill=>linecolor)
+        end
         draw.line(@@chrom_width,phenobox.chrom_y,start_x,phenobox.top_y).styles(:stroke=>linecolor,:stroke_width=>1) unless params[:chr_only]
       end
     end
@@ -1857,7 +1883,12 @@ class ChromosomePlotter < Plotter
     
     phenobox.line_colors.each do |linecolor|
       canvas.g.translate(xbase,ybase) do |draw|
-        draw.line(0, phenobox.chrom_y, @@chrom_width, phenobox.chrom_y).styles(:stroke=>linecolor, :stroke_width=>1)
+        if phenobox.chrom_end_y - phenobox.chrom_y <= 1.0
+          draw.line(0, phenobox.chrom_y, @@chrom_width, phenobox.chrom_y).styles(:stroke=>linecolor, :stroke_width=>1)
+        else
+          draw.rect(@@chrom_width, phenobox.chrom_end_y-phenobox.chrom_y,0, phenobox.chrom_y).styles(:stroke=>linecolor, 
+            :stroke_width=>1, :fill=>linecolor)
+        end
         draw.line(@@chrom_width,phenobox.chrom_y,start_x,phenobox.top_y).styles(:stroke=>linecolor,:stroke_width=>1) unless params[:chr_only]
       end
     end
@@ -1884,6 +1915,7 @@ class ChromosomePlotter < Plotter
       # center of first circle that will be pointed at 
       pos_fraction = snp.pos.to_f/chrom.size
       y_offset = pos_fraction * total_chrom_y
+      y_end = snp.endpos.to_f/chrom.size * total_chrom_y
       phenobox = PhenoBox.new
       if pos_fraction <= 0.5
         phenobox.up = true
@@ -1892,7 +1924,7 @@ class ChromosomePlotter < Plotter
       end
       snp.phenos.each { |pheno| phenobox.add_phenocolor(pheno.color)}
       snp.linecolors.each_key {|col| phenobox.add_line_color(col)}
-      phenobox.set_default_boundaries(y_offset)
+      phenobox.set_default_boundaries(y_offset, y_end)
       pheno_boxes << phenobox
     end
     
@@ -1925,10 +1957,11 @@ class ChromosomePlotter < Plotter
       snp = chrom.snps[snpname]
       pos_fraction = snp.pos.to_f/chrom.size
       y_offset = pos_fraction * total_chrom_y + chrom_offset
+      y_end = snp.endpos.to_f/chrom.size * total_chrom_y + chrom_offset
       phenobox = PhenoBox.new
       snp.phenos.each { |pheno| phenobox.add_phenocolor(pheno.color)}
       snp.linecolors.each_key {|col| phenobox.add_line_color(col)}
-      phenobox.set_even_boundaries(y_offset, y)
+      phenobox.set_even_boundaries(y_offset, y, y_end)
       pheno_boxes << phenobox
       y += y_per_snp
     end
@@ -1952,6 +1985,21 @@ class ChromosomePlotter < Plotter
     tpath = "M0,#{start_chrom_y} C0,#{start_chrom_y-@@circle_size/2} #{@@chrom_width},#{start_chrom_y-@@circle_size/2} #{@@chrom_width},#{start_chrom_y}"
     bpath = "M0,#{end_chrom_y} C0,#{end_chrom_y+@@circle_size/2} #{@@chrom_width},#{end_chrom_y+@@circle_size/2} #{@@chrom_width},#{end_chrom_y}"
 
+        # if drawing chromosomes only fill in with white the centromere triangle 
+    # to overwrite any regions that are over the centromere
+    if params[:chr_only]
+      canvas.g.translate(xbase,ybase) do |draw|
+        # draw triangle and fill it with white 'rgb(255,255,255)'
+        draw.styles(:fill=>'rgb(255,255,255)', :stroke=>'rgb(255,255,255)')
+        xpoints = [0,centromere_offset.to_f/2,0]
+        ypoints = [centromere_y-centromere_offset,centromere_y,centromere_y+centromere_offset]
+        draw.polygon(xpoints, ypoints)
+        xpoints = [@@chrom_width, @@chrom_width-centromere_offset.to_f/2,@@chrom_width]
+        ypoints = [centromere_y-centromere_offset, centromere_y,centromere_y+centromere_offset ]
+        draw.polygon(xpoints, ypoints)
+      end
+    end
+    
     chrom_style = {:stroke=>'darkgray',:stroke_width=>stroke_width, :fill=>'none'}
     
     canvas.g.translate(xbase,ybase) do |draw|

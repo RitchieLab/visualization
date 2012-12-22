@@ -102,6 +102,7 @@ class Arg
     options.include_dist_track = false
     options.plot_power = false
     options.grayscale = false
+    options.color_key_bottom = false
     options.additional_columns = Array.new
 
     return options
@@ -172,22 +173,21 @@ class Arg
       opts.on("-Q [manhattan_thresh]", "Manhattan threshold line value (p-value)") do |manhattan_thresh|
         options.manhattanthresh = manhattan_thresh
       end
-
       opts.on("-M", "--more-locs", "Label SNP locations at additional spots along chromosome") do |more_locs|
         options.add_snp_locs = true
       end
-
       opts.on("-E", "--dist-track", "Includes the distance track in the plot") do |dist|
         options.include_dist_track = true
       end
-
+      opts.on("-k", "--group-key-end", "Place group color key at bottom of plot") do |key|
+        options.color_key_bottom = true
+      end
       opts.on("-T", "Larger plot font") do |tsize|
         options.largetext = true
       end
       opts.on("-S", "--cleaner-axis", "Axes on plots \"cleaner\".  Default uses min and max values as axis boundaries") do |clean|
         options.clean_axes = true
       end
-
       opts.on("-J", "--jitter", "Offsets results from different groups horizontally") do |jitter|
         options.jitter = true
       end
@@ -200,15 +200,12 @@ class Arg
       opts.on("-A", "--pval", "Plot p value track") do |pval|
         options.plot_pval = true
       end
-
       opts.on("-B", "--beta", "Plot effect size track") do |beta|
         options.plot_beta = true
       end
-
       opts.on("-u [columns]", Array, "Columns to plot that are not standard") do |columns|
         options.additional_columns = columns
-      end
-      
+      end    
       opts.on("-n [eff_name]", "Effect size name (beta or es)") do |eff_name|
         options.effect_name = eff_name
       end
@@ -654,13 +651,14 @@ end
 #
 #############################################################################
 class Chromosome
-	attr_accessor :snp_list, :chrom_num, :genes
+	attr_accessor :snp_list, :chrom_num, :genes, :name
 
 	# requires chromosome number
-	def initialize(chr_num)
+	def initialize(chr_num, name)
 		@chrom_num = chr_num
 		@snp_list = SNPList.new
 		@genes = Array.new
+    @name = name
 	end
 
 	def add_gene(gene)
@@ -2607,7 +2605,7 @@ class PlotWriter
       end
 
       @canvas.g.translate(x_start, y_start).text((end_x-start_x)/2+@box_size*1.22-box_adjust-@box_size.to_f/5,0) do |text|
-        text.tspan("chr#{chrom_num.to_s}").styles(:font_size=>font_size/1.5, :text_anchor=>'middle', :font_style=>font_style, :font_family=>font_family)
+        text.tspan("chr #{chrom_num.to_s}").styles(:font_size=>font_size/1.5, :text_anchor=>'middle', :font_style=>font_style, :font_family=>font_family)
       end
 
       # draw narrow rectangle with white fill
@@ -3401,10 +3399,18 @@ class SynthesisViewReader<FileReader
         end
 
         chrnum = snp_positions[data[@snpid]]['chr']
-
+        chrname = chrnum.to_s
+        if chrnum =~ /mt/i
+          chrnum = "26"
+        elsif chrnum  =~ /y/i
+          chrnum = "24"
+        elsif chrnum =~ /x/i
+          chrnum = "23"
+        end  
+       
         if (chromosome = chromlist.get_chrom(chrnum.to_i)) == nil
           # create a new SNP
-          newchrom = Chromosome.new(chrnum.to_i)
+          newchrom = Chromosome.new(chrnum.to_i, chrname)
           chromlist.add_chrom(newchrom)
           chromosome = chromlist.get_chrom(chrnum.to_i)
         end
@@ -3413,14 +3419,12 @@ class SynthesisViewReader<FileReader
         location = snp_positions[data[@snpid]]['pos']
 
         location = location.to_i
-        snp = chromosome.snp_list.get_snp(data[@snpname])
-        
+        snp = chromosome.snp_list.get_snp(data[@snpname])       
         unless snp
           snp = SNP.new(data[@snpname], location)
           chromosome.snp_list.add_snp(snp)
           snp = chromosome.snp_list.get_snp(data[@snpname])
         end
-
         # add results to SNP
         if !subgroup_column and !group_column
           glisthash.each_value do |glist|
@@ -3472,7 +3476,7 @@ def get_locations(lines, filename)
     if data[@location] =~ /\d/
       positions[snpid] = Hash.new
       positions[snpid]['chr'] = data[@chromnum]
-      positions[snpid]['chr'] =~ /(\d+)/
+      positions[snpid]['chr'] =~ /(\d+)/ or positions[snpid]['chr'] =~ /(\w+)/
       positions[snpid]['chr'] = $1
       positions[snpid]['pos'] = data[@location]
     elsif data[@snpid] =~ /\w/
@@ -4378,7 +4382,7 @@ ygroup_boxes_start = Array.new
 ystart_block_stat_box = ymax
 
 # add if need to show which groups have data for each SNP
-if grouplisthash.length == 1 and !options.rotate
+if grouplisthash.length == 1 and !options.rotate and !options.color_key_bottom
   grouplist = grouplisthash[GroupList.get_default_name]
   if !chromlist.results_complete?(grouplist.groups.length)
     grouplist.groups.length.times do |i|
@@ -4473,7 +4477,7 @@ elsif options.rotate
   end
   
   total_stat_boxes += options.additional_columns.length
-  
+
 else # multiple group lists usually for ethnicity so one plot per ethnicity
   total_stat_boxes = grouplisthash.length
 
@@ -4506,11 +4510,22 @@ end
 ystart_half_boxes = Array.new
 if grouplisthash.length == 1
   if grouplisthash[GroupList.get_default_name].plot_study? and options.plot_studynum
-    ystart_half_boxes << ymax + box_size/2
+    ystart_half_boxes << ymax + box_size
     yside = yside + box_size * 0.0360
     ymax = writer.calculate_coordinate(yside)
   end
 end
+
+  if grouplisthash.length == 1 and !options.rotate and options.color_key_bottom
+    grouplist = grouplisthash[GroupList.get_default_name]
+    if !chromlist.results_complete?(grouplist.groups.length)
+      grouplist.groups.length.times do |i|
+        ygroup_boxes_start << ymax - box_size
+        yside = yside + box_size/4 * 1 * 0.01667 + (writer.font_size_multiple-1.0)*box_size/4*0.5*0.01667#0.0125
+        ymax = writer.calculate_coordinate(yside)
+      end
+    end
+  end
 
 yend_block_stat_box = ymax
 
@@ -4625,7 +4640,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     current_chrom = chromlist.chromhash[chrnum]
     # add labels to top of chart
     chrom_x_starts << x_start
-    x_new_start= writer.add_labels(current_chrom.chrom_num, current_chrom.snp_list, x_start,
+    x_new_start= writer.add_labels(current_chrom.name, current_chrom.snp_list, x_start,
       y_label_start, y_label_end, true, options.rotate,  options.add_snp_locs, options.include_dist_track)
     chrom_x_ends << x_new_start
   # add gene information if necessary
@@ -4646,6 +4661,13 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
           if contains_meta
             thisindex = thisindex -1
           end
+#          if options.color_key_bottom
+#            writer.group_membership_plot(group.name, group.colorstr,  current_chrom.snp_list, x_original_start, ygroup_boxes_start[thisindex], 
+#                true, true, options.grayscale)
+#          else
+#            writer.group_membership_plot(group.name, group.colorstr, current_chrom.snp_list, x_start, ygroup_boxes_start[thisindex], first_chrom, false,
+#              options.grayscale)            
+#          end
           writer.group_membership_plot(group.name, group.colorstr, current_chrom.snp_list, x_start, ygroup_boxes_start[thisindex], first_chrom, false,
             options.grayscale)
         else
@@ -4691,8 +4713,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       if grouplist.groups.first.betaucicol > -1
         minbeta = chromlist.minscore['betalci'].to_f
         maxbeta = chromlist.maxscore['betauci'].to_f
-      end  
-        
+      end       
         
       if options.clean_axes
         increment, minbeta, maxbeta = writer.calculate_increments_include_zero(minbeta, maxbeta)
@@ -4839,7 +4860,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_half_boxes[curr_half_box], :stat_max=>10,
         :stat_min=>0, :data_key=>'study', :plot_labels=>first_chrom, :title=>'Study #',
-        :precision=>0,start=>ystart_half_boxes[curr_half_box], :stat_max=>10,
+        :precision=>0,:start=>ystart_half_boxes[curr_half_box], :stat_max=>10,
         :stat_min=>0, :data_key=>'study', :plot_labels=>first_chrom, :title=>'Study #',
         :precision=>0, :rotate=>options.rotate, :size_mult=>0.5)
     end
