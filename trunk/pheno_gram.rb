@@ -374,6 +374,7 @@ class Arg
     options.transparent_lines = false
     options.thickness_mult = 1
     options.thin_lines = false
+    options.big_font=false
     help_selected = false
     version_selected = false
     
@@ -404,6 +405,7 @@ class Arg
       opts.on("-T", "--trans-lines", "Make lines on chromosome more transparent") {|trans| options.transparent_lines=true}
       opts.on("-n", "--thin-lines", "Make lines across chromosomes thinner") {|thin| options.thin_lines=true}
       opts.on("-B", "--thick_boundary", "Increase thickness of chromosome boundary") {|thick| options.thickness_mult=2}
+      opts.on("-F", "--big-font", "Increase font size of labels") {|big_font| options.big_font=true}
       opts.on("-p [pheno_spacing]", "Options are standard or equal or alternative (default) ") do |pheno_spacing|
         options.pheno_spacing = pheno_spacing
       end
@@ -575,7 +577,7 @@ class Chromosome
   @@chromsize << 249239465 
   @@chromsize << 243199373
   @@chromsize << 199411731
-  @@chromsize << 191154276
+  @@chromsize << 191252270
   @@chromsize << 180915260
   @@chromsize << 171115067
   @@chromsize << 159138663
@@ -1118,6 +1120,8 @@ class PhenoGramFileReader < FileHandler
       
       data[@chromcol]="23" if data[@chromcol] =~ /^x/i
       data[@chromcol]="24" if data[@chromcol] =~ /^y/i
+      
+      next if data[@chromcol] =~ /chrM/
 
       raise "Problem in #{filename} with line:\n#{line}\n#{data[@chromcol]} is not a valid chromsome number" unless chr_good?(data[@chromcol])
       
@@ -1829,7 +1833,8 @@ class ChromosomePlotter < Plotter
     centromere_y = total_chrom_y * (centromere/chrom.size.to_f) + start_chrom_y
     draw_chr(:canvas=>canvas, :centromere_y=>centromere_y, :start_chrom_y=>start_chrom_y, 
       :end_chrom_y=>end_chrom_y, :xbase=>xbase, :ybase=>ybase, :chromnum=>chrom.display_num,
-      :thickness_mult=>params[:thickness_mult], :chr_only=>params[:chr_only])
+      :thickness_mult=>params[:thickness_mult], :chr_only=>params[:chr_only], 
+      :bigtext=>params[:bigtext])
     
     
   end
@@ -1985,7 +1990,7 @@ class ChromosomePlotter < Plotter
     tpath = "M0,#{start_chrom_y} C0,#{start_chrom_y-@@circle_size/2} #{@@chrom_width},#{start_chrom_y-@@circle_size/2} #{@@chrom_width},#{start_chrom_y}"
     bpath = "M0,#{end_chrom_y} C0,#{end_chrom_y+@@circle_size/2} #{@@chrom_width},#{end_chrom_y+@@circle_size/2} #{@@chrom_width},#{end_chrom_y}"
 
-        # if drawing chromosomes only fill in with white the centromere triangle 
+    # if drawing chromosomes only fill in with white the centromere triangle 
     # to overwrite any regions that are over the centromere
     if params[:chr_only]
       canvas.g.translate(xbase,ybase) do |draw|
@@ -2017,9 +2022,10 @@ class ChromosomePlotter < Plotter
       
     end
     
-    font_size = @@circle_size
+#    font_size = @@circle_size
+    params[:bigtext] ? font_size = @@circle_size * 1.5 : font_size = @@circle_size
 
-    canvas.g.translate(xbase,ybase).text(@@chrom_width.to_f/2,end_chrom_y+2*@@circle_size) do |write|
+    canvas.g.translate(xbase,ybase).text(@@chrom_width.to_f/2,end_chrom_y+2*font_size) do |write|
       write.tspan(number.to_s).styles(:font_size=>font_size, :text_anchor=>'middle')
     end
     
@@ -2067,6 +2073,16 @@ class PhenotypeLabels < Plotter
     radius = @@circle_size.to_f/2
     y = 0
     x = 0
+      
+    if params[:bigtext]
+      font_size = 33
+      vert_offset = 2
+      y_offset = 2.5
+    else
+      font_size = 22
+      vert_offset = 2
+      y_offset = 2
+    end
     
     phenokeys = phenoholder.phenonames.keys.sort{|a,b| phenoholder.phenonames[a].sortnumber <=> phenoholder.phenonames[b].sortnumber}
     
@@ -2087,10 +2103,10 @@ class PhenotypeLabels < Plotter
         canvas.g.translate(xstart,ystart) do |draw|
           draw.circle(radius, x, y).styles(:fill=>pheno.color, :stroke=>'black')
         end
-        canvas.g.translate(xstart,ystart).text(x+@@circle_size*1.5,y+@@circle_size.to_f/4) do |text|
-          text.tspan(pheno.name).styles(:font_size=>22)
+        canvas.g.translate(xstart,ystart).text(x+@@circle_size*1.5,y+@@circle_size.to_f/vert_offset) do |text|
+          text.tspan(pheno.name).styles(:font_size=>font_size)
         end
-        y += @@circle_size * 2
+        y += @@circle_size * y_offset
       end
       
       x += pheno_space
@@ -2150,15 +2166,22 @@ def draw_plot(genome, phenoholder, options)
 
   second_row_box_max = max_chrom_box * Chromosome.chromsize(23)/Chromosome.chromsize(1)
 
-  phenotypes_per_row = 5
+  if options.big_font 
+    phenotypes_per_row = 4
+    label_offset_y = 2.5
+  else
+    phenotypes_per_row = 5    
+    label_offset_y = 2
+  end
+#  phenotypes_per_row = 5
   phenotype_rows = phenoholder.phenonames.length/phenotypes_per_row
   phenotype_rows += 1 unless phenoholder.phenonames.length % phenotypes_per_row == 0
 
   total_y = second_row_start + second_row_box_max
 
   # each row should be 2 circles high + 2 circle buffer on top
-  phenotype_labels_total = circle_size * 2 * (phenotype_rows+1)
-  phenotype_labels_y_start = total_y
+  phenotype_labels_total = circle_size * label_offset_y * (phenotype_rows+1)
+  phenotype_labels_y_start = total_y + (circle_size * label_offset_y)/2
   total_y += phenotype_labels_total unless options.chr_only
   # total y for now
   width_in = 8
@@ -2188,7 +2211,8 @@ def draw_plot(genome, phenoholder, options)
       ChromosomePlotter.plot_chrom(:canvas=>canvas, :chrom=>genome.chromosomes[chr], 
         :xstart=>xstart, :ystart=>first_row_start, :height=>max_chrom_height, 
         :alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only,
-        :transparent=>options.transparent_lines, :thickness_mult=>options.thickness_mult)
+        :transparent=>options.transparent_lines, :thickness_mult=>options.thickness_mult,
+        :bigtext=>options.big_font)
       xstart += chrom_box_width 
     end
   
@@ -2197,12 +2221,14 @@ def draw_plot(genome, phenoholder, options)
       ChromosomePlotter.plot_chrom(:canvas=>canvas, :chrom=>genome.chromosomes[chr], 
         :xstart=>xstart, :ystart=>second_row_start, :height=>second_row_box_max, 
         :alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only,
-        :transparent=>options.transparent_lines, :thickness_mult=>options.thickness_mult)    
+        :transparent=>options.transparent_lines, :thickness_mult=>options.thickness_mult,
+        :bigtext=>options.big_font)    
       xstart += chrom_box_width
     end
   
     PhenotypeLabels.draw(:canvas=>canvas, :xstart=>padded_width, :ystart=>phenotype_labels_y_start,
-      :phenoholder=>phenoholder, :pheno_row=>phenotypes_per_row, :xtotal=>xmax-padded_width) unless options.chr_only
+      :phenoholder=>phenoholder, :pheno_row=>phenotypes_per_row, :xtotal=>xmax-padded_width,
+      :bigtext=>options.big_font) unless options.chr_only
   
   end
 
