@@ -1998,28 +1998,27 @@ class ChromosomePlotter < Plotter
         draw.styles(:fill=>'rgb(255,255,255)', :stroke=>'rgb(255,255,255)')
         xpoints = [0,centromere_offset.to_f/2,0]
         ypoints = [centromere_y-centromere_offset,centromere_y,centromere_y+centromere_offset]
-        draw.polygon(xpoints, ypoints)
+        draw.polygon(xpoints, ypoints).styles(:stroke_width=>2)
         xpoints = [@@chrom_width, @@chrom_width-centromere_offset.to_f/2,@@chrom_width]
         ypoints = [centromere_y-centromere_offset, centromere_y,centromere_y+centromere_offset ]
-        draw.polygon(xpoints, ypoints)
+        draw.polygon(xpoints, ypoints).styles(:stroke_width=>2)
       end
     end
     
     chrom_style = {:stroke=>'darkgray',:stroke_width=>stroke_width, :fill=>'none'}
     
+    line1 = [0,start_chrom_y,0,centromere_y-centromere_offset,centromere_offset.to_f/2,centromere_y,
+      0,centromere_y+centromere_offset,0,end_chrom_y]
+    
+    line2 = [@@chrom_width,start_chrom_y,@@chrom_width,centromere_y-centromere_offset,@@chrom_width-centromere_offset.to_f/2,centromere_y,
+      @@chrom_width,centromere_y+centromere_offset, @@chrom_width,end_chrom_y]
+    
     canvas.g.translate(xbase,ybase) do |draw|
-      draw.line(0,start_chrom_y,0,centromere_y-centromere_offset).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
-      draw.line(0,centromere_y-centromere_offset,centromere_offset.to_f/2,centromere_y).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
-      draw.line(centromere_offset.to_f/2,centromere_y,0,centromere_y+centromere_offset).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
-      draw.line(0,centromere_y+centromere_offset,0,end_chrom_y).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
+      draw.polyline(line1).styles(:stroke=>'darkgray',:stroke_width=>stroke_width, :fill=>'none')
       draw.path(tpath).styles(chrom_style)
       
-      draw.line(@@chrom_width,start_chrom_y,@@chrom_width,centromere_y-centromere_offset).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
-      draw.line(@@chrom_width,centromere_y-centromere_offset,@@chrom_width-centromere_offset.to_f/2,centromere_y).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
-      draw.line(@@chrom_width-centromere_offset.to_f/2,centromere_y,@@chrom_width,centromere_y+centromere_offset).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
-      draw.line(@@chrom_width,centromere_y+centromere_offset,@@chrom_width,end_chrom_y).styles(:stroke=>'darkgray',:stroke_width=>stroke_width)
+      draw.polyline(line2).styles(:stroke=>'darkgray',:stroke_width=>stroke_width, :fill=>'none')
       draw.path(bpath).styles(chrom_style)
-      
     end
     
 #    font_size = @@circle_size
@@ -2145,7 +2144,7 @@ def draw_plot(genome, phenoholder, options)
 
   num_circles_in_row=7
   
-  num_circles_in_row=3 if options.chr_only
+  num_circles_in_row=2 if options.chr_only
   Plotter.set_circle(circle_size, options.small_circles)
   Plotter.set_maxchrom(Chromosome.chromsize(1))
   chrom_width = circle_size * 1.5
