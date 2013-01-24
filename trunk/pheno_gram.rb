@@ -375,6 +375,7 @@ class Arg
     options.thickness_mult = 1
     options.thin_lines = false
     options.big_font=false
+    options.shade_inaccessible=false
     help_selected = false
     version_selected = false
     
@@ -406,6 +407,7 @@ class Arg
       opts.on("-n", "--thin-lines", "Make lines across chromosomes thinner") {|thin| options.thin_lines=true}
       opts.on("-B", "--thick_boundary", "Increase thickness of chromosome boundary") {|thick| options.thickness_mult=2}
       opts.on("-F", "--big-font", "Increase font size of labels") {|big_font| options.big_font=true}
+      opts.on("-x", "--cross-hatch", "Add cross-hatch shading to inaccessible regions of chromosomes"){|cross_hath|options.shade_inaccessible=true}
       opts.on("-p [pheno_spacing]", "Options are standard or equal or alternative (default) ") do |pheno_spacing|
         options.pheno_spacing = pheno_spacing
       end
@@ -546,30 +548,54 @@ class Chromosome
   
   @@centromeres = Array.new
   @@centromeres << 0
-  @@centromeres << 124496354 #Array.new(121535434, 124535434) 
-  @@centromeres << 92893890 #Array.new(92326171, 95326171)  
-  @@centromeres << 90566355 #Array.new(90504854, 93504854)  
-  @@centromeres << 50126782 #Array.new(49660117, 52660117)
-  @@centromeres << 48648211 #Array.new(46405641, 49405641)
-  @@centromeres << 60807186 #Array.new(58830166, 61830166)
-  @@centromeres << 59726986 #Array.new(58054331, 61054331)
-  @@centromeres << 45521049 #Array.new(43838887, 46838887)
-  @@centromeres << 48615828 #Array.new(47367679, 50367679)
-  @@centromeres << 40049365 #Array.new(39254935, 42254935)
-  @@centromeres << 53363994 #Array.new(51644205, 54644205)
-  @@centromeres << 35693838 #Array.new(34856694, 37856694)
-  @@centromeres << 17688322 #Array.new(16000000, 19000000)
-  @@centromeres << 17201315 #Array.new(16000000, 19000000)
-  @@centromeres << 18930038 #Array.new(17000000, 20000000)
-  @@centromeres << 36515875 #Array.new(35335801, 38335801)
-  @@centromeres << 23992494 #Array.new(22263006, 25263006)
-  @@centromeres << 17185073 #Array.new(15460898, 18460898)
-  @@centromeres << 26387347 #Array.new(24681782, 27681782)
-  @@centromeres << 27427515 #Array.new(26369569, 29369569)
-  @@centromeres << 13154793 #Array.new(11288129, 14288129)
-  @@centromeres << 14591276 #Array.new(13000000, 16000000)
-  @@centromeres << 60340916 #Array.new(58632012, 61632012)
-  @@centromeres << 12541733 #Array.new(10104553, 13104553)
+#  @@centromeres << 124496354 
+#  @@centromeres << 92893890   
+#  @@centromeres << 90566355  
+#  @@centromeres << 50126782 
+#  @@centromeres << 48648211
+#  @@centromeres << 60807186 
+#  @@centromeres << 59726986
+#  @@centromeres << 45521049 
+#  @@centromeres << 48615828 
+#  @@centromeres << 40049365 
+#  @@centromeres << 53363994 
+#  @@centromeres << 35693838 
+#  @@centromeres << 17688322 
+#  @@centromeres << 17201315 
+#  @@centromeres << 18930038 
+#  @@centromeres << 36515875 
+#  @@centromeres << 23992494 
+#  @@centromeres << 17185073 
+#  @@centromeres << 26387347 
+#  @@centromeres << 27427515 
+#  @@centromeres << 13154793 
+#  @@centromeres << 14591276 
+#  @@centromeres << 60340916
+#  @@centromeres << 12541733 
+  @@centromeres << [121535434, 124535434]
+  @@centromeres << [92326171, 95326171]
+  @@centromeres << [90504854, 93504854] 
+  @@centromeres << [49660117, 52660117]
+  @@centromeres << [46405641, 49405641]
+  @@centromeres << [58830166, 61830166]
+  @@centromeres << [58054331, 61054331]
+  @@centromeres << [43838887, 46838887]
+  @@centromeres << [47367679, 50367679]
+  @@centromeres << [39254935, 42254935]
+  @@centromeres << [51644205, 54644205]
+  @@centromeres << [34856694, 37856694]
+  @@centromeres << [16000000, 19000000]
+  @@centromeres << [16000000, 19000000]
+  @@centromeres << [17000000, 20000000]
+  @@centromeres << [35335801, 38335801]
+  @@centromeres << [22263006, 25263006]
+  @@centromeres << [15460898, 18460898]
+  @@centromeres << [24681782, 27681782]
+  @@centromeres << [26369569, 29369569]
+  @@centromeres << [11288129, 14288129]
+  @@centromeres << [13000000, 16000000]
+  @@centromeres << [58632012, 61632012]
+  @@centromeres << [10104553, 13104553]  
   
   # sizes taken from ensembl
   @@chromsize = Array.new
@@ -1799,7 +1825,6 @@ class ChromosomePlotter < Plotter
     xbase = params[:xstart]
     ybase = params[:ystart]
 
-
     circle_start_x = @@circle_size*3
     
     if params[:chr_only] or !(params[:alt_spacing]==:alternative or params[:alt_spacing]==:equal)
@@ -1829,14 +1854,15 @@ class ChromosomePlotter < Plotter
       @@circle_size=orig_circle
     end
     
-    centromere = chrom.centromere
-    centromere_y = total_chrom_y * (centromere/chrom.size.to_f) + start_chrom_y
+    centromere_pos = chrom.centromere 
+    centromere_y = total_chrom_y * (((centromere_pos[0]+centromere_pos[1])/2)/chrom.size.to_f) + start_chrom_y
+    centromere_start = total_chrom_y * (centromere_pos[0]/chrom.size.to_f) + start_chrom_y
+    centromere_end = total_chrom_y * (centromere_pos[1]/chrom.size.to_f) + start_chrom_y
     draw_chr(:canvas=>canvas, :centromere_y=>centromere_y, :start_chrom_y=>start_chrom_y, 
       :end_chrom_y=>end_chrom_y, :xbase=>xbase, :ybase=>ybase, :chromnum=>chrom.display_num,
       :thickness_mult=>params[:thickness_mult], :chr_only=>params[:chr_only], 
-      :bigtext=>params[:bigtext])
-    
-    
+      :bigtext=>params[:bigtext], :cent_start=>centromere_start, :cent_end=>centromere_end,
+      :cross_hatch=>params[:cross_hatch])
   end
 
  
@@ -1978,6 +2004,8 @@ class ChromosomePlotter < Plotter
   def self.draw_chr(params)
     canvas = params[:canvas]
     centromere_y = params[:centromere_y]
+    centromere_start = params[:cent_start]
+    centromere_end = params[:cent_end]
     start_chrom_y = params[:start_chrom_y]
     end_chrom_y = params[:end_chrom_y]
     xbase = params[:xbase]
@@ -1990,6 +2018,19 @@ class ChromosomePlotter < Plotter
     tpath = "M0,#{start_chrom_y} C0,#{start_chrom_y-@@circle_size/2} #{@@chrom_width},#{start_chrom_y-@@circle_size/2} #{@@chrom_width},#{start_chrom_y}"
     bpath = "M0,#{end_chrom_y} C0,#{end_chrom_y+@@circle_size/2} #{@@chrom_width},#{end_chrom_y+@@circle_size/2} #{@@chrom_width},#{end_chrom_y}"
 
+    cross_hatches = Magick::RVG::Pattern.new(8, 8).viewbox(0,0, 50,50){|pat| pat.polygon(0,25,25,0,50,25,25,50).styles(:fill=>'none', :stroke=>'black')}
+     
+    # add cross hatching to inaccessible locations ( centromere )
+    if params[:cross_hatch]
+      canvas.g.translate(xbase,ybase) do |draw|
+        x=[0,@@chrom_width, @@chrom_width-centromere_offset.to_f/2,@@chrom_width,0,centromere_offset.to_f/2]
+        y=[centromere_start,centromere_start, centromere_y, 
+          centromere_end, centromere_end, centromere_y]
+        #draw.rect(@@chrom_width, centromere_offset, 0, centromere_y-centromere_offset).styles(:stroke=>'none', :fill=>cross_hatches)
+        draw.polygon(x,y).styles(:stroke=>'none', :fill=>cross_hatches)
+      end
+    end
+    
     # if drawing chromosomes only fill in with white the centromere triangle 
     # to overwrite any regions that are over the centromere
     if params[:chr_only]
@@ -1997,21 +2038,21 @@ class ChromosomePlotter < Plotter
         # draw triangle and fill it with white 'rgb(255,255,255)'
         draw.styles(:fill=>'rgb(255,255,255)', :stroke=>'rgb(255,255,255)')
         xpoints = [0,centromere_offset.to_f/2,0]
-        ypoints = [centromere_y-centromere_offset,centromere_y,centromere_y+centromere_offset]
+        ypoints = [centromere_start,centromere_y,centromere_end]
         draw.polygon(xpoints, ypoints).styles(:stroke_width=>2)
         xpoints = [@@chrom_width, @@chrom_width-centromere_offset.to_f/2,@@chrom_width]
-        ypoints = [centromere_y-centromere_offset, centromere_y,centromere_y+centromere_offset ]
+        ypoints = [centromere_start, centromere_y,centromere_end]
         draw.polygon(xpoints, ypoints).styles(:stroke_width=>2)
       end
     end
     
     chrom_style = {:stroke=>'darkgray',:stroke_width=>stroke_width, :fill=>'none'}
     
-    line1 = [0,start_chrom_y,0,centromere_y-centromere_offset,centromere_offset.to_f/2,centromere_y,
-      0,centromere_y+centromere_offset,0,end_chrom_y]
+    line1 = [0,start_chrom_y,0,centromere_start,centromere_offset.to_f/2,centromere_y,
+      0,centromere_end,0,end_chrom_y]
     
-    line2 = [@@chrom_width,start_chrom_y,@@chrom_width,centromere_y-centromere_offset,@@chrom_width-centromere_offset.to_f/2,centromere_y,
-      @@chrom_width,centromere_y+centromere_offset, @@chrom_width,end_chrom_y]
+    line2 = [@@chrom_width,start_chrom_y,@@chrom_width,centromere_start,@@chrom_width-centromere_offset.to_f/2,centromere_y,
+      @@chrom_width,centromere_end, @@chrom_width,end_chrom_y]
     
     canvas.g.translate(xbase,ybase) do |draw|
       draw.polyline(line1).styles(:stroke=>'darkgray',:stroke_width=>stroke_width, :fill=>'none')
@@ -2211,7 +2252,7 @@ def draw_plot(genome, phenoholder, options)
         :xstart=>xstart, :ystart=>first_row_start, :height=>max_chrom_height, 
         :alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only,
         :transparent=>options.transparent_lines, :thickness_mult=>options.thickness_mult,
-        :bigtext=>options.big_font)
+        :bigtext=>options.big_font, :cross_hatch=>options.shade_inaccessible)
       xstart += chrom_box_width 
     end
   
@@ -2221,7 +2262,7 @@ def draw_plot(genome, phenoholder, options)
         :xstart=>xstart, :ystart=>second_row_start, :height=>second_row_box_max, 
         :alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only,
         :transparent=>options.transparent_lines, :thickness_mult=>options.thickness_mult,
-        :bigtext=>options.big_font)    
+        :bigtext=>options.big_font, :cross_hatch=>options.shade_inaccessible)    
       xstart += chrom_box_width
     end
   
