@@ -45,7 +45,7 @@ require 'optparse'
 require 'ostruct'
 include Magick
 
-RVG::dpi=72
+RVG::dpi=300
 Version = '1.05'
 Maximum_html_image_x = 1000
 
@@ -4143,10 +4143,7 @@ if options.grayscale
 end
 
 # increase dpi if highres is selected
-if options.highres
-  RVG::dpi=300
-end
-
+RVG::dpi=300 if options.highres
 
 chromlist = ChromosomeList.new
 chromlist.set_columns(options.additional_columns)

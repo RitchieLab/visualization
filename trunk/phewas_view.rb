@@ -14,11 +14,10 @@
 
 ENV['MAGICK_CONFIGURE_PATH']='/gpfs/group/mdr23/usr/tools/etc/ImageMagick'
 
-
 # Requires rubygems
 begin
   require 'rubygems'
-rescue Exception => e
+rescue LoadError => e
   puts e
   puts "Please install rubygems -- http://docs.rubygems.org/read/chapter/3 "
   exit(1)
@@ -27,7 +26,7 @@ end
 # Requires RMagick (http://rmagick.rubyforge.org/)
 begin
   require 'rvg/rvg'
-  rescue Exception => e
+  rescue LoadError => e
   puts
   puts e
   puts "\nPlease install RMagick -- See documentation for PheWAS-View or http://rmagick.rubyforge.org/install-faq.html "
@@ -210,7 +209,7 @@ class Arg
     
     begin
       opts.parse!(args)
-    rescue Exception => e
+    rescue => e
       puts e, "", opts
       exit(1)
     end
@@ -1050,7 +1049,7 @@ class ResultFileReader < FileReader
         @ethcol = i
       elsif header =~ /Associated_Phenotype/i
         @groupcol = i
-      elsif header =~ /es|beta/i #es for effect size
+      elsif header =~ /^es$|^beta$/i #es for effect size
         @betacol = i
       elsif header =~ /phenotype_long/i
         @phenolongcol = i
@@ -2671,11 +2670,10 @@ def draw_phewas(options)
 
   dotter = DotPlotter.new
   dotter.diameter = diameter_size
+  dotter.font_size_multiple = 1.25 if options.largetext
 
   xside_end_addition = 0.005 * dotter.diameter * 2
-  if dotter.diameter > 20
-    xside_end_addition *= 2.5
-  end
+  xside_end_addition *= 2.5 if dotter.diameter > 20
 
   # determine the left side of the plot
   xleft_addition = 0.001 * dotter.diameter * 10 + 0.012 * dotter.diameter
@@ -2698,9 +2696,7 @@ def draw_phewas(options)
   # add offset for title
   y_title_start = ymax
   title_fract = 0.008
-  if options.rotate
-    title_fract = 0.008
-  end
+  title_fract = 0.008 if options.rotate
   yside = dotter.add_space_for_title(yside, title_fract)
   ymax = dotter.calculate_coordinate(yside)
 
@@ -2728,7 +2724,8 @@ def draw_phewas(options)
   max_pheno_length = resultholder.get_longest_label
 
   # yside += (0.0018 * dotter.diameter * max_pheno_length) + 0.012 * dotter.diameter
-  text_multiplier = 0.0020
+#  text_multiplier = 0.0020
+  options.largetext ? text_multiplier = 0.0020 * dotter.font_size_multiple : text_multiplier = 0.0020
   if total_phenotypes < 10
     text_multiplier = 0.0024
   elsif total_phenotypes < 20
@@ -3036,7 +3033,7 @@ options = Arg.parse(ARGV)
 if options.lowres
   RVG::dpi = 72
 end
-
+ 
 if options.sun_file
   draw_sun(options)
 else
