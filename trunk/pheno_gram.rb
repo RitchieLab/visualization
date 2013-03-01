@@ -1635,6 +1635,86 @@ class PhenoBinHolder
 
 end
 
+class Chromline
+  attr_accessor :colors
+  
+  def initialize
+    @colors = Hash.new
+  end
+  
+  def add_line(col)
+    @colors.has_key?(col) ? @colors[col] += 1 : @colors[col] = 1
+  end
+  
+end
+
+class ChromLineHolder
+  attr_accessor :chromlines, :colors, :opacity
+  
+  def initialize(total_y, chromsize, opacity)
+    @size = chromsize
+    @chromlines = Array.new(total_y.ceil){|index| Chromline.new}
+    @colors = Hash.new
+    @opacity = opacity
+  end
+  
+  # position is relative to start of chromosome
+  def add_line(ypos, params)
+    color = params[:stroke] || 'black'
+    puts "adding #{ypos.round} #{color}"
+    @chromlines[ypos.round].add_line(color)
+    @colors[color]=1
+  end
+  
+  def draw_lines(params)
+    xbase = params[:xstart]
+    ybase = params[:ystart]
+    canvas = params[:canvas]
+    chrom_width = params[:chrom_width]
+    
+    @colors.each_key do |color|
+# puts "working on color #{color}"
+      start_index = -1
+      last_value = -1
+      
+      @chromlines.each_with_index do |chromline, i|
+        chromline.colors.has_key?(color) ? currvalue= @opacity + ((chromline.colors[color]-1) * @opacity * 0.15): currvalue = 0
+# puts "number=#{chromline.colors[color]} opacity=#{currvalue}" if currvalue > 0
+        currvalue = 1.0 if currvalue > 1 # have to consider opacity when calculating values of objects
+#  puts "i=#{i} currvalue=#{currvalue} original_value=#{chromline.colors[color]}"
+        if currvalue != last_value
+          # draw last region when needed
+          if last_value != -1
+            canvas.g.translate(xbase,ybase) do |draw|
+            # draw it (box or line if only previous index)
+              if start_index == i-1 #and start_index < 50
+puts "drawing line (0,#{start_index},#{chrom_width},#{start_index} with opacity=#{last_value} color=#{color}"
+                draw.line(0,start_index,chrom_width,start_index).styles(:stroke=>color, 
+                  :stroke_width=>1, :stroke_opacity=>last_value)
+              else
+                end_index = i-start_index+start_index-1
+puts "drawing rectangle (#{chrom_width},#{end_index-start_index},0,#{start_index}).styles(:stroke=>#{color}, :stroke_opacity=>#{last_value})"
+                draw.rect(chrom_width, end_index-start_index,0, start_index).styles(:stroke=>color, 
+                  :stroke_width=>1, :stroke_opacity=>last_value, :fill_opacity=>last_value, :fill=>color)
+              end
+            end
+            # set last_value = -1 and start_index = -1 to mark no valid object to draw
+            start_index = -1
+            last_value = -1
+          end
+          if currvalue > 0
+            last_value = currvalue
+            start_index = i
+          end
+        end
+      end
+    end
+    
+  end
+  
+end
+
+
 class ChromosomePlotter < Plotter
   @@chrom_width = 0
   @@drawn_circles_per_row=@@num_phenos_row = 6
@@ -1814,9 +1894,17 @@ class ChromosomePlotter < Plotter
     available_y = params[:height]-padding
     
     chrom = params[:chrom]
-       
+
     # determine location of the chromosome -- leave a circle at top and bottom
     total_chrom_y = chrom.size.to_f/ @@maxchrom * available_y
+    # create a number of bins to hold information for each possible line
+    unless $color_column_included
+      params[:transparent] ? opacity = 0.05 : opacity = 1.0
+    else
+      params[:transparent] ? opacity = 0.35 : opacity = 1.0
+    end
+
+    line_container = ChromLineHolder.new(total_chrom_y.ceil, chrom.size, opacity)
     
     start_chrom_y = padding.to_f/2 + (available_y-total_chrom_y).to_f/2
     end_chrom_y = start_chrom_y + total_chrom_y
@@ -1831,17 +1919,20 @@ class ChromosomePlotter < Plotter
       phenoboxes = get_pheno_boxes(total_chrom_y, chrom)
       phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
       phenoboxes.each do |box|
-        draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y, 
+        draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y, line_container,
           :chr_only=>params[:chr_only], :transparent=>params[:transparent])
       end
+      line_container.draw_lines(:canvas=>canvas, :xstart=>xbase, :ystart=>ybase + start_chrom_y, 
+        :chrom_width=>@@chrom_width)
     elsif params[:alt_spacing]==:alternative
       phenoboxes = position_phenoboxes(:chrom=>chrom, :available_y=>available_y, :chrom_y=>total_chrom_y)
-
       phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
       phenoboxes.each do |box|
-        draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y,
+        draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y, line_container,
           :chr_only=>false)
       end
+      line_container.draw_lines(:canvas=>canvas, :xstart=>xbase, :ystart=>ybase + start_chrom_y, 
+        :chrom_width=>@@chrom_width)
     elsif params[:alt_spacing]==:equal
       orig_circle=@@circle_size
       phenoboxes = get_pheno_boxes_equal_spacing(available_y, total_chrom_y, chrom)
@@ -1868,7 +1959,7 @@ class ChromosomePlotter < Plotter
  
   # ybase is from start of chromosome drawing
   # need start of chromosome and start of bins
-  def self.draw_phenos(canvas, phenobox, start_x, xbase, ybase, params)
+  def self.draw_phenos(canvas, phenobox, start_x, xbase, ybase, line_container, params)
     
     y = phenobox.top_y - @@drawn_circle_size * 0.75
     x = start_x
@@ -1882,12 +1973,14 @@ class ChromosomePlotter < Plotter
     phenobox.line_colors.each do |linecolor|
       canvas.g.translate(xbase,ybase) do |draw|
         if phenobox.chrom_end_y - phenobox.chrom_y <= 1.0
-          draw.line(0, phenobox.chrom_y, @@chrom_width, phenobox.chrom_y).styles(:stroke=>linecolor, :stroke_width=>1, :stroke_opacity=>opacity)
+#          draw.line(0, phenobox.chrom_y, @@chrom_width, phenobox.chrom_y).styles(:stroke=>linecolor, :stroke_width=>1, :stroke_opacity=>opacity)
+          line_container.add_line(phenobox.chrom_y, :stroke=>linecolor)
         else
-          draw.rect(@@chrom_width, phenobox.chrom_end_y-phenobox.chrom_y,0, phenobox.chrom_y).styles(:stroke=>linecolor, 
-            :stroke_width=>1, :stroke_opacity=>opacity, :fill_opacity=>opacity, :fill=>linecolor)
+#          draw.rect(@@chrom_width, phenobox.chrom_end_y-phenobox.chrom_y,0, phenobox.chrom_y).styles(:stroke=>linecolor, 
+#            :stroke_width=>1, :stroke_opacity=>opacity, :fill_opacity=>opacity, :fill=>linecolor)
+          (phenobox.chrom_end_y-phenobox.chrom_y).round.times {|i| line_container.add_line(phenobox.chrom_y+i, :stroke=>linecolor)}
         end
-        draw.line(@@chrom_width,phenobox.chrom_y,start_x,phenobox.top_y).styles(:stroke=>linecolor,:stroke_width=>1) unless params[:chr_only]
+        draw.line(@@chrom_width,phenobox.chrom_y.round,start_x,phenobox.top_y).styles(:stroke=>linecolor,:stroke_width=>1) unless params[:chr_only]
       end
     end
     
@@ -2213,7 +2306,6 @@ def draw_plot(genome, phenoholder, options)
     phenotypes_per_row = 5    
     label_offset_y = 2
   end
-#  phenotypes_per_row = 5
   phenotype_rows = phenoholder.phenonames.length/phenotypes_per_row
   phenotype_rows += 1 unless phenoholder.phenonames.length % phenotypes_per_row == 0
 
