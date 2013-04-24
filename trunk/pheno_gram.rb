@@ -6,12 +6,13 @@ ENV['MAGICK_CONFIGURE_PATH'] = '/gpfs/group/mdr23/usr/tools/etc/ImageMagick'
 Font_family = 'Verdana'
 
 SNPDefaultColor = 'black'
+DefaultEthnicity = '-'
 
 $color_column_included = false
 
 begin
   require 'rubygems'
-rescue Exception => e
+rescue LoadError => e
   puts e
   puts "Please install rubygems -- http://docs.rubygems.org/read/chapter/3 "
   exit(1)
@@ -20,7 +21,7 @@ end
 # Requires RMagick (http://rmagick.rubyforge.org/)
 begin
   require 'rvg/rvg'
-  rescue Exception => e
+  rescue LoadError => e
   puts
   puts e
   puts "\nPlease install RMagick -- See documentation for pheno_gram or http://rmagick.rubyforge.org/install-faq.html "
@@ -430,7 +431,7 @@ class Arg
       
     begin
       opts.parse!(args)
-    rescue Exception => e
+    rescue => e
       puts e, "", opts
       exit(1)
     end
@@ -517,17 +518,21 @@ class PhenotypeHolder
 end
 
 class Genome
-  attr_accessor :chromosomes
+  attr_accessor :chromosomes, :ethnicities
   
   def initialize
     @chromosomes = Array.new
+    @ethnicities = Hash.new
     (1..24).each {|i| @chromosomes[i]=Chromosome.new(i)}
+    @shapefactory=ShapeFactory.new
   end
   
   def add_snp(params)
+    shape = @shapefactory.get_shape(params[:eth])
     @chromosomes[params[:chr].to_i].add_snp(:name=>params[:name], :pos=>params[:pos],
       :pheno=>params[:pheno], :chr=>params[:chr], :snpcolor=>params[:snpcolor], 
-      :endpos=>params[:endpos])
+      :endpos=>params[:endpos], :shape=>shape)
+    @ethnicities[params[:eth]]=shape unless @ethnicities.has_key?(params[:eth])
   end
   
   def snps_per_chrom
@@ -538,6 +543,10 @@ class Genome
   
   def pos_good?(pos, chr)
     return @chromosomes[chr.to_i].pos_good?(pos)
+  end
+  
+  def get_eth_shapes
+    return @shapefactory.get_phenotypes_shapes
   end
   
 end
@@ -651,7 +660,7 @@ class Chromosome
       snp = @snps[params[:name]] = SNP.new(params[:chr], params[:pos], params[:endpos])
       @snpnames << params[:name]
     end
-    snp.phenos << params[:pheno]
+    snp.phenos << PhenoPoint.new(params[:pheno], params[:shape])
     snp.linecolors[params[:snpcolor]]=1
   end
   
@@ -668,6 +677,17 @@ class Chromosome
   end
   
 end
+
+class PhenoPoint
+  attr_accessor :pheno, :shape
+  
+  def initialize(p,s)
+    @pheno = p
+    @shape = s
+  end
+  
+end
+
 
 class SNP
   attr_accessor :chrom, :pos, :phenos, :linecolors, :endpos
@@ -1105,7 +1125,8 @@ class PhenoGramFileReader < FileHandler
         @phenocol = i
       elsif header =~ /^group$/i
         @groupcol = i
-
+      elsif header =~ /^race|^ethnic/i
+        @ethcol = i
       end
     end
 
@@ -1156,24 +1177,28 @@ class PhenoGramFileReader < FileHandler
       group = data[@groupcol] if @groupcol
       pheno = phenoholder.add_phenotype(data[@phenocol], group)
 
-      if @snpcol
-        name = data[@snpcol]
-      else
-        name = data[@chromcol] + "." + data[@bpcol]
-      end
-      if @snpcolorcol
-        snpcolor = @snpcolors[data[@snpcolorcol].to_i-1]
-      else
-        snpcolor = SNPDefaultColor
-      end
-      if @bpendcol
-        endbp = data[@bpendcol].to_i
-      else
-        endbp = data[@bpcol].to_i
-      end
+#      if @snpcol
+#        name = data[@snpcol]
+#      else
+#        name = data[@chromcol] + "." + data[@bpcol]
+#      end
+#      if @snpcolorcol
+#        snpcolor = @snpcolors[data[@snpcolorcol].to_i-1]
+#      else
+#        snpcolor = SNPDefaultColor
+#      end
+#      if @bpendcol
+#        endbp = data[@bpendcol].to_i
+#      else
+#        endbp = data[@bpcol].to_i
+#      end
+      @snpcol ? name = data[@snpcol] : name = data[@chromcol] + "." + data[@bpcol]
+      @snpcolorcol ? snpcolor = @snpcolors[data[@snpcolorcol].to_i-1] : snpcolor = SNPDefaultColor
+      @bpendcol ? endbp = data[@bpendcol].to_i :  endbp = data[@bpcol].to_i
+      @ethcol ? ethnicity = data[@ethcol] : ethnicity = DefaultEthnicity
       
       genome.add_snp(:name => name, :chr=>data[@chromcol], :pos=>data[@bpcol].to_i,
-        :pheno=>pheno, :snpcolor=>snpcolor, :endpos=>endbp)
+        :pheno=>pheno, :snpcolor=>snpcolor, :endpos=>endbp, :eth=>ethnicity)
     end  
     phenoholder.set_colors
   end 
@@ -1205,9 +1230,113 @@ class Circle
   end
 end
 
+
+class ShapeFactory
+  
+  def initialize
+    @shapes = Hash.new
+    @shapecounter=1
+  end
+  
+  def get_shape(name)    
+    unless @shapes.has_key?(name)
+      @shapes[name] = create_shape(@shapecounter)
+      @shapecounter+=1  
+    end
+
+    return @shapes[name]
+  end
+  
+  def get_phenotypes_shapes
+    return @shapes
+  end
+  
+  def create_shape(shapenum)
+    case shapenum
+    when 1
+      return PhenoCircle.new
+    when 2
+      return PhenoDiamond.new
+    when 3
+      return PhenoTriangle.new
+    else
+      return PhenoCircle.new
+    end  
+  end
+end
+
+
+class PhenoShape
+  
+  def draw(pen,size,x,y,color,circle_outline)
+    # base class
+  end
+  
+end
+
+class PhenoCircle < PhenoShape
+  
+  def draw(pen,size,x,y,color,circle_outline)
+    pen.circle(size.to_f/2, x, y).styles(:fill=>color, :stroke=>circle_outline)
+  end
+  
+end
+
+class PhenoDiamond < PhenoShape
+  
+  def draw(pen,size,x,y,color,circle_outline)
+    
+    offset = size.to_f/2
+    
+    pts = Array.new
+    pts << x
+    pts << y-offset
+    pts << x+offset
+    pts << y
+    pts << x
+    pts << y+offset
+    pts << x-offset
+    pts << y
+    
+    pen.polygon(pts).styles(:fill=>color, :stroke=>circle_outline)
+  end
+  
+end
+  
+class PhenoSquare < PhenoShape
+  
+  def draw(pen,size,x,y,color,circle_outline)
+    offset = size.to_f/2
+    xpt = x-offset
+    ypt = y-offset
+    height=width=size
+    pen.rect(height,width,xpt,ypt).styles(:fill=>color, :stroke=>circle_outline)
+  end
+  
+end
+
+ class PhenoTriangle < PhenoShape
+   
+   def draw(pen,size,x,y,color,circle_outline)
+     offset = size.to_f/2
+     pts = Array.new
+     pts << x
+     pts << y-offset
+     pts << x+offset
+     pts << y+offset
+     pts << x-offset
+     pts << y+offset
+     
+     pen.polygon(pts).styles(:fill=>color, :stroke=>circle_outline)
+   end
+  
+end
+
+
+
 class PhenoBox < Plotter
   attr_accessor :top_y, :bottom_y, :circles, :phenocolors, :chrom_y, :height, 
-    :up, :line_colors, :chrom_end_y, :endpos
+    :up, :line_colors, :chrom_end_y, :endpos, :phenoshapes
   @@circles_per_row = 0
   
   def self.set_circles_per_row(c)
@@ -1217,6 +1346,7 @@ class PhenoBox < Plotter
   def initialize
     @circles = Array.new
     @phenocolors = Array.new
+    @phenoshapes = Array.new
     @up = true
     @line_colors = Array.new
   end
@@ -1227,6 +1357,10 @@ class PhenoBox < Plotter
   
   def add_phenocolor(p)
     @phenocolors << p
+  end
+  
+  def add_shape(s)
+    @phenoshapes << s
   end
   
   def add_line_color(color)
@@ -1315,7 +1449,7 @@ class PhenoBin
     return @actual_height-@height_needed
   end
   
-  def add_phenotype_snp(pos, endpos, col)
+  def add_phenotype_snp(pos, endpos, col, shape)
     if @boxpos.has_key?(pos)
       pbox = @boxpos[pos]
     else
@@ -1326,6 +1460,7 @@ class PhenoBin
     end
     
     pbox.add_phenocolor(col)
+    pbox.add_shape(shape)
 #    linecolors.each {|color| pbox.add_line_color(color)}
   end
   
@@ -1349,8 +1484,6 @@ class PhenoBin
       @height_needed += phenobox.set_boundaries(ycenter)
     end
   end
-
-  
 end
 
 # contains the phenoboxes
@@ -1444,10 +1577,10 @@ class PhenoBinHolder
   end
   
   # adds a phenotype to appropriate bin
-  def add_phenotype_snp(position, endpos, color, linecolors)
+  def add_phenotype_snp(position, endpos, color, linecolors, shape)
     @phenobins.each do |pb|
       if position.to_i >= pb.startbase and position.to_i < pb.endbase
-        pb.add_phenotype_snp(position, endpos, color)
+        pb.add_phenotype_snp(position, endpos, color, shape)
         return pb
       end
     end
@@ -1626,8 +1759,8 @@ class PhenoBinHolder
   def add_chrom(chrom)
     chrom.snps.each_value do |snp|
       pb=nil
-      snp.phenos.each do |pheno|
-        pb=add_phenotype_snp(snp.pos, snp.endpos, pheno.color, snp.linecolors.keys)
+      snp.phenos.each do |phenopt|
+        pb=add_phenotype_snp(snp.pos, snp.endpos, phenopt.pheno.color, snp.linecolors.keys, phenopt.shape)
       end
       pb.add_linecolors(snp.pos, snp.linecolors.keys)
     end
@@ -1653,7 +1786,7 @@ class ChromLineHolder
   
   def initialize(total_y, chromsize, opacity)
     @size = chromsize
-    @chromlines = Array.new(total_y.ceil){|index| Chromline.new}
+    @chromlines = Array.new(total_y.ceil+1){|index| Chromline.new}
     @colors = Hash.new
     @opacity = opacity
   end
@@ -1661,7 +1794,6 @@ class ChromLineHolder
   # position is relative to start of chromosome
   def add_line(ypos, params)
     color = params[:stroke] || 'black'
-    puts "adding #{ypos.round} #{color}"
     @chromlines[ypos.round].add_line(color)
     @colors[color]=1
   end
@@ -1673,27 +1805,23 @@ class ChromLineHolder
     chrom_width = params[:chrom_width]
     
     @colors.each_key do |color|
-# puts "working on color #{color}"
       start_index = -1
       last_value = -1
-      
+      currvalue =0
+			
       @chromlines.each_with_index do |chromline, i|
         chromline.colors.has_key?(color) ? currvalue= @opacity + ((chromline.colors[color]-1) * @opacity * 0.15): currvalue = 0
-# puts "number=#{chromline.colors[color]} opacity=#{currvalue}" if currvalue > 0
         currvalue = 1.0 if currvalue > 1 # have to consider opacity when calculating values of objects
-#  puts "i=#{i} currvalue=#{currvalue} original_value=#{chromline.colors[color]}"
         if currvalue != last_value
           # draw last region when needed
           if last_value != -1
             canvas.g.translate(xbase,ybase) do |draw|
             # draw it (box or line if only previous index)
               if start_index == i-1 #and start_index < 50
-puts "drawing line (0,#{start_index},#{chrom_width},#{start_index} with opacity=#{last_value} color=#{color}"
                 draw.line(0,start_index,chrom_width,start_index).styles(:stroke=>color, 
                   :stroke_width=>1, :stroke_opacity=>last_value)
               else
                 end_index = i-start_index+start_index-1
-puts "drawing rectangle (#{chrom_width},#{end_index-start_index},0,#{start_index}).styles(:stroke=>#{color}, :stroke_opacity=>#{last_value})"
                 draw.rect(chrom_width, end_index-start_index,0, start_index).styles(:stroke=>color, 
                   :stroke_width=>1, :stroke_opacity=>last_value, :fill_opacity=>last_value, :fill=>color)
               end
@@ -1708,8 +1836,22 @@ puts "drawing rectangle (#{chrom_width},#{end_index-start_index},0,#{start_index
           end
         end
       end
+			if currvalue > 0 and start_index != -1
+				canvas.g.translate(xbase,ybase) do |draw|
+        # draw it (box or line if only previous index)
+        if start_index == @chromlines.length-1 #and start_index < 50
+					draw.line(0,start_index,chrom_width,start_index).styles(:stroke=>color, 
+						:stroke_width=>1, :stroke_opacity=>last_value)
+          else
+             end_index = @chromlines.length-1
+             draw.rect(chrom_width, end_index-start_index,0, start_index).styles(:stroke=>color, 
+								:stroke_width=>1, :stroke_opacity=>last_value, :fill_opacity=>last_value, :fill=>color)
+          end					
+				end
+			end
+			
     end
-    
+
   end
   
 end
@@ -1787,22 +1929,6 @@ class ChromosomePlotter < Plotter
     phenoboxes = binholder.get_box_array(phenobox_offset,chrom.size,totalchromy)
     
     return phenoboxes if phenoboxes.empty? 
-    
-    
-#    adjust_collisions(phenoboxes, totaly, phenobox_offset)   
-#    adjust_all=0   
-#    # alter again if bottom is past allowed space and shift everything up
-#   # if phenoboxes.last.bottom_y > absolutey+orig_phenobox_offset
-#    adjust_all = phenoboxes.last.bottom_y - (absolutey+orig_phenobox_offset) if phenoboxes.last.bottom_y > absolutey+orig_phenobox_offset
-#   # end
-#    
-#    puts "adjust_all=#{adjust_all}"
-#    
-#    phenoboxes.each do |pbox|
-#      pbox.top_y -= adjust_all
-#      pbox.bottom_y -= adjust_all
-#    end
-
     return phenoboxes
   end
 
@@ -1831,7 +1957,6 @@ class ChromosomePlotter < Plotter
   
   def self.shift_boxes(phenoboxes, i, moveup)
     if moveup
-      #if i == 0 or phenoboxes[i-1].bottom_y < (phenoboxes[i].top_y-phenoboxes[i].height)
       if phenoboxes[i+1].top_y > (phenoboxes[i].bottom_y-phenoboxes[i].height)
         phenoboxes[i].bottom_y = phenoboxes[i+1].top_y
         phenoboxes[i].top_y = phenoboxes[i].bottom_y - phenoboxes[i].height
@@ -1869,7 +1994,6 @@ class ChromosomePlotter < Plotter
     # when both are ok or neither is, move in direction of more available space
     if (toproom and bottomroom)# or (!toproom and !bottomroom)
       topdist = (phenoboxes[i].top_y.to_f - offset) / i
-#      bottomdist = (available_y.to_f - phenoboxes[j].bottom_y)/(last_index-j)
       bottomdist = (available_y.to_f - phenoboxes[j].bottom_y-offset)/(last_index-j)
       if topdist > bottomdist
         shift_boxes(phenoboxes,i,true)
@@ -1913,8 +2037,7 @@ class ChromosomePlotter < Plotter
     xbase = params[:xstart]
     ybase = params[:ystart]
 
-    circle_start_x = @@circle_size*3
-    
+    circle_start_x = @@circle_size*3   
     if params[:chr_only] or !(params[:alt_spacing]==:alternative or params[:alt_spacing]==:equal)
       phenoboxes = get_pheno_boxes(total_chrom_y, chrom)
       phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
@@ -1973,11 +2096,8 @@ class ChromosomePlotter < Plotter
     phenobox.line_colors.each do |linecolor|
       canvas.g.translate(xbase,ybase) do |draw|
         if phenobox.chrom_end_y - phenobox.chrom_y <= 1.0
-#          draw.line(0, phenobox.chrom_y, @@chrom_width, phenobox.chrom_y).styles(:stroke=>linecolor, :stroke_width=>1, :stroke_opacity=>opacity)
           line_container.add_line(phenobox.chrom_y, :stroke=>linecolor)
         else
-#          draw.rect(@@chrom_width, phenobox.chrom_end_y-phenobox.chrom_y,0, phenobox.chrom_y).styles(:stroke=>linecolor, 
-#            :stroke_width=>1, :stroke_opacity=>opacity, :fill_opacity=>opacity, :fill=>linecolor)
           (phenobox.chrom_end_y-phenobox.chrom_y).round.times {|i| line_container.add_line(phenobox.chrom_y+i, :stroke=>linecolor)}
         end
         draw.line(@@chrom_width,phenobox.chrom_y.round,start_x,phenobox.top_y).styles(:stroke=>linecolor,:stroke_width=>1) unless params[:chr_only]
@@ -1991,7 +2111,8 @@ class ChromosomePlotter < Plotter
           x = start_x
         end
         canvas.g.translate(xbase, ybase) do |draw|
-          draw.circle(@@drawn_circle_size.to_f/2, x, y).styles(:fill=>color, :stroke=>@@circle_outline)
+#          draw.circle(@@drawn_circle_size.to_f/2, x, y).styles(:fill=>color, :stroke=>@@circle_outline)
+          phenobox.phenoshapes[i].draw(draw,@@drawn_circle_size,x,y,color,@@circle_outline)
         end
         x += @@drawn_circle_size
       end
@@ -2023,7 +2144,8 @@ class ChromosomePlotter < Plotter
         x = start_x
       end
       canvas.g.translate(xbase, ybase) do |draw|
-        draw.circle(@@circle_size.to_f/2, x, y).styles(:fill=>color, :stroke=>'black')
+#        draw.circle(@@circle_size.to_f/2, x, y).styles(:fill=>color, :stroke=>'black')
+        phenobox.phenoshapes[i].draw(draw,@@drawn_circle_size,x,y,color,@@circle_outline)
       end
       
       x += @@circle_size
@@ -2046,7 +2168,10 @@ class ChromosomePlotter < Plotter
       else
         phenobox.up = false
       end
-      snp.phenos.each { |pheno| phenobox.add_phenocolor(pheno.color)}
+      snp.phenos.each do |phenopt| 
+        phenobox.add_phenocolor(phenopt.pheno.color)
+        phenobox.add_shape(phenopt.shape)
+      end
       snp.linecolors.each_key {|col| phenobox.add_line_color(col)}
       phenobox.set_default_boundaries(y_offset, y_end)
       pheno_boxes << phenobox
@@ -2083,7 +2208,10 @@ class ChromosomePlotter < Plotter
       y_offset = pos_fraction * total_chrom_y + chrom_offset
       y_end = snp.endpos.to_f/chrom.size * total_chrom_y + chrom_offset
       phenobox = PhenoBox.new
-      snp.phenos.each { |pheno| phenobox.add_phenocolor(pheno.color)}
+      snp.phenos.each do |phenopt| 
+        phenobox.add_phenocolor(phenopt.pheno.color)
+        phenobox.add_shape(phenopt.shape)
+      end
       snp.linecolors.each_key {|col| phenobox.add_line_color(col)}
       phenobox.set_even_boundaries(y_offset, y, y_end)
       pheno_boxes << phenobox
@@ -2155,7 +2283,6 @@ class ChromosomePlotter < Plotter
       draw.path(bpath).styles(chrom_style)
     end
     
-#    font_size = @@circle_size
     params[:bigtext] ? font_size = @@circle_size * 1.5 : font_size = @@circle_size
 
     canvas.g.translate(xbase,ybase).text(@@chrom_width.to_f/2,end_chrom_y+2*font_size) do |write|
@@ -2191,6 +2318,46 @@ class Title < Plotter
 end
 
 
+class Ethlabels < Plotter
+
+  def self.draw(params)
+  
+    canvas=params[:canvas]
+    ystart=params[:ystart]
+    xstart=params[:xstart]    
+    xtotal=params[:xtotal]
+    shapes_per_row=params[:shapes_per_row]
+    eth_shapes=params[:eth_shapes]
+    if params[:bigtext]
+      font_size = 33
+      vert_offset = 2
+      y_offset = 2.5
+    else
+      font_size = 22
+      vert_offset = 2
+      y_offset = 2
+    end  
+    
+    shape_space = xtotal.to_f/shapes_per_row
+    y = 0
+    x = 0   
+    shape_size = @@circle_size 
+    eth_shapes.each_pair do |ethnicity, shape|
+      #draw(pen,size,x,y,color,circle_outline)
+      canvas.g.translate(xstart,ystart) do |pen|
+        shape.draw(pen,shape_size,x,y,'none','black')
+      end
+      canvas.g.translate(xstart,ystart).text(x+@@circle_size*1.5,y+@@circle_size.to_f/vert_offset) do |text|
+          text.tspan(ethnicity).styles(:font_size=>font_size)
+      end
+      x+=shape_space
+    end
+    
+  end
+  
+end
+
+
 class PhenotypeLabels < Plotter
   
   def self.draw(params)
@@ -2200,6 +2367,7 @@ class PhenotypeLabels < Plotter
     phenoholder=params[:phenoholder]
     phenos_per_row=params[:pheno_row]
     xtotal=params[:xtotal]
+    shape=params[:shape]
     
     pheno_space = xtotal.to_f/phenos_per_row
     
@@ -2234,7 +2402,7 @@ class PhenotypeLabels < Plotter
         pheno = phenoholder.phenonames[phenokeys[curr_pheno]]
         curr_pheno += 1
         canvas.g.translate(xstart,ystart) do |draw|
-          draw.circle(radius, x, y).styles(:fill=>pheno.color, :stroke=>'black')
+          shape.draw(draw,@@circle_size,x,y,pheno.color,'black')
         end
         canvas.g.translate(xstart,ystart).text(x+@@circle_size*1.5,y+@@circle_size.to_f/vert_offset) do |text|
           text.tspan(pheno.name).styles(:font_size=>font_size)
@@ -2311,6 +2479,13 @@ def draw_plot(genome, phenoholder, options)
 
   total_y = second_row_start + second_row_box_max
 
+  # add row showing shapes/ethnicities when needed
+  eth_shapes = genome.get_eth_shapes
+  if eth_shapes.length > 1 and !options.chr_only
+    eth_label_y_start = total_y + (circle_size * label_offset_y)/2
+    total_y += circle_size * label_offset_y
+  end
+  
   # each row should be 2 circles high + 2 circle buffer on top
   phenotype_labels_total = circle_size * label_offset_y * (phenotype_rows+1)
   phenotype_labels_y_start = total_y + (circle_size * label_offset_y)/2
@@ -2358,9 +2533,16 @@ def draw_plot(genome, phenoholder, options)
       xstart += chrom_box_width
     end
   
+    # insert a row listing the shapes for the ethnicity shapes when more than one
+    eth_shapes = genome.get_eth_shapes
+    Ethlabels.draw(:canvas=>canvas, :xstart=>padded_width, :bigtext=>options.big_font,
+      :eth_shapes=>eth_shapes, :ystart=>eth_label_y_start, :shapes_per_row=>phenotypes_per_row,
+      :xtotal=>xmax-padded_width) if eth_shapes.length > 1
+    
+    eth_shapes.length > 1 ? label_shape=PhenoSquare.new : label_shape = PhenoCircle.new
     PhenotypeLabels.draw(:canvas=>canvas, :xstart=>padded_width, :ystart=>phenotype_labels_y_start,
       :phenoholder=>phenoholder, :pheno_row=>phenotypes_per_row, :xtotal=>xmax-padded_width,
-      :bigtext=>options.big_font) unless options.chr_only
+      :bigtext=>options.big_font, :shape=>label_shape) unless options.chr_only
   
   end
 
@@ -2390,13 +2572,13 @@ genome = Genome.new
 phenoholder = PhenotypeHolder.new(:color=>options.color)
 filereader = PhenoGramFileReader.new
 
-begin
+#begin
   filereader.parse_file(options.input, genome, phenoholder)
-rescue Exception => e
-  puts "ERROR:"
-  puts e.message
-  exit(1)
-end
+#rescue Exception => e
+#  puts "ERROR:"
+#  puts e.message
+#  exit(1)
+#end
 
 draw_plot(genome, phenoholder, options)
 
