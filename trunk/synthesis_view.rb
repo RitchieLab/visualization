@@ -24,7 +24,7 @@ ENV['MAGICK_CONFIGURE_PATH']='/gpfs/group/mdr23/usr/tools/etc/ImageMagick'
 # Requres rubygems
 begin
   require 'rubygems'
-rescue Exception => e
+rescue LoadError => e
   puts e
   puts "Please install rubygems -- http://docs.rubygems.org/read/chapter/3 "
   exit(1)
@@ -33,7 +33,7 @@ end
 # Requires RMagick (http://rmagick.rubyforge.org/)
 begin
   require 'rvg/rvg'
-  rescue Exception => e
+  rescue LoadError => e
   puts
   puts e
   puts "\nPlease install RMagick -- See documentation for synthesis_view or http://rmagick.rubyforge.org/install-faq.html "
@@ -277,7 +277,7 @@ class Arg
 
     begin
       opts.parse!(args)
-    rescue Exception => e
+    rescue => e
       puts e, "", opts
       exit(1)
     end
@@ -337,7 +337,7 @@ class Arg
       end
 
      end
-    rescue Exception => e
+    rescue StandardError => e
       puts e
       exit(1)
     end
@@ -3453,7 +3453,7 @@ class SynthesisViewReader<FileReader
          end
       end
      end
-    rescue Exception => e
+    rescue StandardError => e
       puts e
       exit(1)
     end
@@ -4000,7 +4000,7 @@ end
       end
       end
     end
-    rescue Exception => e
+    rescue StandardError => e
       puts e
       exit(1)
     end
@@ -4023,7 +4023,7 @@ end
         end
       end
 
-    rescue Exception => e
+    rescue StandardError => e
       puts e
       exit(1)
     end
@@ -4049,7 +4049,7 @@ end
           end
         end
       end
-    rescue Exception => e
+    rescue StandardError => e
       puts e
       exit(1)
     end
@@ -4087,7 +4087,7 @@ end
           end
         end
       end
-    rescue Exception => e
+    rescue StandardError => e
       puts e
       exit(1)
     end
@@ -4106,7 +4106,7 @@ SynthesisViewReader.mysql_support(true)
 
 begin
   require '/home/dudek/synthesisview/SNPpos'
-  rescue Exception => e
+  rescue LoadError => e
 #  puts
 #  puts e
 #  puts "\nNo MySQL support"
@@ -4118,7 +4118,7 @@ end
 begin
   require './synthManhattan.rb'
   manhattan_support = true
-rescue Exception => e
+rescue LoadError => e
 #  puts e
 #  puts "\nNo Manhattan plot support"
   manhattan_support = false
