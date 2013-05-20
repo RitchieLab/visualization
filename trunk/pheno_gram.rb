@@ -7,6 +7,7 @@ Font_family = 'Verdana'
 
 SNPDefaultColor = 'black'
 DefaultEthnicity = '-'
+DefaultPhenotype = 'Unknown'
 
 $color_column_included = false
 
@@ -377,6 +378,7 @@ class Arg
     options.thin_lines = false
     options.big_font=false
     options.shade_inaccessible=false
+		options.include_notes=false
     help_selected = false
     version_selected = false
     
@@ -400,9 +402,10 @@ class Arg
       opts.on("-O", "--outline-circle", "Plot circles with black outline") do |outline_circle|
         options.circle_outline = true
       end
-      opts.on("-c [color_range]", "Options are random (default), web, generator or group") do |color_range|
+      opts.on("-c [color_range]", "Options are random (default), web, generator,group or list") do |color_range|
         options.color = color_range
       end
+			opts.on("-a", "--include-annotation", "Include any annotation on plot"){|notes|options.include_notes=true}
       opts.on("-z", "--high-res", "Set resolution to 1200 dpi") {|hres| options.highres=true}
       opts.on("-T", "--trans-lines", "Make lines on chromosome more transparent") {|trans| options.transparent_lines=true}
       opts.on("-n", "--thin-lines", "Make lines across chromosomes thinner") {|thin| options.thin_lines=true}
@@ -485,6 +488,8 @@ class PhenotypeHolder
       @colormaker = ColorGenColorMaker.new
     elsif params[:color]=='group'
       @colormaker = GroupColorMaker.new
+		elsif params[:color]=='list'
+			@colormaker = ListColorMaker.new
     else
       @colormaker = RandomColorMaker.new
     end
@@ -531,7 +536,7 @@ class Genome
     shape = @shapefactory.get_shape(params[:eth])
     @chromosomes[params[:chr].to_i].add_snp(:name=>params[:name], :pos=>params[:pos],
       :pheno=>params[:pheno], :chr=>params[:chr], :snpcolor=>params[:snpcolor], 
-      :endpos=>params[:endpos], :shape=>shape)
+      :endpos=>params[:endpos], :shape=>shape, :note=>params[:note])
     @ethnicities[params[:eth]]=shape unless @ethnicities.has_key?(params[:eth])
   end
   
@@ -553,7 +558,7 @@ end
 
 class Chromosome
   attr_accessor :number, :snps, :snpnames, :centromere, :size, 
-    :display_num
+    :display_num, :note_length
   
   @@centromeres = Array.new
   @@centromeres << 0
@@ -653,6 +658,7 @@ class Chromosome
     @centromere = @@centromeres[n]
     @size = @@chromsize[n]
     @centromere_triangle=Array.new
+		@note_length=0
   end
   
   def add_snp(params)
@@ -660,6 +666,10 @@ class Chromosome
       snp = @snps[params[:name]] = SNP.new(params[:chr], params[:pos], params[:endpos])
       @snpnames << params[:name]
     end
+		if params[:note]
+			snp.note = params[:note] 
+			@note_length = snp.note.length if snp.note.length > @note_length
+		end
     snp.phenos << PhenoPoint.new(params[:pheno], params[:shape])
     snp.linecolors[params[:snpcolor]]=1
   end
@@ -685,12 +695,11 @@ class PhenoPoint
     @pheno = p
     @shape = s
   end
-  
 end
 
 
 class SNP
-  attr_accessor :chrom, :pos, :phenos, :linecolors, :endpos
+  attr_accessor :chrom, :pos, :phenos, :linecolors, :endpos, :note
   
   def initialize(c,p,e=nil)
     @chrom = c
@@ -818,44 +827,6 @@ class RandomColorMaker < ColorMaker
   end
   
 end
-
-
-
-
-#class ColorRange
-#  attr_accessor :name, :start, :stop
-#  
-#  def initialize(n, first, fin)
-#    @start = ColorGen::RGB.new(first[0],first[1],first[2])
-#    @stop = ColorGen::RGB.new(fin[0],fin[1],fin[2])
-#    @name = n
-#    @curr_color = @start
-#  end
-#  
-#  def set_intervals(total_colors)
-#    tcolors = total_colors-1
-#    rint = @stop.red-@start.red
-#    gint = @stop.green-@start.green
-#    bint = @stop.blue-@start.blue
-#    
-#    @rstep = rint.to_f/tcolors
-#    @gstep = gint.to_f/tcolors
-#    @bstep = bint.to_f/tcolors
-#  end
-#  
-#  def get_color
-#    color = @curr_color.clone
-##    @curr_color[0] += @rstep
-##    @curr_color[1] += @gstep
-##    @curr_color[2] += @bstep
-#    
-#    @curr_color.red += @rstep
-#    @curr_color.green += @gstep
-#    @curr_color.blue += @bstep  
-#    
-#    return [color.red.round, color.green.round, color.blue.round]
-#  end
-#end
 
 
 class ColorRange
@@ -1040,6 +1011,25 @@ class ColorGenColorMaker < ColorMaker
 end
 
 
+class ListColorMaker < ColorMaker
+	
+	def initialize
+		@index=0
+		@colors = [ 'blue', 'red', 'purple', 'green', 'gray', 'orange','gold', 'brown',
+			'lightskyblue', 'hotpink', 'violet', 'silver', 'lightsalmon', 'darkgoldenrod',
+			'tan']
+		@final_color_index = @colors.length-1
+	end
+	
+	def gen_html(groupname)
+		@index = 0 if @index > @final_color_index
+		colorname = @colors[@index]
+		@index += 1
+		return colorname
+  end
+	
+end
+
 
 class WebColorMaker < ColorMaker
   
@@ -1102,10 +1092,10 @@ class PhenoGramFileReader < FileHandler
 
   def open(filename)
     @file = File.new(filename, "r")
-    @snpcolors = ['blue','red','green','orange','purple','pink']
+    @snpcolors = ['black','blue','red','green','orange','purple','pink', 'gold']
   end
   
-  def set_columns(headerline)
+  def set_columns(headerline, chr_only)
     @snpcol = @chromcol = @bpcol = @phenocol = @snpcolorcol = @bpendcol = nil
     headers = strip_and_split_delim(headerline, "\t")
     
@@ -1119,7 +1109,7 @@ class PhenoGramFileReader < FileHandler
         $color_column_included = true
       elsif header =~ /^bp|^pos|^start/i
         @bpcol = i
-      elsif header =~ /^end/
+      elsif header =~ /^end/i
         @bpendcol = i
       elsif header =~ /^pheno/i
         @phenocol = i
@@ -1127,13 +1117,17 @@ class PhenoGramFileReader < FileHandler
         @groupcol = i
       elsif header =~ /^race|^ethnic/i
         @ethcol = i
+			elsif header =~ /^annotation|^note/i
+				@notecol = i
       end
     end
 
-    unless @chromcol and @bpcol and @phenocol
-      raise 'Input file must include chrom, pos, phenotype columns'
+    unless @chromcol and @bpcol and (@phenocol || chr_only)
+			error_string = 'Input file must include chrom, pos'
+			error_string = error_string + ' and phenotype' unless chr_only
+			error_string = error_string + ' columns'
+      raise error_string
     end
-    
   end
   
   def chr_good?(chrnum)
@@ -1149,7 +1143,9 @@ class PhenoGramFileReader < FileHandler
   end
   
   
-  def parse_file(filename, genome, phenoholder)
+  def parse_file(filename, genome, phenoholder, params)
+		chr_only = params[:chr_only] || false
+		
     open(filename)
     lines = Array.new
     # read in all lines and split to accommodate Mac files
@@ -1158,7 +1154,7 @@ class PhenoGramFileReader < FileHandler
     end
     close
     
-    set_columns(lines.shift)
+    set_columns(lines.shift, chr_only)
     group = 'default'  
     lines.each do |line|
       next unless line =~ /\w/
@@ -1171,34 +1167,23 @@ class PhenoGramFileReader < FileHandler
       next if data[@chromcol] =~ /chrM/
 
       raise "Problem in #{filename} with line:\n#{line}\n#{data[@chromcol]} is not a valid chromsome number" unless chr_good?(data[@chromcol])
-      
       raise "Problem in #{filename} with line:\n#{line}\nPosition outside chromosome boundaries" unless genome.pos_good?(data[@bpcol], data[@chromcol])
 
       group = data[@groupcol] if @groupcol
-      pheno = phenoholder.add_phenotype(data[@phenocol], group)
+			@phenocol ? phenotype = data[@phenocol] : phenotype = DefaultPhenotype
+      pheno = phenoholder.add_phenotype(phenotype, group)
 
-#      if @snpcol
-#        name = data[@snpcol]
-#      else
-#        name = data[@chromcol] + "." + data[@bpcol]
-#      end
-#      if @snpcolorcol
-#        snpcolor = @snpcolors[data[@snpcolorcol].to_i-1]
-#      else
-#        snpcolor = SNPDefaultColor
-#      end
-#      if @bpendcol
-#        endbp = data[@bpendcol].to_i
-#      else
-#        endbp = data[@bpcol].to_i
-#      end
       @snpcol ? name = data[@snpcol] : name = data[@chromcol] + "." + data[@bpcol]
-      @snpcolorcol ? snpcolor = @snpcolors[data[@snpcolorcol].to_i-1] : snpcolor = SNPDefaultColor
+      @snpcolorcol ? snpcolor = @snpcolors[data[@snpcolorcol].to_i] : snpcolor = SNPDefaultColor
       @bpendcol ? endbp = data[@bpendcol].to_i :  endbp = data[@bpcol].to_i
       @ethcol ? ethnicity = data[@ethcol] : ethnicity = DefaultEthnicity
-      
+			if @notecol
+				notecol = data[@notecol] if @notecol
+				raise "Problem in #{filename} with line:\n#{line}\nAnnotation may be no longer than 10 characters in length" if notecol and notecol.length > 10
+			end
       genome.add_snp(:name => name, :chr=>data[@chromcol], :pos=>data[@bpcol].to_i,
-        :pheno=>pheno, :snpcolor=>snpcolor, :endpos=>endbp, :eth=>ethnicity)
+        :pheno=>pheno, :snpcolor=>snpcolor, :endpos=>endbp, :eth=>ethnicity, 
+				:note=>notecol)
     end  
     phenoholder.set_colors
   end 
@@ -1336,7 +1321,7 @@ end
 
 class PhenoBox < Plotter
   attr_accessor :top_y, :bottom_y, :circles, :phenocolors, :chrom_y, :height, 
-    :up, :line_colors, :chrom_end_y, :endpos, :phenoshapes
+    :up, :line_colors, :chrom_end_y, :endpos, :phenoshapes, :note
   @@circles_per_row = 0
   
   def self.set_circles_per_row(c)
@@ -1368,7 +1353,6 @@ class PhenoBox < Plotter
   end
   
   def estimate_height
-#  est = (@phenocolors.length.to_f/@@circles_per_row).ceil * @@drawn_circle_size
     return (@phenocolors.length.to_f/@@circles_per_row).ceil * @@drawn_circle_size
   end
   
@@ -1449,7 +1433,7 @@ class PhenoBin
     return @actual_height-@height_needed
   end
   
-  def add_phenotype_snp(pos, endpos, col, shape)
+  def add_phenotype_snp(pos, endpos, col, shape, note=nil)
     if @boxpos.has_key?(pos)
       pbox = @boxpos[pos]
     else
@@ -1461,6 +1445,7 @@ class PhenoBin
     
     pbox.add_phenocolor(col)
     pbox.add_shape(shape)
+		pbox.note = note if note
 #    linecolors.each {|color| pbox.add_line_color(color)}
   end
   
@@ -1577,10 +1562,10 @@ class PhenoBinHolder
   end
   
   # adds a phenotype to appropriate bin
-  def add_phenotype_snp(position, endpos, color, linecolors, shape)
+  def add_phenotype_snp(position, endpos, color, linecolors, shape, note)
     @phenobins.each do |pb|
       if position.to_i >= pb.startbase and position.to_i < pb.endbase
-        pb.add_phenotype_snp(position, endpos, color, shape)
+        pb.add_phenotype_snp(position, endpos, color, shape, note)
         return pb
       end
     end
@@ -1760,7 +1745,7 @@ class PhenoBinHolder
     chrom.snps.each_value do |snp|
       pb=nil
       snp.phenos.each do |phenopt|
-        pb=add_phenotype_snp(snp.pos, snp.endpos, phenopt.pheno.color, snp.linecolors.keys, phenopt.shape)
+        pb=add_phenotype_snp(snp.pos, snp.endpos, phenopt.pheno.color, snp.linecolors.keys, phenopt.shape, snp.note)
       end
       pb.add_linecolors(snp.pos, snp.linecolors.keys)
     end
@@ -2043,7 +2028,8 @@ class ChromosomePlotter < Plotter
       phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
       phenoboxes.each do |box|
         draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y, line_container,
-          :chr_only=>params[:chr_only], :transparent=>params[:transparent])
+          :chr_only=>params[:chr_only], :transparent=>params[:transparent], 
+					:include_notes=>params[:include_notes], :bigtext=>params[:bigtext])
       end
       line_container.draw_lines(:canvas=>canvas, :xstart=>xbase, :ystart=>ybase + start_chrom_y, 
         :chrom_width=>@@chrom_width)
@@ -2052,7 +2038,8 @@ class ChromosomePlotter < Plotter
       phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
       phenoboxes.each do |box|
         draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y, line_container,
-          :chr_only=>false)
+          :chr_only=>false, :include_notes=>params[:include_notes], 
+					:bigtext=>params[:bigtext])
       end
       line_container.draw_lines(:canvas=>canvas, :xstart=>xbase, :ystart=>ybase + start_chrom_y, 
         :chrom_width=>@@chrom_width)
@@ -2063,11 +2050,12 @@ class ChromosomePlotter < Plotter
       phenoboxes.sort!{|x,y| x.top_y <=> y.top_y}
       phenoboxes.each do |box|
         draw_phenos_equal(canvas, box, circle_start_x, xbase, ybase + padding.to_f/2, 
-          :chr_only=>params[:chr_only])
+          :chr_only=>params[:chr_only], :include_notes=>params[:include_notes],
+					:bigtext=>params[:bigtext])
       end
       @@circle_size=orig_circle
     end
-    
+		
     centromere_pos = chrom.centromere 
     centromere_y = total_chrom_y * (((centromere_pos[0]+centromere_pos[1])/2)/chrom.size.to_f) + start_chrom_y
     centromere_start = total_chrom_y * (centromere_pos[0]/chrom.size.to_f) + start_chrom_y
@@ -2093,6 +2081,8 @@ class ChromosomePlotter < Plotter
       params[:transparent] ? opacity = 0.55 : opacity = 1.0
     end
 
+		annotation_x=annotation_y=0
+		font_size = get_font_size(params)
     phenobox.line_colors.each do |linecolor|
       canvas.g.translate(xbase,ybase) do |draw|
         if phenobox.chrom_end_y - phenobox.chrom_y <= 1.0
@@ -2100,24 +2090,39 @@ class ChromosomePlotter < Plotter
         else
           (phenobox.chrom_end_y-phenobox.chrom_y).round.times {|i| line_container.add_line(phenobox.chrom_y+i, :stroke=>linecolor)}
         end
-        draw.line(@@chrom_width,phenobox.chrom_y.round,start_x,phenobox.top_y).styles(:stroke=>linecolor,:stroke_width=>1) unless params[:chr_only]
+				if params[:chr_only]
+					if params[:include_notes] and phenobox.note
+						annotation_x = start_x-@@circle_size
+						annotation_y = phenobox.chrom_y+@@drawn_circle_size.to_f/2.25
+					end
+				else
+					draw.line(@@chrom_width,phenobox.chrom_y.round,start_x,phenobox.top_y).styles(:stroke=>linecolor,:stroke_width=>1) unless params[:chr_only]
+				end
       end
     end
-    
+
     unless params[:chr_only]
+			x = start_x
+			annotation_y = y+@@drawn_circle_size.to_f/2.25 + @@drawn_circle_size * 0.75
       phenobox.phenocolors.each_with_index do |color, i|
         if i % @@drawn_circles_per_row == 0
           y += @@drawn_circle_size * 0.75
           x = start_x
         end
         canvas.g.translate(xbase, ybase) do |draw|
-#          draw.circle(@@drawn_circle_size.to_f/2, x, y).styles(:fill=>color, :stroke=>@@circle_outline)
           phenobox.phenoshapes[i].draw(draw,@@drawn_circle_size,x,y,color,@@circle_outline)
         end
         x += @@drawn_circle_size
       end
+			if params[:include_notes] and phenobox.note
+				phenobox.phenocolors.length >= @@drawn_circles_per_row ? annotation_x = start_x + @@drawn_circles_per_row* @@drawn_circle_size : annotation_x = x
+			end
     end
-    
+		if params[:include_notes] and phenobox.note
+			canvas.g.translate(xbase, ybase).text(annotation_x,annotation_y) do |write|
+				write.tspan(phenobox.note).styles(:font_size=>font_size, :text_anchor=>'start')
+			end
+		end
   end
   
   # ybase is from start of chromosome drawing
@@ -2138,19 +2143,24 @@ class ChromosomePlotter < Plotter
       end
     end
     
+		annotation_y = y+@@drawn_circle_size.to_f/2.25 + @@drawn_circle_size * 0.75
     phenobox.phenocolors.each_with_index do |color, i|
       if i % @@num_phenos_row == 0
         y += @@circle_size * 0.75
         x = start_x
       end
       canvas.g.translate(xbase, ybase) do |draw|
-#        draw.circle(@@circle_size.to_f/2, x, y).styles(:fill=>color, :stroke=>'black')
         phenobox.phenoshapes[i].draw(draw,@@drawn_circle_size,x,y,color,@@circle_outline)
       end
-      
       x += @@circle_size
     end
-    
+		if params[:include_notes] and phenobox.note
+			font_size = get_font_size(params)
+			x = start_x + @@drawn_circles_per_row* @@drawn_circle_size if phenobox.phenocolors.length >= @@drawn_circles_per_row
+			canvas.g.translate(xbase, ybase).text(x,annotation_y) do |write|
+				write.tspan(phenobox.note).styles(:font_size=>font_size, :text_anchor=>'start')
+			end
+		end    
   end
   
   # adds phenotypes to sets matching same SNP
@@ -2168,6 +2178,7 @@ class ChromosomePlotter < Plotter
       else
         phenobox.up = false
       end
+			phenobox.note = snp.note 
       snp.phenos.each do |phenopt| 
         phenobox.add_phenocolor(phenopt.pheno.color)
         phenobox.add_shape(phenopt.shape)
@@ -2212,6 +2223,7 @@ class ChromosomePlotter < Plotter
         phenobox.add_phenocolor(phenopt.pheno.color)
         phenobox.add_shape(phenopt.shape)
       end
+			phenobox.note = snp.note
       snp.linecolors.each_key {|col| phenobox.add_line_color(col)}
       phenobox.set_even_boundaries(y_offset, y, y_end)
       pheno_boxes << phenobox
@@ -2222,6 +2234,10 @@ class ChromosomePlotter < Plotter
   end
   
   
+	def self.get_font_size(params)
+		 params[:bigtext] ? font_size = @@circle_size * 1.5 : font_size = @@circle_size
+	end
+	
   def self.draw_chr(params)
     canvas = params[:canvas]
     centromere_y = params[:centromere_y]
@@ -2283,8 +2299,8 @@ class ChromosomePlotter < Plotter
       draw.path(bpath).styles(chrom_style)
     end
     
-    params[:bigtext] ? font_size = @@circle_size * 1.5 : font_size = @@circle_size
-
+		font_size = get_font_size(params)
+		
     canvas.g.translate(xbase,ybase).text(@@chrom_width.to_f/2,end_chrom_y+2*font_size) do |write|
       write.tspan(number.to_s).styles(:font_size=>font_size, :text_anchor=>'middle')
     end
@@ -2494,8 +2510,39 @@ def draw_plot(genome, phenoholder, options)
   width_in = 8
 
   padded_width = circle_size
+	x_per_chrom = chrom_width + num_circles_in_row * circle_size
   # total_y is 2 for chromsome width 6 for circles * number of chroms + space on sides
-  total_x = (chrom_width + num_circles_in_row * circle_size )* 12 + padded_width * 2
+  total_x = x_per_chrom * 12 + padded_width * 2
+	
+	# determine how many additional x based on the starting position for each
+	# how about a circle 
+	
+	# change to an array that lists the X start for each chromosome
+	# as work way across can add up total of the inches and adjust overall
+	# size - the chromosomes match up as 0 to 12 (which is 1 to 13, etc.)
+	# want to make them align the same along the horizontal grid 
+
+	# first chromosomes start at standard left position
+	x_chr_start = Array.new(13){ |i| 0 }
+	additional_notation_x=0
+	for i in 2..13
+		if options.include_notes
+			options.big_font ? increase_mult=1.15 : increase_mult = 0.75
+			increase_mult /= 1.1 if options.chr_only
+			upper_x = x_chr_start[i-1]+ x_per_chrom + genome.chromosomes[i-1].note_length * increase_mult * circle_size 
+			lower_x = x_chr_start[i-1] + x_per_chrom + genome.chromosomes[i+12-1].note_length * increase_mult * circle_size
+		else
+			upper_x=lower_x=x_chr_start[i-1]+x_per_chrom
+		end
+		upper_x > lower_x ? x_chr_start[i] = upper_x : x_chr_start[i]=lower_x	
+		additional_notation_x += x_chr_start[i] - x_per_chrom-x_chr_start[i-1]
+	end
+
+	if additional_notation_x > 0 and options.include_notes
+		width_in = width_in/total_x.to_f * additional_notation_x + width_in
+		total_x += additional_notation_x
+	end
+	
   # height can now be determined based on a width of 10 and the ratios
   # of the total x and total y
   height_in = width_in * total_y / total_x.to_f
@@ -2515,22 +2562,26 @@ def draw_plot(genome, phenoholder, options)
   
     # draw each chromosome (first 12 on top row and then second 12 below)
     (1..12).each do |chr|
+			xstart = x_chr_start[chr] + padded_width
       ChromosomePlotter.plot_chrom(:canvas=>canvas, :chrom=>genome.chromosomes[chr], 
         :xstart=>xstart, :ystart=>first_row_start, :height=>max_chrom_height, 
         :alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only,
         :transparent=>options.transparent_lines, :thickness_mult=>options.thickness_mult,
-        :bigtext=>options.big_font, :cross_hatch=>options.shade_inaccessible)
-      xstart += chrom_box_width 
+        :bigtext=>options.big_font, :cross_hatch=>options.shade_inaccessible,
+				:include_notes=>options.include_notes)
+      #xstart += chrom_box_width 
     end
   
     xstart = padded_width
     (13..24).each do |chr|
+			xstart = x_chr_start[chr-12] + padded_width
       ChromosomePlotter.plot_chrom(:canvas=>canvas, :chrom=>genome.chromosomes[chr], 
         :xstart=>xstart, :ystart=>second_row_start, :height=>second_row_box_max, 
         :alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only,
         :transparent=>options.transparent_lines, :thickness_mult=>options.thickness_mult,
-        :bigtext=>options.big_font, :cross_hatch=>options.shade_inaccessible)    
-      xstart += chrom_box_width
+        :bigtext=>options.big_font, :cross_hatch=>options.shade_inaccessible,
+				:include_notes=>options.include_notes)    
+#      xstart += chrom_box_width
     end
   
     # insert a row listing the shapes for the ethnicity shapes when more than one
@@ -2572,13 +2623,13 @@ genome = Genome.new
 phenoholder = PhenotypeHolder.new(:color=>options.color)
 filereader = PhenoGramFileReader.new
 
-#begin
-  filereader.parse_file(options.input, genome, phenoholder)
-#rescue Exception => e
-#  puts "ERROR:"
-#  puts e.message
-#  exit(1)
-#end
+begin
+  filereader.parse_file(options.input, genome, phenoholder, :chr_only=>options.chr_only)
+rescue => e
+  puts "ERROR:"
+  puts e.message
+  exit(1)
+end
 
 draw_plot(genome, phenoholder, options)
 
