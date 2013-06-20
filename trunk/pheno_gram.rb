@@ -1114,7 +1114,7 @@ class PhenoGramFileReader < FileHandler
     headers = strip_and_split_delim(headerline, "\t")
     
     headers.each_with_index do |header, i|
-      if header =~ /^snp$/i
+      if header =~ /^snp$|^snp_id$/i
         @snpcol = i
       elsif header =~ /^chrom|^chr$/i
         @chromcol = i
@@ -1129,7 +1129,7 @@ class PhenoGramFileReader < FileHandler
         @phenocol = i
       elsif header =~ /^group$/i
         @groupcol = i
-      elsif header =~ /^race|^ethnic/i
+      elsif header =~ /^race|^ethnic|^ancestry/i
         @ethcol = i
 			elsif header =~ /^annotation|^note/i
 				@notecol = i

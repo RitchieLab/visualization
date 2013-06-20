@@ -3659,16 +3659,16 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
       @snpid = i
     elsif header =~ /snp\s*name/i
       @snpname = i
-    elsif header =~ /chromosome|CHR/i
+    elsif header =~ /chromosome|CHR|^chrom$/i
       @chromnum = i
-    elsif header =~ /location/i
+    elsif header =~ /location|^pos$|^bp$/i
       @location = i
     elsif header =~ /^subgroup$/i || header =~ /^group$/i  # skip if no _ to mark name
       next
     else
       header.strip!
       column_type = header
-      if column_type =~ /pval/i
+      if column_type =~ /pval|p_value/i
         groupkeys.each {|key| groups[key].pcol = i}
       elsif column_type =~ /beta_uci|betauci/
         groupkeys.each {|key| groups[key].betaucicol = i}
@@ -3676,7 +3676,7 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
         groupkeys.each {|key| groups[key].betalcicol = i}
       elsif column_type =~ /beta/i or column_type =~ /^es$/
         groupkeys.each {|key| groups[key].betacol = i}
-      elsif column_type =~ /^n$/i
+      elsif column_type =~ /^n$|^sample_size$/i
         groupkeys.each {|key| groups[key].Ncol = i}
       elsif column_type =~ /cafcases/i
         groupkeys.each {|key| groups[key].cafcasescol = i}
@@ -3812,7 +3812,7 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
         column_type = pcs[2].strip
       end
       
-      if column_type =~ /pval/i
+      if column_type =~ /pval|p_value/i
         currgroup.pcol = i
       elsif column_type =~ /beta_uci|betauci/
         currgroup.betaucicol = i
@@ -3820,7 +3820,7 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
         currgroup.betalcicol = i
       elsif column_type =~ /beta/i or column_type =~ /^es$/
         currgroup.betacol = i
-      elsif column_type =~ /^n$/i
+      elsif column_type =~ /^n$|^sample_size$/i
         currgroup.Ncol = i
       elsif column_type =~ /cafcases/i
         currgroup.cafcasescol = i

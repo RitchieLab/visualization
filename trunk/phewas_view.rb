@@ -1039,11 +1039,11 @@ class ResultFileReader < FileReader
     data = strip_and_split(line)
 
     data.each_with_index do |header, i|
-      if header =~ /snpID/i
+      if header =~ /^snpID|^snp/i
         @snpcol = i
       elsif header =~ /^\s*phenotype\s*$/i
         @phenocol = i
-      elsif header =~ /p_value/i
+      elsif header =~ /^p_value|^pval/i
         @pvalcol = i
       elsif header =~ /Race_ethnicity|ancestry|group/i
         @ethcol = i
