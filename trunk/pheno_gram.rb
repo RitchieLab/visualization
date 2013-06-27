@@ -8,8 +8,8 @@ SNPDefaultColor = 'black'
 DefaultEthnicity = '-'
 DefaultPhenotype = 'Unknown'
 $color_column_included = false
-#CytoBandFile = '/Users/dudeksm/Documents/lab/rails/visualization/plot/cytoBand.txt'
-CytoBandFile = '/gpfs/group1/m/mdr23/www/visualization/plot/cytoBand.txt'
+CytoBandFile = '/Users/dudeksm/Documents/lab/rails/visualization/plot/cytoBand.txt'
+#CytoBandFile = '/gpfs/group1/m/mdr23/www/visualization/plot/cytoBand.txt'
 
 begin
   require 'rubygems'
@@ -335,7 +335,7 @@ require 'optparse'
 require 'ostruct'
 include Magick
 
-Version = '0.5.0'
+Version = '0.5.1'
 Name = 'pheno_gram.rb'
 
 # check for windows and select alternate font based on OS
@@ -428,8 +428,9 @@ class Arg
       opts.on("-B", "--thick-boundary", "Increase thickness of chromosome boundary") {|thick| options.thickness_mult=2}
       opts.on("-F", "--big-font", "Increase font size of labels") {|big_font| options.big_font=true}
       opts.on("-x", "--shade-chromatin", "Add cross-hatch shading to inaccessible regions of chromosomes"){|cross_hath|options.shade_inaccessible=true}
-      opts.on("-p [pheno_spacing]", "Options are standard or equal or alternative (default) ") do |pheno_spacing|
+      opts.on("-p [pheno_spacing]", "Options are standard or equal or proximity (default) ") do |pheno_spacing|
         options.pheno_spacing = pheno_spacing
+				options.pheno_spacing = 'proximity' if options.pheno_spacing == 'proximity'
       end
       opts.on("-r [random_seed]", "Random number generator seed (default=7") do |random_seed|
         options.rand_seed = random_seed.to_i
@@ -1048,8 +1049,8 @@ class ListColorMaker < ColorMaker
 	
 	def initialize
 		@index=0
-		@colors = [ 'blue', 'red', 'purple', 'green', 'gray', 'orange','gold', 'brown',
-			'lightskyblue', 'hotpink', 'violet', 'silver', 'lightsalmon', 'darkgoldenrod',
+		@colors = [ 'blue', 'red', 'medium purple', 'green', 'gray', 'lightskyblue','gold', 'brown',
+			'orange', 'hotpink', 'violet', 'silver', 'lightsalmon', 'darkgoldenrod',
 			'tan']
 		@final_color_index = @colors.length-1
 	end
@@ -2132,7 +2133,7 @@ class ChromosomePlotter < Plotter
 		
 		params[:zoomstart] ? startbp = params[:zoomstart] : startbp = 0
 		params[:zoomend] ? endbp = params[:zoomend] : endbp = chrom.size
-		
+	
     draw_chr(:canvas=>canvas, :centromere_y=>centromere_y, :start_chrom_y=>start_chrom_y, 
       :end_chrom_y=>end_chrom_y, :xbase=>xbase, :ybase=>ybase, :chromnum=>chrom.display_num,
       :thickness_mult=>params[:thickness_mult], :chr_only=>params[:chr_only], 
