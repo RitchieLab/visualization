@@ -4488,6 +4488,11 @@ elsif options.rotate
   if grouplisthash[GroupList.get_default_name].plot_maf?
     total_stat_boxes +=1
   end
+	
+	if grouplisthash[GroupList.get_default_name].plot_sample_sizes?
+    total_stat_boxes +=1
+  end
+	
   if options.casecontrol
     total_stat_boxes += 2
   end
@@ -4880,8 +4885,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_half_boxes[curr_half_box], :stat_max=>10,
         :stat_min=>0, :data_key=>'study', :plot_labels=>first_chrom, :title=>'Study #',
-        :precision=>0,:start=>ystart_half_boxes[curr_half_box], :stat_max=>10,
-        :stat_min=>0, :data_key=>'study', :plot_labels=>first_chrom, :title=>'Study #',
         :precision=>0, :rotate=>options.rotate, :size_mult=>0.5)
     end
 
@@ -5012,6 +5015,19 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       curr_stat_box+=1
     end
 
+    if grouplist.plot_sample_sizes?
+      nmin = chromlist.minscore['N'].to_f
+      nmax = chromlist.maxscore['N'].to_f
+      if options.clean_axes
+        increment, nmin, nmax = writer.calculate_increments(nmin, nmax)
+      end
+      writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
+        :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>nmax, :stat_min=>nmin,
+        :data_key=>'N', :plot_labels=>plot_labels, :title=>'Sample Size', 
+				:precision=>0, :rotate=>options.rotate)
+      curr_stat_box+=1
+    end			
+			
     if options.circlecasecon
       if first_chrom
         writer.add_circle_plot_legend('Cases', 'Controls', options.rotate, x_start, ystart_stat_boxes[curr_stat_box])
