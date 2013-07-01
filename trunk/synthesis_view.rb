@@ -46,7 +46,7 @@ require 'ostruct'
 include Magick
 
 RVG::dpi=300
-Version = '1.05'
+Version = '1.1.0'
 Maximum_html_image_x = 1000
 
 # check for windows and select alternate font based on OS
@@ -103,6 +103,7 @@ class Arg
     options.plot_power = false
     options.grayscale = false
     options.color_key_bottom = false
+		options.forest_plot = false
     options.additional_columns = Array.new
 
     return options
@@ -231,9 +232,13 @@ class Arg
       opts.on("-r", "Draws r-squared result plot") do |r|
         options.rsquared = true
       end
-      opts.on("-a", "--rotate", "Draw Forest plot") do |rot|
+      opts.on("-a", "--rotate", "Rotate final plot") do |rot|
         options.rotate = true
       end
+			opts.on("-F", "--forest", "Draw Forest plot") do |forest|
+				options.forest_plot = true
+				options.rotate = true
+			end
       opts.on("-D", "--forest-legend", "Draw legend on Forest plot") do |for_legend|
         options.forest_legend = true
       end
@@ -1470,7 +1475,7 @@ end
 #############################################################################
 class PlotWriter
   attr_accessor :box_size, :canvas, :color_array, :dashed_array, :interval_array, :feature_opacity,
-    :font_size_multiple, :first_grid, :map_pos, :pixels_per_coordinate, :maxy, :maxx
+    :font_size_multiple, :first_grid, :map_pos, :pixels_per_coordinate, :maxy, :maxx, :last_grid
 
   def initialize(box_size)
     @box_size = box_size
@@ -1480,6 +1485,7 @@ class PlotWriter
     @feature_opacity = 1.0
     @font_size_multiple = 1.0
     @first_grid = true
+		@last_grid = false
     @map_pos = Array.new
     @pixels_per_coordinate = 0
     @maxy =0
@@ -1701,9 +1707,6 @@ class PlotWriter
 
     stat_max = get_neg_log(stat_min)
     top_max = get_neg_log(stat_min)
-
-    #############
-    #######  CHECK ALL Draw_pvalue calls ###################
 
     # check to see if there is a cut-off imposed for the pvalue plot
     if stat_min.to_f > original_min.to_f
@@ -2903,8 +2906,14 @@ class PlotWriter
 
   # draws the group information grid -- shows whether the group has
   # information about the SNPs in the list
-  def group_membership_plot(groupname, colorstr, snp_list, x_start, y_start, first_plot=false, show_one=false,
-    grayscale=false)
+  def group_membership_plot(groupname, colorstr, snp_list, x_start, y_start, params)
+		first_plot = params[:first_plot] || false;
+		show_one = params[:show_one] || false;
+		grayscale = params[:grayscale] || false;
+		rotated = params[:rotate] || false;
+		last_plot = params[:last_plot] || false;
+		
+
     box_y_start = 0 #@box_size * Math.sqrt(2) *0.25 #@box_size/6
 
     x_text = @box_size * 0.7
@@ -2939,8 +2948,7 @@ class PlotWriter
     end
 
     font_size = standard_font_size * 0.9
-
-    if first_plot
+    if first_plot and !rotated
       namepcs = groupname.split /:/
       @canvas.g.translate(x_start,y_start).text(@box_size/2.8, font_size * 0.8) do |text|
         text.tspan(namepcs[0]).styles(:font_size=>font_size, :text_anchor=>'end')
@@ -2952,15 +2960,27 @@ class PlotWriter
           check.styles(:fill=>colorstr, :stroke=>stroke, :stroke_width=>1)
           check.rect(@box_size * Math.sqrt(2) *0.25 * font_size_multiple, @box_size * Math.sqrt(2) *0.25 * font_size_multiple, box_x_start, box_y_start)
         end
+			end
+			elsif last_plot and rotated
+				namepcs = groupname.split /:/
+				show_one ? x_adjust = -@box_size : x_adjust = -@box_size/4
+				@canvas.g.translate(x_start,y_start).text(x_text+@box_size/4, font_size * 0.8) do |text|
+					text.tspan(namepcs[0]).styles(:font_size=>font_size, :text_anchor=>'start')
+				end
+				if show_one
+					box_y_start=0
+					box_x_start = -@box_size
+	        @canvas.g.translate(x_start+x_text,y_start) do |check|
+						check.styles(:fill=>colorstr, :stroke=>stroke, :stroke_width=>1)
+						check.rect(@box_size * Math.sqrt(2) *0.25 * font_size_multiple, @box_size * Math.sqrt(2) *0.25 * font_size_multiple, box_x_start, box_y_start)		
+					end
+				end
       end
-      
-    end
-
   end
 
 
   # draws the grid showing LD values
-  def draw_grid(snp_list, x_start, y_start, use_dprime=true)
+  def draw_grid(snp_list, x_start, y_start, rotate, use_dprime=true)
     x_start = x_start - @box_size*0.7
     y = y_start+@box_size
 
@@ -2985,19 +3005,30 @@ class PlotWriter
     end
 
     # draw plot legend below grid label
-    if @first_grid
+    if @first_grid and !rotate
       draw_plot_legend(label_x, y_text+@box_size*1.5, use_dprime)
       @first_grid = false
     end
-
+		
+		text_rotate=0
+		if rotate
+			text_rotate=90
+			x_text -= @box_size/2
+			y_text -= @box_size/2
+		end
     snp_list.included_snps.each do |snp_index|
-      @canvas.text(x_text, y_text) do |number|
+      @canvas.text(x_text, y_text).rotate(text_rotate) do |number|
         number.tspan((snp_index+1).to_s).styles(:text_anchor =>'middle', :font_size => standard_font_size,
           :font_family=>Font_family_style, :fill=>'black')
         x_text = label_step(x_text)
       end
     end
 
+		if @last_grid and rotate
+      draw_plot_legend(x_text+2*@box_size, y_text+@box_size*1.5, use_dprime)
+      @first_grid = false			
+		end
+		
      y_current_start = @box_size
      x = 0
 
@@ -3055,10 +3086,9 @@ class PlotWriter
           x_line_end, y_line_end).styles(:fill=>'none', :stroke=>'black', :stroke_width=>@box_size/5+1)
       end
     end
-
-
   end
 
+	
   def draw_plot_legend(x_start, y_start, is_dprime=true)
 
     labels_array = Array.new
@@ -3708,7 +3738,7 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
   end
 
   unless @snpid and @location and @chromnum
-    puts "ERROR:  Need SNPID, CHROMOSOME, and LOCATION columns in input file"
+    puts "ERROR:  Need SNP, CHR, and POS columns in input file"
     exit
   end
   # add groups to the grouplist
@@ -3779,7 +3809,7 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
       @snpname = i
     elsif header =~ /chromosome|CHR/i
       @chromnum = i
-    elsif header =~ /location/i
+    elsif header =~ /location|^pos$|^bp$/i
       @location = i
     elsif header !~ /:/  # skip if no _ to mark name
       next
@@ -3852,7 +3882,7 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
   end
 
   unless @snpid and @location and @chromnum
-    puts "ERROR:  Need SNPID, CHROMOSOME, and LOCATION columns in input file"
+    puts "ERROR:  Need SNP, CHR, and POS columns in input file"
     exit
   end
   
@@ -3940,12 +3970,11 @@ end
     firstline = true
 
     header_cols = nil
-
     begin
       File.open(filename, "r") do |file|
       file.each_line do |oline|
 
-        oline.each("\r") do |line|
+        oline.each_line("\r") do |line|
         next if line =~ /^\n$/
 
         # skip blank lines
@@ -4379,7 +4408,7 @@ ygroup_boxes_start = Array.new
 ystart_block_stat_box = ymax
 
 # add if need to show which groups have data for each SNP
-if grouplisthash.length == 1 and !options.rotate and !options.color_key_bottom
+if grouplisthash.length == 1 and !options.foreast_plot and !options.color_key_bottom
   grouplist = grouplisthash[GroupList.get_default_name]
   if !chromlist.results_complete?(grouplist.groups.length)
     grouplist.groups.length.times do |i|
@@ -4443,7 +4472,7 @@ if grouplisthash.length == 1 and !options.rotate
   total_stat_boxes += options.additional_columns.length
 
 elsif options.rotate
-  total_stat_boxes = grouplisthash[GroupList.get_default_name].groups.length
+	options.forest_plot ? total_stat_boxes = grouplisthash[GroupList.get_default_name].groups.length : total_stat_boxes=0
   if grouplisthash[GroupList.get_default_name].plot_pvals? and options.plot_pval
     total_stat_boxes +=1
   end
@@ -4635,6 +4664,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
 
   chromlist.chromarray.each_with_index do |chrnum, chromindex|
     current_chrom = chromlist.chromhash[chrnum]
+		last_chrom = true if chromindex == chromlist.chromarray.length-1
     # add labels to top of chart
     chrom_x_starts << x_start
     x_new_start= writer.add_labels(current_chrom.name, current_chrom.snp_list, x_start,
@@ -4644,9 +4674,9 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
   if gene_rows > 0
     writer.add_gene_rows(current_chrom, x_start, y_gene_start, x_new_start, y_label_start, gene_rows)
   end
-
+		
   # display which groups were genotyped -- only for single grouplist plot
-  if grouplisthash.length == 1 and !options.rotate
+  if grouplisthash.length == 1 and !options.forest_plot
     grouplist = grouplisthash[GroupList.get_default_name]
     if !chromlist.results_complete?(grouplist.groups.length)
       contains_meta = false
@@ -4658,15 +4688,8 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
           if contains_meta
             thisindex = thisindex -1
           end
-#          if options.color_key_bottom
-#            writer.group_membership_plot(group.name, group.colorstr,  current_chrom.snp_list, x_original_start, ygroup_boxes_start[thisindex], 
-#                true, true, options.grayscale)
-#          else
-#            writer.group_membership_plot(group.name, group.colorstr, current_chrom.snp_list, x_start, ygroup_boxes_start[thisindex], first_chrom, false,
-#              options.grayscale)            
-#          end
-          writer.group_membership_plot(group.name, group.colorstr, current_chrom.snp_list, x_start, ygroup_boxes_start[thisindex], first_chrom, false,
-            options.grayscale)
+					writer.group_membership_plot(group.name, group.colorstr, current_chrom.snp_list, x_start, ygroup_boxes_start[thisindex], :first_plot=>first_chrom, 
+						:show_one=>false, :grayscale=>options.grayscale, :rotate=>options.rotate, :last_plot=>last_chrom)
         else
           meta_group = group
           contains_meta = true
@@ -4674,14 +4697,14 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
         end
       end
       if contains_meta
-        writer.group_membership_plot(meta_group.name, meta_group.colorstr, current_chrom.snp_list, x_start, ygroup_boxes_start.last, first_chrom, false,options.grayscale)
+        writer.group_membership_plot(meta_group.name, meta_group.colorstr, current_chrom.snp_list, x_start, ygroup_boxes_start.last, 
+					:first_plot=>first_chrom, :show_one=>false, :grayscale=>options.grayscale, :rotate=>options.rotate,:last_plot=>last_chrom)
       end
     end
   end
 
   curr_stat_box = 0
-
-
+	
   # when single group list from input file
   if grouplisthash.length == 1 and !options.rotate
     grouplist = grouplisthash[GroupList.get_default_name]
@@ -4864,7 +4887,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
 
   elsif options.rotate # for rotated plots for odds ratio
     plot_labels = (chromindex == chromlist.chromarray.length-1)
-
     grouplist = grouplisthash[GroupList.get_default_name]
 
     pvalmin = chromlist.minscore['pvalue']
@@ -4914,16 +4936,18 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     end
 
     # plot each groups odds ratio values
-    grouplist.groups.each do |group|
-      if options.clean_axes
-        increment, newormin, newormax = writer.calculate_increments(ormin.to_f, ormax.to_f)
-      else
-        newormin = ormin.to_f
-        newormax = ormax.to_f
-      end
-      writer.draw_or_plot(group, current_chrom.snp_list, x_start, ystart_stat_boxes[curr_stat_box],newormin, newormax, plot_labels, options.large_or)
-      curr_stat_box += 1
-    end
+		if options.forest_plot
+			grouplist.groups.each do |group|
+				if options.clean_axes
+					increment, newormin, newormax = writer.calculate_increments(ormin.to_f, ormax.to_f)
+				else
+					newormin = ormin.to_f
+					newormax = ormax.to_f
+				end
+				writer.draw_or_plot(group, current_chrom.snp_list, x_start, ystart_stat_boxes[curr_stat_box],newormin, newormax, plot_labels, options.large_or)
+				curr_stat_box += 1
+			end
+		end
 
     if grouplist.plot_maf?
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
@@ -5062,13 +5086,17 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
   if current_chrom.snp_list.get_num_included_snps > 0
     if(options.dprime)
      writer.first_grid = first_chrom
-     writer.draw_grid(current_chrom.snp_list, x_start, y_dprime_start, true)
+		 writer.last_grid = last_chrom
+     writer.draw_grid(current_chrom.snp_list, x_start, y_dprime_start, options.rotate,
+			 true)
     end
 
     # draw r-squared grid
     if(options.rsquared)
       writer.first_grid = first_chrom
-      writer.draw_grid(current_chrom.snp_list, x_start, y_rsquared_start, false)
+			writer.last_grid = last_chrom
+      writer.draw_grid(current_chrom.snp_list, x_start, y_rsquared_start, options.rotate,
+				false)
     end
   end
 
@@ -5142,7 +5170,8 @@ if grouplisthash.length == 1 and !options.rotate
   # draw group legend when needed
   if y_group_legend_rows.length > 0
     grouplist.groups.each_with_index do |group, index|
-      writer.group_membership_plot(group.name, group.colorstr,  chromlist.chromhash[chromlist.chromarray.first].snp_list, x_original_start, y_group_legend_rows[index], true, true, options.grayscale)
+      writer.group_membership_plot(group.name, group.colorstr,  chromlist.chromhash[chromlist.chromarray.first].snp_list, x_original_start, y_group_legend_rows[index], 
+				:first_plot=>true, :show_one=>true, :grayscale=>options.grayscale, :rotate=>options.rotate, :last_plot=>true)
     end
   end
 
@@ -5192,6 +5221,35 @@ elsif options.rotate
     end
   end
 
+	# draw group legend when needed
+  if grouplisthash.length == 1 and y_group_legend_rows.length > 0
+		grouplist = grouplisthash[GroupList.get_default_name]
+		if chromlist.results_complete?(grouplist.groups.length)
+			grouplist.groups.each_with_index do |group, index|
+				writer.group_membership_plot(group.name, group.colorstr,  chromlist.chromhash[chromlist.chromarray.first].snp_list, x_original_start, y_group_legend_rows[index], 
+					:first_plot=>true, :show_one=>true, :grayscale=>options.grayscale, :rotate=>options.rotate, :last_plot=>true)
+			end
+		end
+  end
+
+  # draw group summary plots
+  if options.groupfile
+    x_number_plot = x_original_start
+    if grouplist.plot_pheno_avg?
+      x_number_plot = writer.group_summary_plot(grouplist, x_original_start+box_size*5, y_group_total_start[0], options.phenotitle, 'pheno_avg',1)
+    end
+    if grouplist.plot_box_plot?
+      x_number_plot = writer.group_box_plot(grouplist, x_number_plot, y_group_total_start[0], 1)
+    end
+    if grouplist.plot_summary_size?
+      if vertical_totals
+        writer.group_summary_plot(grouplist, x_original_start+box_size*5, y_group_total_start[1], 'N', 'num',50)
+      else
+        writer.group_summary_plot(grouplist, x_number_plot, y_group_total_start[0], 'N', 'num',50)
+      end
+    end
+  end	
+	
   # add legend at bottom when requested
   if options.forest_legend
     writer.add_forest_legend(x_forest_legend_lines, yforest_legend_start, grouplisthash[GroupList.get_default_name], 0, 0)
@@ -5255,7 +5313,8 @@ else # multiple grouplists for ethnicity so different lines need to be drawn
     glist = grouplisthash[keys[0]]
 
     glist.groups.each_with_index do |group, index|
-      writer.group_membership_plot(group.name, group.colorstr,  chromlist.chromhash[chromlist.chromarray.first].snp_list, x_original_start, y_group_legend_rows[index], true, true, options.grayscale)
+      writer.group_membership_plot(group.name, group.colorstr,  chromlist.chromhash[chromlist.chromarray.first].snp_list, x_original_start, y_group_legend_rows[index], 
+				:first_plot=>true, :show_one=>true, :grayscale=>options.grayscale, :rotate=>options.rotate, :last_plot=>true)
     end
   end
 
@@ -5267,9 +5326,7 @@ outfile = options.out_name + '.' + options.imageformat
 print "\n\tDrawing #{outfile}..."
 STDOUT.flush
 img = rvg.draw
-#if options.rotate
 img.rotate!(-90) if options.rotate
-#end
 img.write(outfile)
 
 if options.htmlfile
