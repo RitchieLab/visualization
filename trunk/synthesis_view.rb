@@ -2580,8 +2580,7 @@ class PlotWriter
       min_pos = snp_list.get_min
       max_pos = snp_list.get_max
       interval_pos = max_pos - min_pos
-
-      x_interval = end_x - start_x
+			interval_pos != 0 ? x_interval = end_x - start_x : x_interval = 0
 
       box_height = @box_size/3
 
@@ -2596,7 +2595,7 @@ class PlotWriter
 
       font_style = 'italic'
       font_family = 'Arial'
-      if snp_list.included_snps.length > 1
+      if snp_list.included_snps.length > 1 and interval_pos != 0
         @canvas.g.translate(x_start, y_start).text(end_x+@box_size/4-box_adjust,box_y_start-box_height).rotate(rotate_angle) do |text|
           text.tspan(snp_list.get_max.to_s).styles(:font_size=>font_size/1.3, :text_anchor=>txt_anchor, :font_style=>font_style, :font_family=>font_family)
         end
@@ -2620,37 +2619,45 @@ class PlotWriter
       x_text_line = @box_size + 1
 
       last_x_position = ((snp_list.snps[snp_list.included_snps.first].location.to_f - min_pos) / interval_pos) * x_interval + start_x
-
+			
       # draw lines connecting fonts to the position
-      if snp_list.included_snps.length > 1
-        final_x_position = ((snp_list.snps[snp_list.included_snps.last].location.to_f - min_pos) / interval_pos) * x_interval + start_x
+      if snp_list.included_snps.length > 1 
+				if interval_pos != 0
+					final_x_position = ((snp_list.snps[snp_list.included_snps.last].location.to_f - min_pos) / interval_pos) * x_interval + start_x
+					snp_list.included_snps.each do |snp_index|
+						snp = snp_list.snps[snp_index]
+						# determine relative position
+						x_end_position = ((snp.location.to_f - min_pos) / interval_pos) * x_interval + start_x
 
-        snp_list.included_snps.each do |snp_index|
-          snp = snp_list.snps[snp_index]
-          # determine relative position
-          x_end_position = ((snp.location.to_f - min_pos) / interval_pos) * x_interval + start_x
+						# when enough room to label add the current basepair location
+						# distance should be 1/2 of a box size
+						if add_snp_locs
+						  if x_end_position - last_x_position > @box_size.to_f/1.8 and final_x_position - x_end_position > @box_size.to_f/1.8
+								@canvas.g.translate(x_start, y_start).text(x_end_position+@box_size/4-box_adjust, box_y_start-box_height).rotate(rotate_angle) do |text|
+									text.tspan(snp.location.to_s).styles(:font_size=>font_size/1.3, :text_anchor=>txt_anchor, :font_style=>font_style, :font_family=>font_family)
+								end
+								last_x_position = x_end_position
+							end
+						end
 
-          # when enough room to label add the current basepair location
-          # distance should be 1/2 of a box size
-          if add_snp_locs
-            if x_end_position - last_x_position > @box_size.to_f/1.8 and final_x_position - x_end_position > @box_size.to_f/1.8
-              @canvas.g.translate(x_start, y_start).text(x_end_position+@box_size/4-box_adjust, box_y_start-box_height).rotate(rotate_angle) do |text|
-                text.tspan(snp.location.to_s).styles(:font_size=>font_size/1.3, :text_anchor=>txt_anchor, :font_style=>font_style, :font_family=>font_family)
-              end
-              last_x_position = x_end_position
-            end
-          end
-
-          @canvas.g.translate(x_start, y_start) do |pos_line|
-            # draw a vertical line across the box
-            pos_line.styles(:stroke=>'gray', :stroke_width=>1)
-            pos_line.line(x_end_position, box_y_start, x_end_position, box_y_start+box_height)
-            pos_line.line(x_text_line, y_text_line, x_end_position, box_y_start+box_height)
-          end
-          x_text_line = label_step(x_text_line)
-        end
+						@canvas.g.translate(x_start, y_start) do |pos_line|
+							# draw a vertical line across the box
+							pos_line.styles(:stroke=>'gray', :stroke_width=>1)
+							pos_line.line(x_end_position, box_y_start, x_end_position, box_y_start+box_height)
+							pos_line.line(x_text_line, y_text_line, x_end_position, box_y_start+box_height)
+						end
+						x_text_line = label_step(x_text_line)
+					end
+				else # interval_pos is zero (all SNPs from same position
+					snp_list.included_snps.each do |snp_index|
+						@canvas.g.translate(x_start, y_start) do |pos_line|
+							pos_line.line(x_text_line,y_text_line,start_x, box_y_start+box_height)
+						end
+						x_text_line = label_step(x_text_line)
+					end
+				end
       else
-        # only on SNP to draw line
+        # only one SNP to draw line
         @canvas.g.translate(x_start, y_start) do |pos_line|
           pos_line.line(start_x, y_text_line, start_x, box_y_start+box_height)
         end
@@ -4873,7 +4880,6 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
         :data_key=>column, :plot_labels=>first_chrom, :title=>column, :precision=>2)
       curr_stat_box+=1
     end  
-      
       
     curr_half_box = 0
     if grouplist.plot_study? and options.plot_studynum
