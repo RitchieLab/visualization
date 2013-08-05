@@ -2452,7 +2452,7 @@ class PlotWriter
   end
 
   # places faint dashed line across plot at indicated value
-  def draw_dashed(x_start, y_start, x_end, value, stat_max, stat_min)
+  def draw_dashed(x_start, y_start, x_end, value, stat_max, stat_min, rotated=false)
     y_interval = @box_size*9
     x_begin = @box_size * 0.7
     stat_interval = stat_max - stat_min
@@ -2462,6 +2462,7 @@ class PlotWriter
     dash_array << dash1
     dash_array << dash2
     y = ((stat_max-value) / stat_interval) * y_interval
+		y = y_interval - y if rotated
     @canvas.g.translate(x_start, y_start) do |l|
       l.styles(:fill=>'none', :stroke_width=>1, :stroke=>'gray', :fill_opacity=>0.0, :stroke_dasharray=>dash_array)
       l.line(x_begin, y, x_end-x_start, y)
@@ -4918,6 +4919,11 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     if grouplist.plot_betas? and options.plot_beta
       minbeta = chromlist.minscore['beta'].to_f
       maxbeta = chromlist.maxscore['beta'].to_f
+			
+      if grouplist.groups.first.betaucicol > -1
+        minbeta = chromlist.minscore['betalci'].to_f
+        maxbeta = chromlist.maxscore['betauci'].to_f
+      end
       if options.clean_axes
         increment, minbeta, maxbeta = writer.calculate_increments_include_zero(minbeta, maxbeta)
       end
@@ -5091,6 +5097,10 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       if grouplist.plot_betas? and options.plot_beta
         minbeta = chromlist.minscore['beta'].to_f
         maxbeta = chromlist.maxscore['beta'].to_f
+				if grouplist.groups.first.betaucicol > -1
+					minbeta = chromlist.minscore['betalci'].to_f
+					maxbeta = chromlist.maxscore['betauci'].to_f
+				end 
         if options.clean_axes
           increment, minbeta, maxbeta = writer.calculate_increments_include_zero(minbeta, maxbeta)
         end
@@ -5166,17 +5176,21 @@ if grouplisthash.length == 1 and !options.rotate
   if grouplist.plot_betas? and options.plot_beta
     minbeta = chromlist.minscore['beta'].to_f
     maxbeta = chromlist.maxscore['beta'].to_f
+		if grouplist.groups.first.betaucicol > -1
+      minbeta = chromlist.minscore['betalci'].to_f
+			maxbeta = chromlist.maxscore['betauci'].to_f
+    end 
     if options.clean_axes
       increment, minbeta, maxbeta = writer.calculate_increments_include_zero(minbeta, maxbeta)
-    end
+    end	
     if 0 > minbeta and 0 < maxbeta
-      writer.draw_dashed(x_original_start, ystart_stat_boxes[1], x_line_end, 0, maxbeta, minbeta)
+      writer.draw_dashed(x_original_start, ystart_stat_boxes[1], x_line_end, 0, maxbeta, minbeta, options.rotate)
     end
   end
 
   # draw dotted line across odds ratio at 1.0
   if grouplist.plot_oddsratio?
-    writer.draw_dashed(x_original_start, ystart_stat_boxes[or_index], x_line_end, 1.0, or_max, or_min)
+    writer.draw_dashed(x_original_start, ystart_stat_boxes[or_index], x_line_end, 1.0, or_max, or_min, options.rotate)
   end
 
   # draw lines across value plots
@@ -5235,11 +5249,15 @@ elsif options.rotate
   if grouplist.plot_betas? and options.plot_beta
     minbeta = chromlist.minscore['beta'].to_f
     maxbeta = chromlist.maxscore['beta'].to_f
+		if grouplist.groups.first.betaucicol > -1
+      minbeta = chromlist.minscore['betalci'].to_f
+      maxbeta = chromlist.maxscore['betauci'].to_f
+    end 
     if options.clean_axes
        increment, minbeta, maxbeta = writer.calculate_increments_include_zero(minbeta, maxbeta)
     end
     if 0 > minbeta and 0 < maxbeta
-      writer.draw_dashed(x_original_start, ystart_stat_boxes[1], x_line_end, 0, maxbeta, minbeta)
+      writer.draw_dashed(x_original_start, ystart_stat_boxes[1], x_line_end, 0, maxbeta, minbeta, options.rotate)
     end
   end
 
@@ -5299,7 +5317,7 @@ else # multiple grouplists for ethnicity so different lines need to be drawn
         increment, minbeta, maxbeta = writer.calculate_increments_include_zero(minbeta, maxbeta)
       end
       if 0 > minbeta and 0 < maxbeta
-        writer.draw_dashed(x_original_start, ystart_stat_boxes[i], x_line_end, 0, maxbeta, minbeta)
+        writer.draw_dashed(x_original_start, ystart_stat_boxes[i], x_line_end, 0, maxbeta, minbeta, options.rotate)
       end
       writer.draw_plot_boundaries(x_original_start, x_line_end, ystart_stat_boxes[i])
     end
