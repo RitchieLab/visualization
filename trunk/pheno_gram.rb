@@ -430,7 +430,7 @@ class Arg
       opts.on("-x", "--shade-chromatin", "Add cross-hatch shading to inaccessible regions of chromosomes"){|cross_hath|options.shade_inaccessible=true}
       opts.on("-p [pheno_spacing]", "Options are standard or equal or proximity (default) ") do |pheno_spacing|
         options.pheno_spacing = pheno_spacing
-				options.pheno_spacing = 'proximity' if options.pheno_spacing == 'proximity'
+				options.pheno_spacing = 'alternative' if options.pheno_spacing == 'proximity'
       end
       opts.on("-r [random_seed]", "Random number generator seed (default=7") do |random_seed|
         options.rand_seed = random_seed.to_i
