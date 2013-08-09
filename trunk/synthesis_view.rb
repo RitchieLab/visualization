@@ -532,22 +532,26 @@ class ChromosomeList
       maxpos = chrom.snp_list.get_max
       deletions = Array.new
       chrom.genes.each do |gene|
-        if gene.start < minpos or gene.end > maxpos
-          deletions << gene
-        end
+				if gene.end <= minpos or gene.start >= maxpos
+					deletions << gene
+				elsif gene.start < minpos
+					gene.start = minpos
+				elsif gene.end > maxpos
+					gene.end = maxpos
+				end
+				
       end
 
       deletions.each do |d_gene|
         chrom.genes.delete(d_gene)
       end
-    end
+		end
 
     # for each chromosome need to calculate how many rows needed
     # and return max across all chromosomes
     @chromhash.each_value do |chrom|
       minpos = chrom.snp_list.get_min
       maxpos = chrom.snp_list.get_max
-
       num_snps = chrom.snp_list.get_num_included_snps
       snp_size = (maxpos-minpos)/num_snps
 
@@ -563,7 +567,7 @@ class ChromosomeList
       # mark ones that are used here
       used_gene = Hash.new
       num_rows = 1
-
+			
       while used_gene.length != num_genes
         total_indexes.times do |i|
           # when a gene is placed mark it as done
@@ -574,7 +578,7 @@ class ChromosomeList
           # locate ending point (in terms of snps for this gene)
           end_snp = (chrom.genes[i].end.to_f - minpos)/snp_size
           start_snp = (chrom.genes[i].start.to_f - minpos) /snp_size
-
+					
           # line_start and line_end mark location of actual bar on plot
           chrom.genes[i].line_start = start_snp / num_snps
           chrom.genes[i].line_end = end_snp / num_snps
@@ -584,12 +588,13 @@ class ChromosomeList
 
           gene_space = original_gene_space
           # increase gene space for long gene names
+					# when gene isn't covering a long stretch of genome
           if chrom.genes[i].name.length >=7
             # gene_space += (chrom.genes[i].name.length-6) * 0.15
             gene_space = 2
           end
 
-
+			
           # pad for label around actual location when needed
           if snp_length < gene_space
             start_snp = start_snp - gene_space/2 + snp_length/2
@@ -606,17 +611,15 @@ class ChromosomeList
 
           if end_snp > num_snps
             start_snp = start_snp - (end_snp - num_snps)
+						start_snp = 0 if start_snp < 0
             end_snp = num_snps
-            chrom.genes[i].alignment = 'end'
-
+            chrom.genes[i].alignment = 'end' unless start_snp==0
             chrom.genes[i].text_anchor = 1.0
           end
 
           chrom.genes[i].row = num_rows
           # overlap here so need to skip and check again in next row
-          if start_snp < last_snp
-            next
-          end
+					next if start_snp < last_snp
 
           # this gene will fit in row
           used_gene[i] = 1
@@ -627,9 +630,7 @@ class ChromosomeList
         num_rows = num_rows + 1
         last_snp = 0
       end # end while loop
-      if num_rows > max_rows
-        max_rows = num_rows
-      end
+      max_rows = num_rows if num_rows > max_rows
     end #end chromosome
     return max_rows-1
 
@@ -766,8 +767,13 @@ class SNP
 	  @results[groupname].values['cafcontrols'] = cafcon
 	  @results[groupname].values['study'] = studynum
     @results[groupname].values['power'] = pownum
-    @results[groupname].values['betauci'] = betauci
-    @results[groupname].values['betalci'] = betalci
+		if betauci.to_f > betalci.to_f
+			@results[groupname].values['betauci'] = betauci
+			@results[groupname].values['betalci'] = betalci
+		else
+			@results[groupname].values['betauci'] = betalci
+			@results[groupname].values['betalci'] = betauci
+		end
     add_columns.each_pair{|key,value| @results[groupname].values[key]=value}
 	end
 
@@ -1593,17 +1599,17 @@ class PlotWriter
 
     start_plot_x = @box_size
     end_plot_x = x_end - x_start -@box_size * 0.7
-    start_plot_y = 0
-    end_plot_y = y_end - y_start - @box_size * 0.5
+#   start_plot_y = 0
+#   end_plot_y = y_end - y_start - @box_size * 0.5
 
     # needs a box all the way around to denote area
-    @canvas.g.translate(x_start, y_start) do |plot|
-      plot.styles(:stroke_width=>1, :stroke=>'black')
-      plot.line(start_plot_x, start_plot_y, end_plot_x, start_plot_y)
-      plot.line(start_plot_x, end_plot_y, end_plot_x, end_plot_y)
-      plot.line(start_plot_x, start_plot_y, start_plot_x, end_plot_y)
-      plot.line(end_plot_x, start_plot_y, end_plot_x, end_plot_y)
-    end
+#    @canvas.g.translate(x_start, y_start) do |plot|
+#      plot.styles(:stroke_width=>1, :stroke=>'black')
+#      plot.line(start_plot_x, start_plot_y, end_plot_x, start_plot_y)
+#      plot.line(start_plot_x, end_plot_y, end_plot_x, end_plot_y)
+#      plot.line(start_plot_x, start_plot_y, start_plot_x, end_plot_y)
+#      plot.line(end_plot_x, start_plot_y, end_plot_x, end_plot_y)
+#    end
 
     # make row be the size of one box
     row_size = @box_size
@@ -1626,7 +1632,8 @@ class PlotWriter
       end
 
       # add label above
-      text_anchor_x = start_plot_x + gene.text_anchor * x_total_width
+      #text_anchor_x = start_plot_x + gene.text_anchor * x_total_width
+			text_anchor_x = x_line_start + (x_line_end-x_line_start)/2  #if gene.alignment == 'middle'
       font_size = standard_font_size * 0.68
       @canvas.g.translate(x_start, y_start).text(text_anchor_x, y_line-@box_size/4) do |text|
         text.tspan(gene.name).styles(:font_size=>font_size, :text_anchor=>gene.alignment)
@@ -4103,7 +4110,7 @@ end
     begin
       File.open(genefile, "r") do |file|
         file.each_line do |oline|
-          oline.each("\r") do |line|
+          oline.each_line("\r") do |line|
           next if line =~ /^\n$/
           # skip header line
           if first_line
@@ -4360,6 +4367,7 @@ if gene_rows > 0
   else
     offset = 0
   end
+	offset += box_size/4 * 2 * 0.01667 
 
   multiplier = 1
   if gene_rows == 1
