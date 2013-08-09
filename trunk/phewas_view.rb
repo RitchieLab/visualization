@@ -957,7 +957,7 @@ class ResultFileReader < FileReader
         # standard line of input - add result to ResultHolder
         data = strip_and_split(line)
         if !@snpcol
-          print "\nNo SNPID column header in file #{filename}\n\n"
+          print "\nNo SNP column header in file #{filename}\n\n"
           exit
         elsif !@phenocol
           print "\nNo Phenotype column header in file #{filename}\n\n"
