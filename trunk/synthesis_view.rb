@@ -4312,9 +4312,13 @@ if grouplisthash.length > 0
     end
 
   end
-  max_label_length += 10
-  xleftside_addition = (0.001 * box_size * max_label_length) + 0.012 * box_size
-  xleftside_addition += (writer.font_size_multiple-1.0) * 0.5 *  xleftside_addition
+	standard_label_length=15
+  adjust_label_length = max_label_length - standard_label_length
+#  xleftside_addition = (0.00122 * box_size * max_label_length) + 0.012 * box_size
+#  xleftside_addition += (writer.font_size_multiple-1.0) * 0.98 *  xleftside_addition
+	xleftside_addition = 0.034 * box_size
+  xleftside_addition += (0.00152 * box_size * adjust_label_length)# + 0.012 * box_size
+  xleftside_addition += (writer.font_size_multiple-1.0) * 0.98 *  xleftside_addition	
   x_start = writer.calculate_coordinate(xside_end_addition)
   xside_end_addition = xside_end_addition + xleftside_addition
   if !options.rotate
