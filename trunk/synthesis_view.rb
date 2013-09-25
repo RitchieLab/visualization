@@ -1097,8 +1097,10 @@ end
 #
 #############################################################################
 class GroupList
-  @@color_array = ['rgb(55,126,184)', 'rgb(228,26,28)', 'rgb(255,127,0)', 'rgb(152,78,163)', 'rgb(77,175,74)', #'rgb(255,255,51)',
-    'rgb(166,86,40)', 'rgb(247,129,191)', 'yellow']
+  @@color_array = [ 'blue', 'red',  'green', 'orange','medium purple', 'lightslategray', 'lightskyblue','saddlebrown', 'gold','hotpink', 'chartreuse', 'silver', 'black', 'darkgoldenrod', 'tan']
+#	@@color_array = [ 'blue', 'red',  'green', 'orange','medium purple', 'rgb(180,180,180)', 'lightskyblue','gold', 'brown',
+#			 'hotpink', 'chartreuse', 'gray', 'black', 'darkgoldenrod',
+#			'tan']
   @@color_index = 0
   @@defaultname = ''
   attr_accessor :groups, :grouphash, :mafcoltitle
@@ -3715,11 +3717,11 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
       column_type = header
       if column_type =~ /pval|p_value/i
         groupkeys.each {|key| groups[key].pcol = i}
-      elsif column_type =~ /beta_uci|betauci/
+      elsif column_type =~ /beta_uci|betauci/i
         groupkeys.each {|key| groups[key].betaucicol = i}
-      elsif column_type =~ /beta_lci|betalci/
+      elsif column_type =~ /beta_lci|betalci/i
         groupkeys.each {|key| groups[key].betalcicol = i}
-      elsif column_type =~ /beta/i or column_type =~ /^es$/
+      elsif column_type =~ /beta/i or column_type =~ /^es$/i
         groupkeys.each {|key| groups[key].betacol = i}
       elsif column_type =~ /^n$|^sample_size$/i
         groupkeys.each {|key| groups[key].Ncol = i}
@@ -3859,11 +3861,11 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
       
       if column_type =~ /pval|p_value/i
         currgroup.pcol = i
-      elsif column_type =~ /beta_uci|betauci/
+      elsif column_type =~ /beta_uci|betauci/i
         currgroup.betaucicol = i
-      elsif column_type =~ /beta_lci|betalci/
+      elsif column_type =~ /beta_lci|betalci/i
         currgroup.betalcicol = i
-      elsif column_type =~ /beta/i or column_type =~ /^es$/
+      elsif column_type =~ /beta/i or column_type =~ /^es$/i
         currgroup.betacol = i
       elsif column_type =~ /^n$|^sample_size$/i
         currgroup.Ncol = i
@@ -4491,7 +4493,7 @@ if grouplisthash.length == 1 and !options.rotate
   # add any additional columns to plot
   total_stat_boxes += options.additional_columns.length
 
-elsif options.rotate
+elsif options.rotate and (grouplisthash.length == 1 or options.forest_plot)
 	options.forest_plot ? total_stat_boxes = grouplisthash[GroupList.get_default_name].groups.length : total_stat_boxes=0
   if grouplisthash[GroupList.get_default_name].plot_pvals? and options.plot_pval
     total_stat_boxes +=1
@@ -4530,15 +4532,23 @@ elsif options.rotate
   total_stat_boxes += options.additional_columns.length
 
 else # multiple group lists usually for ethnicity so one plot per ethnicity
-  total_stat_boxes = grouplisthash.length
-
+	
+  total_stat_boxes = 0
   # iterate through groups and add a box for each beta that needs to be plotted
   grouplisthash.each_value do |group|
+		if options.plot_pval and group.plot_pvals?
+			total_stat_boxes += 1
+		end
     if group.plot_betas? and options.plot_beta
       total_stat_boxes += 1
     end
+		if group.plot_maf?
+			total_stat_boxes += 1
+		end
+		if group.plot_sample_sizes?
+			total_stat_boxes +=1
+		end
   end
-
 end
 
 ystart_stat_boxes = Array.new
@@ -4675,7 +4685,7 @@ chrom_x_ends = Array.new
 
 # Draw features of plot here
 rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
-  canvas.background_fill = 'rgb(253,253,253)'
+  canvas.background_fill = 'rgb(255,255,255)'
   writer.canvas = canvas
   writer.box_size = box_size
   # draw for each chromosome
@@ -4907,7 +4917,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
         :precision=>0, :rotate=>options.rotate, :size_mult=>0.5)
     end
 
-  elsif options.rotate # for rotated plots for odds ratio
+  elsif options.rotate and grouplisthash.length==1 # for rotated plots for odds ratio
     plot_labels = (chromindex == chromlist.chromarray.length-1)
     grouplist = grouplisthash[GroupList.get_default_name]
 
@@ -5088,18 +5098,22 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     end
 
   else # multiple grouplists with each one being a different ethnicity
-
+		curr_stat_box=0
+		
     pvalmin = chromlist.minscore['pvalue']
     if options.pmin
       pvalmin=options.pmin
     end
     grouplistkeys = grouplisthash.keys
     grouplistkeys.length.times do |i|
-      writer.draw_pvalue_plot(:jitter=>options.jitter, :no_triangles=>options.no_triangles, :grouplist=>grouplisthash[grouplistkeys[i]],
-        :snp_list=>current_chrom.snp_list, :x_start=>x_start, :y_start=>ystart_stat_boxes[i],
-        :stat_max=>chromlist.maxscore['pvalue'], :stat_min=>pvalmin, :original_min=>chromlist.minscore['pvalue'],
-        :first_plot=>first_chrom, :prefix_title=>grouplistkeys[i] + "\n", :rotate=>options.rotate,
-        :clean_axis=>options.clean_axes)
+			if grouplisthash[grouplistkeys[i]].plot_pvals? and options.plot_pvals
+				writer.draw_pvalue_plot(:jitter=>options.jitter, :no_triangles=>options.no_triangles, :grouplist=>grouplisthash[grouplistkeys[i]],
+					:snp_list=>current_chrom.snp_list, :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box],
+					:stat_max=>chromlist.maxscore['pvalue'], :stat_min=>pvalmin, :original_min=>chromlist.minscore['pvalue'],
+					:first_plot=>first_chrom, :prefix_title=>grouplistkeys[i] + "\n", :rotate=>options.rotate,
+					:clean_axis=>options.clean_axes)
+				curr_stat_box += 1
+			end
     end
 
     # draw beta values on plots
@@ -5117,12 +5131,41 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
           increment, minbeta, maxbeta = writer.calculate_increments_include_zero(minbeta, maxbeta)
         end
         writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
-          :x_start=>x_start, :y_start=>ystart_stat_boxes[i], :stat_max=>maxbeta,
+          :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>maxbeta,
           :stat_min=>minbeta, :data_key=>'beta', :plot_labels=>first_chrom, :title=>options.effect_name,
           :precision=>2, :rotate=>options.rotate, :prefix_title=>grouplistname + "\n", :lci_key=>'betalci', :uci_key=>'betauci') 
         curr_stat_box+=1
       end
     end
+		
+		grouplistkeys.each_with_index do |grouplistname, i|
+			grouplist = grouplisthash[grouplistname]
+		  if grouplist.plot_maf?
+				writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
+					:x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>1.0, :stat_min=>0.0,
+					:data_key=>'maf', :plot_labels=>first_chrom, :title=>grouplist.mafcoltitle, :precision=>2,
+					:prefix_title=>grouplistname + "\n", :rotate=>options.rotate)
+        
+				curr_stat_box+=1
+			end	
+		end
+			
+		grouplistkeys.each_with_index do |grouplistname, i|
+			grouplist = grouplisthash[grouplistname]
+			if grouplist.plot_sample_sizes?
+				nmin = chromlist.minscore['N'].to_f
+				nmax = chromlist.maxscore['N'].to_f
+				if options.clean_axes
+					increment, nmin, nmax = writer.calculate_increments(nmin, nmax)
+				end
+				writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
+					:x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>nmax, :stat_min=>nmin,
+					:data_key=>'N', :plot_labels=>first_chrom, :title=>'Sample Size', :precision=>0, 
+					:prefix_title=>grouplistname + "\n", :rotate=>options.rotate)
+				curr_stat_box+=1
+			end
+		end
+			
 
   end
 
@@ -5309,12 +5352,13 @@ elsif options.rotate
 
 else # multiple grouplists for ethnicity so different lines need to be drawn
   grouplistkeys = grouplisthash.keys
-  grouplistkeys.length.times do |i|
-    if options.p_thresh > 0
-      writer.draw_red_line(x_original_start, ystart_stat_boxes[i], x_line_end, chromlist.maxscore['pvalue'],
-        chromlist.minscore['pvalue'], options.p_thresh, options.rotate)
-    end
-    writer.draw_plot_boundaries(x_original_start, x_line_end, ystart_stat_boxes[i])
+	if options.p_vals
+		grouplistkeys.length.times do |i|
+			if options.p_thresh > 0 and grouplisthash[grouplistkeys[i]].plot_pvals?
+				writer.draw_red_line(x_original_start, ystart_stat_boxes[i], x_line_end, chromlist.maxscore['pvalue'],
+					chromlist.minscore['pvalue'], options.p_thresh, options.rotate)
+			end
+		end
   end
 
 
@@ -5331,10 +5375,14 @@ else # multiple grouplists for ethnicity so different lines need to be drawn
       if 0 > minbeta and 0 < maxbeta
         writer.draw_dashed(x_original_start, ystart_stat_boxes[i], x_line_end, 0, maxbeta, minbeta, options.rotate)
       end
-      writer.draw_plot_boundaries(x_original_start, x_line_end, ystart_stat_boxes[i])
     end
   end
 
+	  #draw lines across value plots
+  total_stat_boxes.times do |i|
+    writer.draw_plot_boundaries(x_original_start, x_line_end, ystart_stat_boxes[i])
+  end
+	
   if options.groupfile
     combinedgrouplist = GroupList.new
     grouplisthash.each_value do |glist|
