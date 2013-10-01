@@ -5106,7 +5106,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     end
     grouplistkeys = grouplisthash.keys
     grouplistkeys.length.times do |i|
-			if grouplisthash[grouplistkeys[i]].plot_pvals? and options.plot_pvals
+			if grouplisthash[grouplistkeys[i]].plot_pvals? and options.plot_pval
 				writer.draw_pvalue_plot(:jitter=>options.jitter, :no_triangles=>options.no_triangles, :grouplist=>grouplisthash[grouplistkeys[i]],
 					:snp_list=>current_chrom.snp_list, :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box],
 					:stat_max=>chromlist.maxscore['pvalue'], :stat_min=>pvalmin, :original_min=>chromlist.minscore['pvalue'],
