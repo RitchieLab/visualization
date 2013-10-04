@@ -2929,8 +2929,8 @@ class PlotWriter
 		grayscale = params[:grayscale] || false;
 		rotated = params[:rotate] || false;
 		last_plot = params[:last_plot] || false;
+		text_rotate = params[:text_rotate] || 0;
 		
-
     box_y_start = 0 #@box_size * Math.sqrt(2) *0.25 #@box_size/6
 
     x_text = @box_size * 0.7
@@ -2958,12 +2958,6 @@ class PlotWriter
         #x_text += @box_size + @box_size/2 - @box_size/10
         x_text = label_step(x_text)
     end
-
-    @canvas.g.translate(x_start, y_start) do |checks|
-      #checks.line(box_x_start, box_y_start , x_text, box_y_start)
-      #checks.line(box_x_start, box_y_start + @box_size * Math.sqrt(2) *0.25 , x_text, box_y_start + @box_size * Math.sqrt(2) *0.25)
-    end
-
     font_size = standard_font_size * 0.9
     if first_plot and !rotated
       namepcs = groupname.split /:/
@@ -2979,18 +2973,32 @@ class PlotWriter
         end
 			end
 			elsif last_plot and rotated
-				namepcs = groupname.split /:/
-				show_one ? x_adjust = -@box_size : x_adjust = -@box_size/4
-				@canvas.g.translate(x_start,y_start).text(x_text+@box_size/4, font_size * 0.8) do |text|
-					text.tspan(namepcs[0]).styles(:font_size=>font_size, :text_anchor=>'start')
-				end
-				if show_one
-					box_y_start=0
-					box_x_start = -@box_size
-	        @canvas.g.translate(x_start+x_text,y_start) do |check|
-						check.styles(:fill=>colorstr, :stroke=>stroke, :stroke_width=>1)
-						check.rect(@box_size * Math.sqrt(2) *0.25 * font_size_multiple, @box_size * Math.sqrt(2) *0.25 * font_size_multiple, box_x_start, box_y_start)		
+				unless rotated
+					namepcs = groupname.split /:/
+					@canvas.g.translate(x_start,y_start).text(x_text+@box_size/4, font_size * 0.8).rotate(text_rotate) do |text|
+						text.tspan(namepcs[0]).styles(:font_size=>font_size, :text_anchor=>'start')
 					end
+					if show_one
+						box_y_start=0
+						box_x_start = -@box_size
+						@canvas.g.translate(x_start+x_text,y_start) do |check|
+							check.styles(:fill=>colorstr, :stroke=>stroke, :stroke_width=>1)
+							check.rect(@box_size * Math.sqrt(2) *0.25 * font_size_multiple, @box_size * Math.sqrt(2) *0.25 * font_size_multiple, box_x_start, box_y_start)		
+						end
+					end
+				else
+					namepcs = groupname.split /:/
+					x_text=0
+#					show_one ? x_adjust = -@box_size : x_adjust = -@box_size/4
+					@canvas.g.translate(x_start,y_start).text(x_text, font_size * 0.8).rotate(text_rotate) do |text|
+						text.tspan(namepcs[0]).styles(:font_size=>font_size, :text_anchor=>'start')
+					end
+						box_y_start=0
+						box_x_start = 0
+						@canvas.g.translate(x_start+x_text,y_start) do |check|
+							check.styles(:fill=>colorstr, :stroke=>stroke, :stroke_width=>1)
+							check.rect(@box_size * Math.sqrt(2) *0.25 * font_size_multiple, @box_size * Math.sqrt(2) *0.25 * font_size_multiple, box_x_start, box_y_start)		
+						end
 				end
       end
   end
@@ -4238,14 +4246,14 @@ total_snps = chromlist.get_nsnps
 box_size = case
            when total_snps > 500 then 2
            when total_snps > 350 then 4
-           when total_snps > 275 then 6
-           when total_snps > 200 then 8
-           when total_snps > 175 then 10
-           when total_snps > 150 then 12
-           when total_snps > 125 then 14
-           when total_snps > 100 then 16
-           when total_snps > 80 then 18
-           when total_snps > 60 then 20
+           when total_snps > 300 then 6
+           when total_snps > 250 then 8
+           when total_snps > 200 then 10
+           when total_snps > 175 then 12
+           when total_snps > 150 then 14
+           when total_snps > 125 then 16
+           when total_snps > 100 then 18
+           when total_snps > 75 then 20
            when total_snps > 40 then 22
            else 24
            end
@@ -4320,7 +4328,19 @@ if grouplisthash.length > 0
 #  xleftside_addition += (writer.font_size_multiple-1.0) * 0.98 *  xleftside_addition
 	xleftside_addition = 0.034 * box_size
   xleftside_addition += (0.00152 * box_size * adjust_label_length)# + 0.012 * box_size
-  xleftside_addition += (writer.font_size_multiple-1.0) * 0.98 *  xleftside_addition	
+  xleftside_addition += (writer.font_size_multiple-1.0) * 0.98 *  xleftside_addition
+	
+# current give 6 rows for small font and 3.5 rows for large font
+# when have rotate and need key need to add some more to xleft_side
+	if options.rotate and chromlist.results_complete?(grouplisthash[grouplisthash.keys.first].groups.length)
+		groups_to_plot = grouplisthash[grouplisthash.keys.first].groups.length
+		options.largetext ? groups_fit = 3 : groups_fit = 5.5
+		if(groups_to_plot > groups_fit)
+			xside_end_addition += (groups_to_plot - groups_fit) * xside_end_addition.to_f/groups_fit
+			xleftside_addition *= 1.25
+		end
+	end
+	
   x_start = writer.calculate_coordinate(xside_end_addition)
   xside_end_addition = xside_end_addition + xleftside_addition
   if !options.rotate
@@ -4612,8 +4632,10 @@ if(options.rsquared)
   ymax = writer.calculate_coordinate(yside)
 end
 
+x_original_start = x_start
 y_group_legend = ymax
 y_group_legend_rows = Array.new
+x_group_legend_rows = Array.new
 # add if need to show which groups have data for each SNP
 if grouplisthash.length == 1 and !options.rotate
   grouplist = grouplisthash[GroupList.get_default_name]
@@ -4622,15 +4644,26 @@ if grouplisthash.length == 1 and !options.rotate
       y_group_legend_rows << ymax  # + box_size/8
       yside = yside + box_size/4 * 1 * 0.01666 + (writer.font_size_multiple-1.0)*box_size/4*1*0.01667#0.0125
       ymax = writer.calculate_coordinate(yside)
+			x_group_legend_rows << x_original_start
     end
   end
 else #when working with multiple ethnicities include legend anyway
   keys = grouplisthash.keys
   glist = grouplisthash[keys[0]]
-  glist.groups.length.times do |i|
-      y_group_legend_rows << ymax  # + box_size/8
-      yside = yside + box_size/4 * 1 * 0.01666 + (writer.font_size_multiple-1.0)*box_size/4*1*0.01667#0.0125
-      ymax = writer.calculate_coordinate(yside)
+	unless options.rotate
+		glist.groups.length.times do |i|
+			  y_group_legend_rows << ymax  # + box_size/8
+				yside = yside + box_size/4 * 1 * 0.01666 + (writer.font_size_multiple-1.0)*box_size/4*1*0.01667#0.0125
+				ymax = writer.calculate_coordinate(yside)
+				x_group_legend_rows << x_original_start
+		end
+	else
+		glist.groups.length.times do |i|
+			  y_group_legend_rows << ymax/2  # + box_size/8
+				ymax = writer.calculate_coordinate(yside)
+				options.largetext ? adjust=1 : adjust=2
+				x_group_legend_rows << x_original_start - box_size - i * box_size/adjust.to_f
+		end		
   end
 end
 
@@ -4668,7 +4701,7 @@ else
   x_start -= 14
 end
 
-x_original_start = x_start
+
 x_line_end = 0
 
 or_index = -1
@@ -5315,14 +5348,16 @@ elsif options.rotate
       writer.draw_dashed(x_original_start, ystart_stat_boxes[1], x_line_end, 0, maxbeta, minbeta, options.rotate)
     end
   end
-
+	
 	# draw group legend when needed
   if grouplisthash.length == 1 and y_group_legend_rows.length > 0
+		options.rotate ? text_rotate=90 : text_rotate=0
 		grouplist = grouplisthash[GroupList.get_default_name]
 		if chromlist.results_complete?(grouplist.groups.length)
 			grouplist.groups.each_with_index do |group, index|
-				writer.group_membership_plot(group.name, group.colorstr,  chromlist.chromhash[chromlist.chromarray.first].snp_list, x_original_start, y_group_legend_rows[index], 
-					:first_plot=>true, :show_one=>true, :grayscale=>options.grayscale, :rotate=>options.rotate, :last_plot=>true)
+				writer.group_membership_plot(group.name, group.colorstr,  chromlist.chromhash[chromlist.chromarray.first].snp_list, 
+					x_group_legend_rows[index], y_group_legend_rows[index], :first_plot=>true, :text_rotate=>text_rotate,
+					:show_one=>true, :grayscale=>options.grayscale, :rotate=>options.rotate, :last_plot=>true)
 			end
 		end
   end
