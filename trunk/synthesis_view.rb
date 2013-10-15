@@ -4244,15 +4244,15 @@ total_snps = chromlist.get_nsnps
 # box_size is basic unit of size in the plot
 # it is adjusted for total number of snps in the set
 box_size = case
-           when total_snps > 500 then 2
-           when total_snps > 350 then 4
-           when total_snps > 300 then 6
-           when total_snps > 250 then 8
-           when total_snps > 200 then 10
-           when total_snps > 175 then 12
-           when total_snps > 150 then 14
-           when total_snps > 125 then 16
-           when total_snps > 100 then 18
+#           when total_snps > 500 then 2
+#           when total_snps > 350 then 4
+#           when total_snps > 300 then 6
+#           when total_snps > 250 then 8
+#           when total_snps > 200 then 10
+#           when total_snps > 175 then 12
+#           when total_snps > 150 then 14
+#           when total_snps > 125 then 16
+#           when total_snps > 100 then 18
            when total_snps > 75 then 20
            when total_snps > 40 then 22
            else 24
