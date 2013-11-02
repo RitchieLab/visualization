@@ -8,7 +8,6 @@ SNPDefaultColor = 'black'
 DefaultEthnicity = '-'
 DefaultPhenotype = 'Unknown'
 $color_column_included = false
-#CytoBandFile = '/Users/dudeksm/Documents/lab/rails/visualization/plot/cytoBand.txt'
 CytoBandFile = '/gpfs/group1/m/mdr23/www/visualization/plot/cytoBand.txt'
 
 begin
@@ -334,7 +333,7 @@ require 'optparse'
 require 'ostruct'
 include Magick
 
-Version = '0.5.2'
+Version = '1.0.0'
 Name = 'pheno_gram.rb'
 
 # check for windows and select alternate font based on OS
@@ -364,7 +363,7 @@ class Arg
     options.out_name = 'pheno_gram'
     options.imageformat = 'png'
     options.title = "Title Here"
-    options.color = 'random'
+    options.color = 'exhaustive'
     options.pheno_spacing = 'alternative'
     options.rand_seed = 7
     options.chr_only = false
@@ -376,6 +375,7 @@ class Arg
     options.thin_lines = false
     options.big_font=false
     options.shade_inaccessible=false
+		options.cytobandfile = CytoBandFile
 		options.include_notes=false
 		options.zoomchr = nil
 		options.zoomstart = nil
@@ -403,7 +403,7 @@ class Arg
       opts.on("-O", "--outline-circle", "Plot circles with black outline") do |outline_circle|
         options.circle_outline = true
       end
-      opts.on("-c [color_range]", "Options are random (default), exhaustive, web, generator,group or list") do |color_range|
+      opts.on("-c [color_range]", "Options are random, exhaustive (default), web, generator,group or list") do |color_range|
         options.color = color_range
       end
 			opts.on("-Z [zoom_location]", "Zoom on chromosome (7) or portion of chromsome (7:10000000-25000000)") do |zoom_location|
@@ -426,7 +426,8 @@ class Arg
       opts.on("-n", "--thin-lines", "Make lines across chromosomes thinner") {|thin| options.thin_lines=true}
       opts.on("-B", "--thick-boundary", "Increase thickness of chromosome boundary") {|thick| options.thickness_mult=2}
       opts.on("-F", "--big-font", "Increase font size of labels") {|big_font| options.big_font=true}
-      opts.on("-x", "--shade-chromatin", "Add cross-hatch shading to inaccessible regions of chromosomes"){|cross_hath|options.shade_inaccessible=true}
+      opts.on("-x", "--shade-chromatin", "Add cross-hatch shading to inaccessible regions of chromosomes") {|cross_hath|options.shade_inaccessible=true}
+			opts.on("-B [cytoBand_file]", "Location of file with banding information for use with shading chromatin"){|cytoBand_file|options.cytobandfile=cytoBand_file}
       opts.on("-p [pheno_spacing]", "Options are standard or equal or proximity (default) ") do |pheno_spacing|
         options.pheno_spacing = pheno_spacing
 				options.pheno_spacing = 'alternative' if options.pheno_spacing == 'proximity'
@@ -473,6 +474,15 @@ class Arg
       print "\n"
       exit(1)
     end
+		
+		# check for cytoband file
+		if options.shade_inaccessible and !File.exist?(options.cytobandfile)
+			puts "\n#{Name} (Version: #{Version})"
+			puts "\nNo cytoBand file found for chromatin shading.\nUse -B to pass location of file."
+			puts "If needed, file can be downloaded from ftp://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/cytoBand.txt.gz
+\n\n"
+			exit(1)
+		end
     
     return options
     
@@ -2837,9 +2847,9 @@ filereader = PhenoGramFileReader.new
 begin
   filereader.parse_file(options.input, genome, phenoholder, :chr_only=>options.chr_only,
 		:zoomchr=>options.zoomchr, :zoomstart=>options.zoomstart, :zoomend=>options.zoomend)
-	if options.shade_inaccessible and File.exists?(CytoBandFile)
+	if options.shade_inaccessible and File.exists?(options.cytobandfile)
 		cytoreader = CytoBandFileReader.new
-		cytoreader.parse_file(CytoBandFile, genome)
+		cytoreader.parse_file(options.cytobandfile, genome)
 	end
 rescue => e
   puts "ERROR:"
