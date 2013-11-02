@@ -427,7 +427,7 @@ class Arg
       opts.on("-B", "--thick-boundary", "Increase thickness of chromosome boundary") {|thick| options.thickness_mult=2}
       opts.on("-F", "--big-font", "Increase font size of labels") {|big_font| options.big_font=true}
       opts.on("-x", "--shade-chromatin", "Add cross-hatch shading to inaccessible regions of chromosomes") {|cross_hath|options.shade_inaccessible=true}
-			opts.on("-B [cytoBand_file]", "Location of file with banding information for use with shading chromatin"){|cytoBand_file|options.cytobandfile=cytoBand_file}
+			opts.on("-Y [cytoBand_file]", "Location of file with banding information for use with shading chromatin"){|cytoBand_file|options.cytobandfile=cytoBand_file}
       opts.on("-p [pheno_spacing]", "Options are standard or equal or proximity (default) ") do |pheno_spacing|
         options.pheno_spacing = pheno_spacing
 				options.pheno_spacing = 'alternative' if options.pheno_spacing == 'proximity'
@@ -478,7 +478,7 @@ class Arg
 		# check for cytoband file
 		if options.shade_inaccessible and !File.exist?(options.cytobandfile)
 			puts "\n#{Name} (Version: #{Version})"
-			puts "\nNo cytoBand file found for chromatin shading.\nUse -B to pass location of file."
+			puts "\nNo cytoBand file found for chromatin shading.\nUse -Y to pass location of file."
 			puts "If needed, file can be downloaded from ftp://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/cytoBand.txt.gz
 \n\n"
 			exit(1)
