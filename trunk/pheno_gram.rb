@@ -2828,7 +2828,6 @@ def draw_plot(genome, phenoholder, options)
   print "\n\tDrawing #{outfile}..."
   STDOUT.flush
   img = rvg.draw
-puts "#{outfile}"
   img.write(outfile)
 
   print " Created #{outfile}\n\n" 
