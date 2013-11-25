@@ -8,6 +8,7 @@ SNPDefaultColor = 'black'
 DefaultEthnicity = '-'
 DefaultPhenotype = 'Unknown'
 $color_column_included = false
+#CytoBandFile = '/Users/dudeksm/Documents/lab/rails/visualization/plot/cytoBand.txt'
 CytoBandFile = '/gpfs/group1/m/mdr23/www/visualization/plot/cytoBand.txt'
 
 begin
@@ -403,7 +404,7 @@ class Arg
       opts.on("-O", "--outline-circle", "Plot circles with black outline") do |outline_circle|
         options.circle_outline = true
       end
-      opts.on("-c [color_range]", "Options are random, exhaustive (default), web, generator,group or list") do |color_range|
+      opts.on("-c [color_range]", "Options are random, exhaustive (default), grayscale, web, generator,group or list") do |color_range|
         options.color = color_range
       end
 			opts.on("-Z [zoom_location]", "Zoom on chromosome (7) or portion of chromsome (7:10000000-25000000)") do |zoom_location|
@@ -518,6 +519,8 @@ class PhenotypeHolder
 			@colormaker = ListColorMaker.new
 		elsif params[:color]=='exhaustive'
 			@colormaker = ExhaustiveSearchColorMaker.new
+		elsif params[:color]=='grayscale'
+			@colormaker = GrayScaleColorMaker.new
     else
       @colormaker = RandomColorMaker.new
     end
@@ -543,6 +546,7 @@ class PhenotypeHolder
   
 
   def set_colors
+		@colormaker.set_color_num(@phenonames.length)
     @phenonames.each_value {|pheno| pheno.color = @colormaker.gen_html(pheno.group)}
 	end
   
@@ -743,6 +747,9 @@ class ColorMaker
   def gen_html(groupname)
     return "rgb(220,220,220)"
   end
+	
+	def set_color_num(nColors)
+	end
   
   def rgb_to_hsv(r,g,b)
     # Input rgb values 1...255
@@ -851,7 +858,6 @@ class RandomColorMaker < ColorMaker
   
 end
 
-
 class ColorRange
   attr_accessor :name, :start, :maxlum
   
@@ -872,7 +878,7 @@ class ColorRange
     @start.luminance  = @start.luminance + @l_adjust
     return [color.hue, color.saturation, color.luminance]
   end
-  
+ 
 end
 
 
@@ -1023,6 +1029,35 @@ class ExhaustiveSearchColorMaker < ColorMaker
 	
 end
 
+
+class GrayScaleColorMaker < ColorMaker
+	
+	def initialize
+		@darkgray = 68
+		@lightgray= 238
+		@colors = Array.new
+		@index = 0
+	end
+	
+	def set_color_num(nColors)
+		interval = (@lightgray-@darkgray)/(nColors-1).to_f if nColors > 1
+		currcolor = @darkgray
+		@colors << "'rgb(#{currcolor},#{currcolor},#{currcolor})'"
+		for i in 0..nColors-1
+			currcolor += interval  
+		  @colors << "'rgb(#{currcolor},#{currcolor},#{currcolor})'"
+		end
+		@final_color_index = nColors-1
+	end
+	
+	def gen_html(groupname)
+		@index = 0 if @index > @final_color_index
+		colorname = @colors[@index]
+		@index += 1
+		return colorname
+  end
+	
+end
 
 class ListColorMaker < ColorMaker
 	
@@ -2232,7 +2267,6 @@ class ChromosomePlotter < Plotter
 				end
       end
     end
-
     unless params[:chr_only]
 			x = start_x
 			annotation_y = y+@@drawn_circle_size.to_f/2.25 + @@drawn_circle_size * 0.75
