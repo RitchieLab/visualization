@@ -8,8 +8,8 @@ SNPDefaultColor = 'black'
 DefaultEthnicity = '-'
 DefaultPhenotype = 'Unknown'
 $color_column_included = false
-#CytoBandFile = '/Users/dudeksm/Documents/lab/rails/visualization/plot/cytoBand.txt'
-CytoBandFile = '/gpfs/group1/m/mdr23/www/visualization/plot/cytoBand.txt'
+CytoBandFile = '/Users/dudeksm/Documents/lab/rails/visualization/plot/cytoBand.txt'
+#CytoBandFile = '/gpfs/group1/m/mdr23/www/visualization/plot/cytoBand.txt'
 
 begin
   require 'rubygems'
@@ -604,7 +604,7 @@ end
 
 class Chromosome
   attr_accessor :number, :snps, :snpnames, :centromere, :size, 
-    :display_num, :note_length, :cytobands
+    :display_num, :note_length, :cytobands, :maxphenos
   
   @@centromeres = Array.new
   @@centromeres << 0
@@ -682,6 +682,7 @@ class Chromosome
     @centromere_triangle=Array.new
 		@note_length=0
 		@cytobands = Array.new
+		@maxphenos=0
   end
   
   def add_snp(params)
@@ -694,6 +695,7 @@ class Chromosome
 			@note_length = snp.note.length if snp.note.length > @note_length
 		end
     snp.phenos << PhenoPoint.new(params[:pheno], params[:shape])
+		@maxphenos = snp.phenos.length if snp.phenos.length > @maxphenos
     snp.linecolors[params[:snpcolor]]=1
   end
   
@@ -1701,7 +1703,7 @@ class PhenoBinHolder
       # do nothing when the bin has enough space for its phenotypes
       # no need to change the bp spread    
       if pbin.actual_height <= pbin.height_needed or pbin.boxes.empty?
-        return
+        next
       end
       
       topbp = pbin.startbase
@@ -2249,7 +2251,7 @@ class ChromosomePlotter < Plotter
     end
 
 		annotation_x=annotation_y=0
-		font_size = get_font_size(params)
+		font_size = get_font_size(params) / 1.35
     phenobox.line_colors.each do |linecolor|
       canvas.g.translate(xbase,ybase) do |draw|
         if phenobox.chrom_end_y - phenobox.chrom_y <= 1.0
@@ -2269,7 +2271,7 @@ class ChromosomePlotter < Plotter
     end
     unless params[:chr_only]
 			x = start_x
-			annotation_y = y+@@drawn_circle_size.to_f/2.25 + @@drawn_circle_size * 0.75
+			annotation_y = y+@@drawn_circle_size.to_f/2.25 + @@drawn_circle_size * 0.59
       phenobox.phenocolors.each_with_index do |color, i|
         if i % @@drawn_circles_per_row == 0
           y += @@drawn_circle_size * 0.75
@@ -2773,19 +2775,28 @@ def draw_plot(genome, phenoholder, options)
 	# first chromosomes start at standard left position
 	x_chr_start = Array.new(13){ |i| 0 }
 	additional_notation_x=0
-	for i in 2..13
+	for i in 2..13	
 		if options.include_notes
-			options.big_font ? increase_mult=1.15 : increase_mult = 0.75
-			increase_mult /= 1.1 if options.chr_only
-			upper_x = x_chr_start[i-1]+ x_per_chrom + genome.chromosomes[i-1].note_length * increase_mult * circle_size 
-			lower_x = x_chr_start[i-1] + x_per_chrom + genome.chromosomes[i+12-1].note_length * increase_mult * circle_size
+			genome.chromosomes[i-1].maxphenos > genome.chromosomes[i+12-1].maxphenos ? 
+				current_maxphenos=genome.chromosomes[i-1].maxphenos : current_maxphenos=genome.chromosomes[i+12-1].maxphenos
+			# adjust for maxphenos of previous chromosome
+			# 3 characters per circle? for small text and 2 for big (font size diff is 1.5)
+			# look at num_circles_in_row and then see if maxphenos plus notes will fit
+			options.big_font ? chars_per_circle=1.2 : chars_per_circle=1.8
+			upper_circles_needed = genome.chromosomes[i-1].maxphenos + genome.chromosomes[i-1].note_length/chars_per_circle.to_f + 1
+			lower_circles_needed = genome.chromosomes[i+12-1].maxphenos + genome.chromosomes[i+12-1].note_length/chars_per_circle.to_f + 1
+			
+			upper_circles_needed > lower_circles_needed ? circles_needed = upper_circles_needed : circles_needed = lower_circles_needed
+			
+			size_needed = circles_needed * circle_size
+			x_chr_start[i] = chrom_width + x_chr_start[i-1] + size_needed 
+			# shrinks or expands overall size
+			additional_notation_x += size_needed + chrom_width - x_per_chrom  #if i < 13 or size_needed > x_per_chrom
 		else
-			upper_x=lower_x=x_chr_start[i-1]+x_per_chrom
+			x_chr_start[i] = x_chr_start[i-1]+x_per_chrom
 		end
-		upper_x > lower_x ? x_chr_start[i] = upper_x : x_chr_start[i]=lower_x	
-		additional_notation_x += x_chr_start[i] - x_per_chrom-x_chr_start[i-1]
 	end
-
+	
 	if additional_notation_x > 0 and options.include_notes
 		width_in = width_in/total_x.to_f * additional_notation_x + width_in
 		total_x += additional_notation_x
