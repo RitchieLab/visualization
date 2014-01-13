@@ -1273,19 +1273,31 @@ class Plotter
   @@circle_size=0
   @@maxchrom=0
   @@drawn_circle_size=0
+	@@circle_multiplier=1
   
   def self.set_circle(n, params)
     @@circle_size = n
 		size = params[:size]
 		if size == 'large'
 			@@drawn_circle_size =@@circle_size*2
+			@@circle_multiplier = 2.0
 		elsif size == 'small'
 			@@drawn_circle_size =@@circle_size/2
+			@@circle_multiplier = 0.5
 		else # medium (default)
 			@@drawn_circle_size = @@circle_size
+			@@circle_multiplier = 1.0
 		end
   end
   
+	def self.get_circle_multiplier
+		return @@circle_multiplier
+	end
+	
+	def self.get_drawn_size
+		return @@drawn_circle_size
+	end
+	
   def self.set_maxchrom(n)
     @@maxchrom=n
   end
@@ -2722,7 +2734,6 @@ def draw_plot(genome, phenoholder, options)
   second_row_start -= circle_size*5 if alternative_pheno_spacing == :standard
 
   second_row_box_max = max_chrom_box * Chromosome.chromsize(23)/Chromosome.chromsize(1)
-
 	phenotypes_per_row = PhenotypeLabels.phenotypes_per_row(phenoholder.maxname,
 		:big_font=>options.big_font, :zoom=>options.zoomchr)
 	
@@ -2733,7 +2744,6 @@ def draw_plot(genome, phenoholder, options)
 
   total_y = second_row_start + second_row_box_max
 	single_chrom_total_y = total_y - first_row_start
-	
   # add row showing shapes/ethnicities when needed
   eth_shapes = genome.get_eth_shapes
   if eth_shapes.length > 1 and !options.chr_only
@@ -2783,8 +2793,8 @@ def draw_plot(genome, phenoholder, options)
 			# 3 characters per circle? for small text and 2 for big (font size diff is 1.5)
 			# look at num_circles_in_row and then see if maxphenos plus notes will fit
 			options.big_font ? chars_per_circle=1.2 : chars_per_circle=1.8
-			upper_circles_needed = genome.chromosomes[i-1].maxphenos + genome.chromosomes[i-1].note_length/chars_per_circle.to_f + 1
-			lower_circles_needed = genome.chromosomes[i+12-1].maxphenos + genome.chromosomes[i+12-1].note_length/chars_per_circle.to_f + 1
+			upper_circles_needed = genome.chromosomes[i-1].maxphenos * Plotter.get_circle_multiplier + genome.chromosomes[i-1].note_length/chars_per_circle.to_f + 1
+			lower_circles_needed = genome.chromosomes[i+12-1].maxphenos * Plotter.get_circle_multiplier + genome.chromosomes[i+12-1].note_length/chars_per_circle.to_f + 1
 			
 			upper_circles_needed > lower_circles_needed ? circles_needed = upper_circles_needed : circles_needed = lower_circles_needed
 			
@@ -2877,7 +2887,6 @@ def draw_plot(genome, phenoholder, options)
 
   print " Created #{outfile}\n\n" 
 end
-
 
 options = Arg.parse(ARGV)
 
