@@ -73,7 +73,7 @@ class Arg
     options.groupfile = nil
     options.ld_file = nil
     options.genefile = nil
-    options.title = "-log10(p-value) plot"
+    options.title = " "
     options.largetext = false
     options.p_thresh = 0.0
     options.phenotitle = "Avg phenotype"
@@ -164,7 +164,7 @@ class Arg
         if title_str 
           options.title = title_str
         else
-          options.title = "-log10(p-value) plot"
+          options.title = " "
         end
       end
 
@@ -204,6 +204,9 @@ class Arg
       opts.on("-B", "--beta", "Plot effect size track") do |beta|
         options.plot_beta = true
       end
+			opts.on("-x", "--ancestry-track", "Plot ancestry track") do |ancestry|
+				options.plot_ancestry = true
+			end
       opts.on("-u [columns]", Array, "Columns to plot that are not standard") do |columns|
         options.additional_columns = columns
       end    
@@ -350,7 +353,7 @@ class Arg
     options.marshal_load(options_dump.inject({ }) { |h, (k,v)| h[k.to_sym] = v; h })
 
   return options
-
+ 
   end
 
 end
@@ -737,13 +740,18 @@ end
 #
 #############################################################################
 class SNP
-	attr_accessor :name, :location, :results, :groups
+	attr_accessor :name, :location, :results, :groups, :info
 
-	def initialize(name, location)
+	def initialize(name, location, anc=nil)
 		@name = name
 		@location = location.to_i
 		@results = Hash.new
 		@groups = Hash.new
+		# ancestry should be an array where the 0 index is fraction with 0 alleles, 
+		# 1 is the fraction with one allele, and 2 is the fraction with 2 alleles.
+		# info can contain values related to the entire SNP rather than a group
+		@info = Hash.new
+		@info['ancestry'] = anc
 	end
 
 	def group_calculated?(groupname)
@@ -879,15 +887,6 @@ class SNPList
   # the total number of snps 
   def get_max_interactions
     return @snps.length-1
-#     max_interaction = 0
-#     
-#     @ld_scores.each_key do |snpname|
-#       if @ld_scores[snpname].length > max_interaction
-#         max_interaction = @ld_scores[snpname].length
-#       end
-#     end
-#     
-#     return max_interaction
   end
 
   # returns max position
@@ -1707,7 +1706,6 @@ class PlotWriter
     
     x = @box_size
     xmin = x
-
     ymin = 0
     ymax = @box_size*9
     y_interval = ymax-ymin
@@ -1754,7 +1752,6 @@ class PlotWriter
       points = Array.new
 
       grouplist.groups.each do |group|
-
         if snp.results.has_key?(group.name)
           over_max = false
           box_mult=1
@@ -1970,6 +1967,80 @@ class PlotWriter
     end
   end
 
+	def draw_bar_plot(params)
+    snp_list = params[:snp_list]
+    x_start = params[:x_start]
+    y_start = params[:y_start]
+    stat_max = params[:stat_max]
+    stat_min = params[:stat_min]
+    data_key = params[:data_key]
+    plot_labels = params[:plot_labels]
+    title = params[:title]
+    precision = params[:precision]
+    rotate = params[:rotate] || false
+    size_mult = params[:size_mult] || 1
+    prefix_title = params[:prefix_title] || ""
+
+		bar_colors = ['green', 'gray', 'orange']
+		
+    x = @box_size
+    xmin = x
+    ymin = 0
+    ymax = @box_size*9 * size_mult
+    y_interval = ymax-ymin
+    # set stat_min to be zero
+    stat_interval = stat_max - stat_min
+
+    value_x = xmin * 0.7 + (@box_size * Math.sqrt(2)*0.25)/2
+    
+		Shape.get_grayscale ? fill_opacity = 1.0 : fill_opacity = 0.9
+		# draw bars here
+		snp_list.included_snps.each do |snp_index|
+			snp = snp_list.snps[snp_index]
+			anc_array = snp.info[data_key]
+			if anc_array.empty?
+				draw_separation(x_start, y_start, 0, ymax, value_x)
+			else
+				sum=anc_array.inject{|sum,n| sum+n.to_f}
+				anc_array.map!{|element| element =  element/sum.to_f * 100}
+#				anc_array.each{|element| puts element}
+				# determine start and end of each block - put first element at bottom and so on up to top
+				box_y_end = ymax
+				bar_width = @box_size/1.5
+				bar_x_start = value_x-@box_size.to_f/3
+				proportion=0
+				anc_array.each_with_index do |val,i|
+					proportion = val + proportion
+					box_y_start = ((stat_max-proportion.to_f) / stat_interval) * y_interval
+					@canvas.g.translate(x_start,y_start) do |bar|
+						bar.styles(:fill=>bar_colors[i], :stroke=>bar_colors[i], :stroke_width=>1, :fill_opacity=>0.9)
+						bar.rect(bar_width,  box_y_end-box_y_start, bar_x_start, box_y_start)
+					end
+					# start of next will match with end of the last one
+					box_y_end = box_y_start
+				end
+			end	
+			value_x = label_step(value_x)
+		end
+		
+    if plot_labels
+      if rotate
+        x_label_start = value_x + x_start+ @box_size * 0.4 
+      else
+        x_label_start = x_start 
+      end
+
+      if size_mult >= 1
+        write_plot_labels(x_label_start, y_start, ymax, stat_max, stat_min, y_interval, 0, prefix_title+title, false, precision, rotate)
+      else
+        write_plot_labels(x_label_start, y_start, ymax, stat_max, stat_min, y_interval, 0, prefix_title+title,
+          false, precision, rotate, 5)
+      end
+    end	
+		
+		
+	end
+	
   # draw plot where one set of numbers are presented as filled circles and
   # the second as closed circles
   def draw_circles_plot(grouplist, snp_list, x_start, y_start, stat_max, stat_min, closed_key, open_key,
@@ -2941,7 +3012,7 @@ class PlotWriter
     else
       stroke = 'white'
     end
-    
+  
     snp_list.included_snps.each do |snp_index|
       if show_one
         break
@@ -2961,7 +3032,8 @@ class PlotWriter
     font_size = standard_font_size * 0.9
     if first_plot and !rotated
       namepcs = groupname.split /:/
-      @canvas.g.translate(x_start,y_start).text(@box_size/2.8, font_size * 0.8) do |text|
+			show_one ? y_move = font_size * 0.8 : y_move = font_size * 0.5
+      @canvas.g.translate(x_start,y_start).text(@box_size/2.8, y_move) do |text|
         text.tspan(namepcs[0]).styles(:font_size=>font_size, :text_anchor=>'end')
       end
       if show_one
@@ -2988,17 +3060,23 @@ class PlotWriter
 					end
 				else
 					namepcs = groupname.split /:/
-					x_text=0
+					y_move=0
+					if show_one
+						x_text=0
+						y_move = @box_size/2 if rotated
+					end
 #					show_one ? x_adjust = -@box_size : x_adjust = -@box_size/4
-					@canvas.g.translate(x_start,y_start).text(x_text, font_size * 0.8).rotate(text_rotate) do |text|
+					@canvas.g.translate(x_start,y_start).text(x_text, y_move+font_size * 0.55).rotate(text_rotate) do |text|
 						text.tspan(namepcs[0]).styles(:font_size=>font_size, :text_anchor=>'start')
 					end
+					if show_one
 						box_y_start=0
 						box_x_start = 0
 						@canvas.g.translate(x_start+x_text,y_start) do |check|
 							check.styles(:fill=>colorstr, :stroke=>stroke, :stroke_width=>1)
 							check.rect(@box_size * Math.sqrt(2) *0.25 * font_size_multiple, @box_size * Math.sqrt(2) *0.25 * font_size_multiple, box_x_start, box_y_start)		
 						end
+					end
 				end
       end
   end
@@ -3396,6 +3474,7 @@ class SynthesisViewReader<FileReader
     @snpname = -1
     @chromnum = nil
     @location = nil
+		@anccol = Array.new
   end
 
   def self.mysql_support(tf)
@@ -3461,7 +3540,7 @@ class SynthesisViewReader<FileReader
           chrnum = "24"
         elsif chrnum =~ /x/i
           chrnum = "23"
-        end  
+        end
        
         if (chromosome = chromlist.get_chrom(chrnum.to_i)) == nil
           # create a new SNP
@@ -3476,7 +3555,13 @@ class SynthesisViewReader<FileReader
         location = location.to_i
         snp = chromosome.snp_list.get_snp(data[@snpname])       
         unless snp
-          snp = SNP.new(data[@snpname], location)
+					unless @anccol.empty?
+						anc_array = Array.new
+						anc_array << data[@anccol[0]].to_f
+						anc_array << data[@anccol[1]].to_f
+						anc_array << data[@anccol[2]].to_f
+					end
+          snp = SNP.new(data[@snpname], location, anc_array)
           chromosome.snp_list.add_snp(snp)
           snp = chromosome.snp_list.get_snp(data[@snpname])
         end
@@ -3718,6 +3803,10 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
       @chromnum = i
     elsif header =~ /location|^pos$|^bp$/i
       @location = i
+		elsif header =~ /anc\d/i
+			# should be anc0, anc1, or anc2
+			allelenum = /anc(\d)/.match(header)[1]
+			@anccol[allelenum.to_i] = i
     elsif header =~ /^subgroup$/i || header =~ /^group$/i  # skip if no _ to mark name
       next
     else
@@ -3836,6 +3925,10 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
       @chromnum = i
     elsif header =~ /location|^pos$|^bp$/i
       @location = i
+		elsif header =~ /anc\d/i
+			# should be anc0, anc1, or anc2
+			allelenum = /anc(\d)/.match(header)[1]
+			@anccol[allelenum.to_i] = i
     elsif header !~ /:/  # skip if no _ to mark name
       next
     else # information for a group
@@ -4478,37 +4571,15 @@ if grouplisthash.length == 1 and !options.rotate
     total_stat_boxes +=1
   end
 
-  if options.plot_power
-    total_stat_boxes +=1
-  end
-
-  if grouplist.plot_maf?
-    total_stat_boxes +=1
-  end
-
-  if grouplist.plot_sample_sizes?
-    total_stat_boxes +=1
-  end
-
-  if options.casecontrol
-    total_stat_boxes += 2
-  end
-
-  if options.circlecasecon
-    total_stat_boxes += 1
-  end
-
-  if options.cafcasecontrol
-    total_stat_boxes +=2
-  end
-
-  if options.circlecafcasecontrol
-    total_stat_boxes +=1
-  end
-
-  if grouplist.plot_oddsratio?
-    total_stat_boxes +=1
-  end
+	total_stat_boxes += 1 if options.plot_ancestry
+	total_stat_boxes += 1 if options.plot_power
+	total_stat_boxes += 1 if grouplist.plot_maf?
+	total_stat_boxes += 1 if grouplist.plot_sample_sizes?
+  total_stat_boxes += 2 if options.casecontrol
+	total_stat_boxes += 1 if options.circlecasecon
+	total_stat_boxes +=2 if options.cafcasecontrol
+	total_stat_boxes +=1 if options.circlecafcasecontrol
+  total_stat_boxes +=1 if grouplist.plot_oddsratio?
   
   # add any additional columns to plot
   total_stat_boxes += options.additional_columns.length
@@ -4523,31 +4594,14 @@ elsif options.rotate and (grouplisthash.length == 1 or options.forest_plot)
     total_stat_boxes +=1
   end
 
-  if options.plot_power
-    total_stat_boxes +=1
-  end
-
-  if grouplisthash[GroupList.get_default_name].plot_maf?
-    total_stat_boxes +=1
-  end
-	
-	if grouplisthash[GroupList.get_default_name].plot_sample_sizes?
-    total_stat_boxes +=1
-  end
-	
-  if options.casecontrol
-    total_stat_boxes += 2
-  end
-  if options.circlecasecon
-    total_stat_boxes += 1
-  end
-  if options.cafcasecontrol
-    total_stat_boxes +=2
-  end
-
-  if options.circlecafcasecontrol
-    total_stat_boxes +=1
-  end
+	total_stat_boxes += 1 if options.plot_ancestry
+	total_stat_boxes += 1 if options.plot_power
+	total_stat_boxes +=1 if grouplisthash[GroupList.get_default_name].plot_maf?
+	total_stat_boxes +=1 if grouplisthash[GroupList.get_default_name].plot_sample_sizes?
+	total_stat_boxes += 2 if options.casecontrol
+	total_stat_boxes += 1 if options.circlecasecon
+  total_stat_boxes +=2 if options.cafcasecontrol
+	total_stat_boxes +=1 if options.circlecafcasecontrol
   
   total_stat_boxes += options.additional_columns.length
 
@@ -4632,7 +4686,6 @@ if(options.rsquared)
   ymax = writer.calculate_coordinate(yside)
 end
 
-x_original_start = x_start
 y_group_legend = ymax
 y_group_legend_rows = Array.new
 x_group_legend_rows = Array.new
@@ -4644,7 +4697,7 @@ if grouplisthash.length == 1 and !options.rotate
       y_group_legend_rows << ymax  # + box_size/8
       yside = yside + box_size/4 * 1 * 0.01666 + (writer.font_size_multiple-1.0)*box_size/4*1*0.01667#0.0125
       ymax = writer.calculate_coordinate(yside)
-			x_group_legend_rows << x_original_start
+			x_group_legend_rows << x_start
     end
   end
 else #when working with multiple ethnicities include legend anyway
@@ -4655,14 +4708,14 @@ else #when working with multiple ethnicities include legend anyway
 			  y_group_legend_rows << ymax  # + box_size/8
 				yside = yside + box_size/4 * 1 * 0.01666 + (writer.font_size_multiple-1.0)*box_size/4*1*0.01667#0.0125
 				ymax = writer.calculate_coordinate(yside)
-				x_group_legend_rows << x_original_start
+				x_group_legend_rows << x_start
 		end
 	else
 		glist.groups.length.times do |i|
 			  y_group_legend_rows << ymax/2  # + box_size/8
 				ymax = writer.calculate_coordinate(yside)
 				options.largetext ? adjust=1 : adjust=2
-				x_group_legend_rows << x_original_start - box_size - i * box_size/adjust.to_f
+				x_group_legend_rows << x_start - box_size - i * box_size/adjust.to_f
 		end		
   end
 end
@@ -4699,8 +4752,9 @@ if !options.rotate
   xmax += 10
 else
   x_start -= 14
+	xmax += 10 unless options.largetext
 end
-
+x_original_start = x_start
 
 x_line_end = 0
 
@@ -4802,7 +4856,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
         minbeta = chromlist.minscore['betalci'].to_f
         maxbeta = chromlist.maxscore['betauci'].to_f
       end       
-        
+
       if options.clean_axes
         increment, minbeta, maxbeta = writer.calculate_increments_include_zero(minbeta, maxbeta)
       end
@@ -4813,6 +4867,14 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       curr_stat_box+=1
     end
 
+	  if options.plot_ancestry
+			writer.draw_bar_plot(:snp_list=>current_chrom.snp_list,:x_start=>x_start, 
+				:y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>100.0, 
+				:stat_min=>0.0,:plot_labels=>first_chrom, :title=>"Proportion Alleles (%)", :precision=>0,
+				:rotate=>options.rotate, :data_key=>'ancestry')
+			curr_stat_box+=1
+		end
+			
     # plot the odds ratio results
     if grouplist.plot_oddsratio?
 
@@ -5019,6 +5081,14 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
 			end
 		end
 
+	  if options.plot_ancestry
+			writer.draw_bar_plot(:snp_list=>current_chrom.snp_list,:x_start=>x_start, 
+				:y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>100.0, 
+				:stat_min=>0.0,:plot_labels=>plot_labels, :title=>"Proportion Alleles (%)", :precision=>0,
+				:rotate=>options.rotate, :data_key=>'ancestry')
+			curr_stat_box+=1
+		end
+			
     if grouplist.plot_maf?
       writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
         :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>1.0,

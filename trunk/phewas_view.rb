@@ -40,7 +40,7 @@ include Magick
 
 RVG::dpi=600
 
-Version = '0.20'
+Version = '0.30'
 
 # check for windows and select alternate font based on OS
 Font_family_style = RUBY_PLATFORM =~ /mswin/ ? "Verdana" : "Times"
@@ -78,8 +78,9 @@ class Arg
     options.genefile = nil
     options.phenotype_listfile = nil
     options.phenotype_correlations_file = nil
-    options.title = "PheWAS"
+    options.title = " "
     options.largetext = false
+		options.boldfont = false
     options.p_thresh = 0.0
     options.phenofile = nil
     options.ethlist = Array["AA","EA","MA", "H", "AP", "NA"]
@@ -100,6 +101,7 @@ class Arg
     options.redline = nil
     options.classname = nil
     options.showbest = false
+		options.display_pval = false
     options.include_all_eths = true
     options.label_cols = Array['phenotype', 'phenotype_long', 'substudy']
     help_selected = false
@@ -183,9 +185,11 @@ class Arg
       opts.on("-g [gene_name]", "Gene to display in center of sun plot from input file") do |gene_name|
         options.genename = gene_name
       end
+			opts.on("-d", "--display-pval","Display p-value on sun plot for each 'ray'"){|display_val| options.display_pval=true}
       opts.on("-F", "--large-text", "Use larger text") do |large_text|
         options.largetext = true
       end
+			opts.on("-H", "--bod-font") {|boldfont| options.boldfont = true}
       opts.on("-G", "Include gene name along with SNP when SNP is selected for sun plot") do |gene|
         options.labelgene = true
       end
@@ -193,7 +197,6 @@ class Arg
         options.include_eth = true
       end
       opts.on("-T [text_columns]",Array, "List columns for inclusion in text label") do |text_columns|
-        #options.label_cols.push(*text_columns)
         options.label_cols = text_columns
       end
       opts.on_tail("-h", "--help", "Show this usage statement") do
@@ -1519,13 +1522,13 @@ class SunResultFileReader < FileReader
         data = strip_and_split(line)
 
         if !@snpcol
-          print "\nNo SNPID column header in file #{filename}\n\n"
+          print "\nNo SNP column header in file #{filename}\n\n"
           exit
         elsif !@phenocol
           print "\nNo Phenotype column header in file #{filename}\n\n"
           exit
         elsif !@pvalcol
-          print "\nNo P_value column header in file #{filename}\n\n"
+          print "\nNo pval column header in file #{filename}\n\n"
           exit
         end
 
@@ -1582,11 +1585,11 @@ class SunResultFileReader < FileReader
     data = strip_and_split(line)
 
     data.each_with_index do |header, i|
-      if header =~ /^\s*snpID\s*$/i
+      if header =~ /^\s*snpID\s*$|^snp$/i
         @snpcol = i
       elsif header =~ /^\s*phenotype\s*$/i
         @phenocol = i
-      elsif header =~ /p_value/i
+      elsif header =~ /p_value|^pval/i
         @pvalcol = i
       elsif header =~ /Race_ethnicity|ancestry|group/i
         @ethcol = i
@@ -1629,13 +1632,16 @@ end #ResultFileReader
 #
 ############################################################################
 class RadialPlotter
-  attr_accessor :radius, :font_size_multiple, :canvas, :line_size
+  attr_accessor :radius, :font_size_multiple, :canvas, :line_size, :center_size_multiple,
+		:title_text_adj
 
   def initialize
     @radius = 2
     @font_size_multiple = 1
+		@center_size_multiple = 1
     @canvas = nil
     @line_size = 20
+		@title_text_adj = 1
   end
 
   # returns plot width in inches
@@ -1689,6 +1695,19 @@ class RadialPlotter
   end #write_main_title
 
 
+	def convert_pval(pval)
+		if pval < 0.0001
+			label = (sprintf "%.2g", pval)
+    elsif pval < 0.001
+      label = (sprintf "%.4f", pval)
+    elsif pval < 0.01
+      label = (sprintf "%.3f", pval)
+    else
+      label = (sprintf "%.2f", pval)
+     end		
+		 return label
+	end
+	
   # draw main plot results with center circle and lines radiating out from that
  # def draw_main_plot(center_name, reslist, midx, ystart, yend, p_thresh, total_radii)
   def draw_main_plot(params)
@@ -1700,6 +1719,9 @@ class RadialPlotter
     p_thresh = params[:p_thresh]
     total_radii = params[:total_radii]
     use_beta = params[:use_beta] || false
+		use_pval = params[:use_pval] || false
+		params[:bold_font] ? font_weight = 'bold' : font_weight = 'normal'
+#		font_weight = params[:bold_font] || false
     gene_name = params[:gene_name]
     largetext = params[:largetext]
     
@@ -1717,8 +1739,8 @@ class RadialPlotter
 
     half_total_radii = total_radii.to_f/2
 
-    radius_interval = @line_size * half_total_radii * 0.8 - @line_size * @radius
-    standard_interval = @line_size * @radius + @line_size * half_total_radii * 0.2
+    radius_interval = @line_size * half_total_radii * 0.85 - @line_size * @radius
+    standard_interval = @line_size * @radius + @line_size * half_total_radii * 0.15
 
     max_length = radius_interval + standard_interval
 
@@ -1750,10 +1772,10 @@ class RadialPlotter
         end
       end
 
-      @canvas.g.translate(midx, midy).rotate(rotation) do |rotated|
+      canvas.g.translate(midx, midy).rotate(rotation) do |rotated|
         length = (reslist.scores[reslist.ordered[i]].pval/maxp.to_f) * radius_interval + standard_interval
         rotated.line(0,0,0,-(length)).styles(:stroke=>stroke_color, :stroke_width=>1)
-
+				
       if rotation < 180 and rotation > 0
         txt_anchor = 'start'
       else
@@ -1761,23 +1783,25 @@ class RadialPlotter
       end
 
       y_shift = -length-line_size/5
-        
-        
+    
       if rotation >= 140 and rotation < 180
-        y_shift -= line_size * (rotation-140)/20 * (@font_size_multiple*y_correction-1.0)
+        y_shift -= line_size * (rotation-140)/20 * (@font_size_multiple*y_correction*@title_text_adj-1.0)
       elsif rotation >= 180 and rotation < 220
-        y_shift -= line_size * (220-rotation)/20 * (@font_size_multiple*y_correction-1.0)
+        y_shift -= line_size * (220-rotation)/20 * (@font_size_multiple*y_correction*@title_text_adj-1.0)
       elsif rotation == 0
-        largetext ? y_shift -= line_size * (120-rotation)/120 * (@font_size_multiple*2-1.0) : y_shift -= line_size * 0.18 * @font_size_multiple       
+#        largetext ? y_shift -= line_size * (120-rotation)/120 * (@font_size_multiple*2-1.0) : y_shift -= line_size * 0.18 * @font_size_multiple
+				largetext ? y_shift -= line_size * (120-rotation)/120 * (@font_size_multiple*2.0*@title_text_adj-1.0) : y_shift -= line_size * 0.18 * @font_size_multiple 
       elsif rotation <= 40
-         y_shift -= line_size * (40-rotation)/120 * (@font_size_multiple*2-1.0)
+#         y_shift -= line_size * (40-rotation)/120 * (@font_size_multiple*2-1.0)
+				y_shift -= line_size * (40-rotation)/120 * (@font_size_multiple*@title_text_adj-1.0)
         # adjust it based on length of line size at that position
         # make farther from original if line is shorter
       elsif rotation >= 320
-        y_shift -= line_size * (rotation-320)/20 * (@font_size_multiple*2-1.0)
+#        y_shift -= line_size * (rotation-320)/20 * (@font_size_multiple*2-1.0)
+				y_shift -= line_size * (rotation-320)/20 * (@font_size_multiple*2*@title_text_adj-1.0)
       end
 
-        label = reslist.ordered[i]
+				label = reslist.ordered[i]
         if use_beta
           if reslist.scores[reslist.ordered[i]].beta < 0
             label += " -"
@@ -1785,7 +1809,7 @@ class RadialPlotter
             label += " +"
           end
         end
-        if i==0
+        if i==0 
           pval = reslist.get_pval(reslist.scores[reslist.ordered[i]].pval)
           if pval < 0.0001
             label += "\n" + (sprintf "%.2g", reslist.get_pval(reslist.scores[reslist.ordered[i]].pval))
@@ -1795,16 +1819,23 @@ class RadialPlotter
             label += "\n" + (sprintf "%.3f", reslist.get_pval(reslist.scores[reslist.ordered[i]].pval))
           else
             label += "\n" + (sprintf "%.2f", reslist.get_pval(reslist.scores[reslist.ordered[i]].pval))
-          end
+					end
+				elsif use_pval
+					formatted_pval = convert_pval(reslist.get_pval(reslist.scores[reslist.ordered[i]].pval))
+					rotation < 180 ? label = formatted_pval + " - " + label : label = label +  " - " + formatted_pval
         end
-        rotated.text(0, y_shift).rotate(-rotation) do |text|
-          text.tspan(label).styles(:font_family=>Font_plot_family, :font_size=>standard_font_size*0.65, :text_anchor=>txt_anchor,
-            :text_decoration=>'none')
-        end
+				
+				midlabel = label.length/2
+				newlabel = label.dup
+#				newlabel.insert(midlabel,"\n")
+				
+					rotated.text(0,y_shift,newlabel).rotate(-rotation).styles(:font_weight=>font_weight,:font_size=>standard_font_size*0.65,
+						:text_anchor=>txt_anchor) #:font_family=>Font_plot_family
       end
       rotation += rotate_increment
     end
     fill_color = '#FF7F24'
+#fill_color = 'none'
     circle_size = @radius * @line_size
     # draw circle of appropriate size in center of the plot
     canvas.circle(circle_size, midx, midy).styles(:fill=>fill_color,
@@ -1845,12 +1876,12 @@ class RadialPlotter
     # add text for the center circle
     y_circle_text = midy + @line_size/5
     @canvas.text(midx, y_circle_text) do |text|
-      text.tspan(center_name).styles(:font_family=>Font_plot_family, :font_size=>standard_font_size*0.8, :text_anchor=>'middle')
+      text.tspan(center_name).styles(:font_family=>Font_plot_family, :font_size=>standard_font_size*0.8*@center_size_multiple, :text_anchor=>'middle')
     end
     if gene_name
       y_circle_text += circle_size/4.to_f
       @canvas.text(midx, y_circle_text) do |text|
-        text.tspan(gene_name).styles(:font_family=>Font_plot_family, :font_size=>standard_font_size*0.8, 
+        text.tspan(gene_name).styles(:font_family=>Font_plot_family, :font_size=>standard_font_size*0.8*@center_size_multple, 
           :text_anchor=>'middle', :font_style=>'italic')
       end
     end
@@ -2766,7 +2797,7 @@ def draw_phewas(options)
   dotter.first_color = resultholder.nonsigcolor
 
   rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
-    canvas.background_fill = 'rgb(253,253,253)'
+    canvas.background_fill = 'rgb(255,255,255)'
 
     dotter.x_offset = sidebuffer
     pval_threshold = 0
@@ -2847,7 +2878,6 @@ def draw_sun(options)
     resultholder.phenorequired = true
   else options.genename =~ /\w/
     resultholder.center_name = options.genename
-    puts "options.labelgene=#{options.labelgene}"
     resultholder.phenorequired = false
     resultholder.appendgene = options.labelgene
   end
@@ -2876,7 +2906,7 @@ def draw_sun(options)
               end
 
   plotter = RadialPlotter.new
-  plotter.line_size = radius_size
+  plotter.line_size = radius_size 
   yside_mult = 1.45
   title_height_mult = 1
 
@@ -2907,7 +2937,7 @@ def draw_sun(options)
       title_size_fit = 80
       title_adjustment = 0.017 * plotter.font_size_multiple
     end
-  elsif total_values > 30
+  elsif total_values > 40
     total_radii = 20
     plotter.radius = 4
     if options.largetext
@@ -2920,14 +2950,32 @@ def draw_sun(options)
       title_size_fit = 48
       title_adjustment = 0.019 * plotter.font_size_multiple
     end
+  elsif total_values > 30
+    total_radii = 20
+    plotter.radius = 4
+    if options.largetext
+			title_height_mult = 1.05
+      yside_mult = 1.25
+      plotter.font_size_multiple = 1.9
+			plotter.center_size_multiple = 0.9
+			plotter.title_text_adj = 0.8
+      title_size_fit = 34
+      title_adjustment = 0.016 * plotter.font_size_multiple
+    else
+      plotter.font_size_multiple = 1.05
+      title_size_fit = 48
+      title_adjustment = 0.019 * plotter.font_size_multiple
+    end
   elsif total_values > 20
     total_radii = 18
     plotter.radius = 4
     title_size_fit = 50
     if options.largetext
-      title_height_mult = 1.1
+      title_height_mult = 1.15
       yside_mult = 1.3
-      plotter.font_size_multiple = 1.5
+      plotter.font_size_multiple = 2.1
+			plotter.center_size_multiple = 0.9
+			plotter.title_text_adj = 0.75
       title_size_fit = 27
       title_adjustment = 0.017 * plotter.font_size_multiple
     else
@@ -2939,9 +2987,11 @@ def draw_sun(options)
     total_radii = 12
     plotter.radius = 2
     if options.largetext
-      title_height_mult = 1.2
+      title_height_mult = 1.25
       yside_mult = 1.35
-      plotter.font_size_multiple = 1.3
+      plotter.font_size_multiple = 2.1
+			plotter.center_size_multiple = 0.7
+			plotter.title_text_adj = 0.6
       title_size_fit = 20
       title_adjustment = 0.027 * plotter.font_size_multiple
     else
@@ -2951,29 +3001,70 @@ def draw_sun(options)
     end
     title_size_fit = 25
   else
-    total_radii = 12
-    plotter.radius = 2
-    title_size_fit = 25
+#    total_radii = 28 # 12 is previous value
+    plotter.radius = 1.5 # 2 is original
     if options.largetext
-      title_height_mult = 1.25
+			total_radii = 20
+#      title_height_mult = 1.6
       yside_mult = 1.4
-      plotter.font_size_multiple = 1.3
-      title_size_fit = 17
+			options.title =~ /\w/ ? title_height_mult = 1.6 : title_height_mult = 0.35
+      plotter.font_size_multiple = 1.8
+			plotter.center_size_multiple = 0.59 # 0.5 is original
+			plotter.title_text_adj = 0.5
+      title_size_fit = 35
       title_adjustment = 0.028 * plotter.font_size_multiple
     else
-      plotter.font_size_multiple = 0.9
-      title_size_fit = 26
+			total_radii=14
+			options.title =~ /\w/ ? title_height_mult = 0.8 : title_height_mult = 0.35
+			plotter.radius=1.5
+      plotter.font_size_multiple = 1.1
+			plotter.center_size_multiple = 0.8
+			plotter.title_text_adj = 0.8
+      title_size_fit = 35
       title_adjustment = 0.032 * plotter.font_size_multiple
     end
   end
- 
+
+title_size_fit = 28
+
+if total_values > 30
+	plotter.font_size_multiple = 2.0
+elsif total_values > 24
+	plotter.font_size_multiple = 2.0
+elsif total_values > 18
+	plotter.font_size_multiple = 2.0
+	title_size_fit = 28
+elsif total_values > 12
+	plotter.font_size_multiple = 2.0
+else
+	plotter.font_size_multiple = 2.8
+	title_size_fit = 28
+end	
+	
+plotter.radius = 2
+total_radii = 20
+#      title_height_mult = 1.6
+yside_mult = 1.4
+options.title =~ /\w/ ? title_height_mult = 1.6 : title_height_mult = 0.4
+#plotter.font_size_multiple = 1.8
+plotter.center_size_multiple = 0.59 # 0.5 is original
+plotter.title_text_adj = 0.5
+
+title_adjustment = 0.028 * plotter.font_size_multiple	
+
+	
+	
+puts "font_mult=#{plotter.font_size_multiple} total_radii=#{total_radii} title_size_fit=#{title_size_fit}"
+	
   xside_end_addition = 0
   resultholder.max_title_length += 2 if options.beta
   resultholder.max_title_length += 3 if options.include_eth
+	resultholder.max_title_length += 7 # 0.123 or 1e281
 
   # add some space on both sides outside of plot
   if resultholder.max_title_length > title_size_fit
     xside_end_addition = title_adjustment * plotter.radius * (resultholder.max_title_length - title_size_fit)
+puts "xside_end_addition=#{xside_end_addition} plotter.radius=#{plotter.radius}"
   end
 
   xside = plotter.calculate_plot_width(total_radii, xside_end_addition)
@@ -2990,7 +3081,11 @@ def draw_sun(options)
   # add vertical space for the main circle plot (which should be the same as plot width)
   yside += plotter.calculate_plot_width(total_radii, 0)/yside_mult
   ymax += plotter.calculate_coordinate(yside)
-  
+puts "xmax=#{xmax} xside=#{xside} ymax=#{ymax} yside=#{yside}"
+
+yside = 4
+xside = 8
+	
   rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     canvas.background_fill = 'rgb(255,255,255)'
     plotter.canvas = canvas
@@ -3003,7 +3098,7 @@ def draw_sun(options)
     plotter.draw_main_plot(:center_name=>resultholder.center_name, :reslist=>resultholder.results,
       :midx=>xmax/2, :ystart=>y_plot_start, :yend=>ymax, :p_thresh=>p_val_thresh, 
       :total_radii=>total_radii, :use_beta=>options.beta, :gene_name=>resultholder.gene_name,
-      :largetext=>options.largetext)
+      :largetext=>options.largetext, :use_pval=>options.display_pval, :bold_font=>options.boldfont)
   end #end RVG.new
 
   # produce output file
@@ -3018,7 +3113,6 @@ def draw_sun(options)
 #  smallimg = img.scale(0.5)
 #  smallimg.write(smallfile)
 #  print " Created #{smallfile}\n\n"
-  
   
 end
 

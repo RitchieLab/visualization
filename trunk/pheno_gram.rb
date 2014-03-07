@@ -30,306 +30,6 @@ begin
   exit(1)
 end
 
-# adapted from http://www.codeproject.com/Tips/258405/Random-Color-Generator#alternative3
-# used_colors should have key be a RGB object
-module ColorGen
-  class ColorGenerator
-    attr_accessor :accuracy
-   
-    MaximumDistanceMin = 1.0
-    MinimumDistanceMin = 0.01
-    
-    def initialize
-      @used_colors = Hash.new
-      # 200 is good hi diff but low speed
-      # 50 is good for hi speed but less difference in colors
-      @accuracy = 100
-      distance_min(0.5)
-      @bad_try_count = 0
-    end
-    
-    def add_used_color(color, ratio)
-      @used_colors[color] = ColorRatio.new(color, ratio)
-    end
-    
-    def used_color_hash_reset
-      distance_min(MaximumDistanceMin)
-    end
-    
-    def used_color_hash_remove
-      if @used_colors.length <= 2
-        distance_min(distance_min+0.1)
-      else
-        distance_min(MaximumDistanceMin)
-      end
-    end
-    
-    def remove_color
-      @used_colors.delete(color)
-      @used_color_hash_remove
-    end
-    
-    def get_distance_min
-      return @dist_min
-    end
-    
-    def distance_min(value)
-      if(value > MaximumDistanceMin)
-        @dist_min = MaximumDistanceMin
-      elsif(value < MinimumDistanceMin)
-        @dist_min = MinimumDistanceMin
-      else
-        @dist_min = value
-      end
-    end
-    
-    def get_next_color
-      while(true)
-        hue = rand * 360
-        saturation = rand
-        luminance = rand
-        
-        hsl = HSL.new(hue, saturation, luminance)
-        col = hsl.to_color
-        
-        if is_far_from_existing_color(col, get_distance_min)
-          @used_colors[col] = ColorRatio.new(col)
-          distance_min(get_distance_min+0.02)
-          @bad_try_count = 0
-          return col
-        end
-        
-        @bad_try_count+=1
-        if(@bad_try_count > @accuracy)
-          @bad_try_count = 0
-          distance_min(get_distance_min - 0.002)
-        end
-      end
-      
-    end
-    
-    def is_far_from_existing_color(c, dist_min)
-      @used_colors.each_pair do |color, ratio|
-        distance = ColorSpaceHelper.get_color_distance_cie_lab(c, color) /100
-        if (distance/ratio.keep_away_ratio < get_distance_min)
-          return false
-        end
-      end
-      return true
-    end
-    
-  end
-  
-  class HSL
-    attr_accessor :hue, :saturation, :luminance
-    
-    def initialize(hue, sat, lum)
-      @hue = hue
-      @saturation = sat
-      @luminance = lum
-    end
-    
-    def to_color
-      return ColorSpaceHelper.hsl_to_rgb(@hue, @saturation, @luminance)
-    end
-    
-  end
-  
-  
-  class CIEXYZ
-    attr_accessor :x,:y,:z
-    
-    def initialize(x,y,z)
-      @x = (x>0.9505)? 0.9505 : ((x<0)? 0 : x)
-			@y = (y>1.0)? 1.0 : ((y<0)? 0 : y)
-			@z = (z>1.089)? 1.089 : ((z<0)? 0 : z)
-    end
-    
-  end
-  
-    # white structure
-  D65 = CIEXYZ.new(0.9505, 1.0, 1.0890)
-  
-  class CIELab
-    attr_accessor :l,:a,:b
-    
-    def self.get_distance_between_cie2000(lab1, lab2)
-      p25 = 25**7
-      
-      c1 = Math.sqrt(lab1.a * lab1.a + lab1.b * lab1.b)
-      c2 = Math.sqrt(lab2.a * lab2.a + lab2.b * lab2.b)
-      avgc = (c1+c2)/2.0
-      
-      powavgc = avgc ** 7
-      g = (1-Math.sqrt(powavgc/(powavgc+p25)))/2.0
-      
-      a_1 = lab1.a * (1+g)
-      a_2 = lab2.a * (1+g)
-      
-      c_1 = Math.sqrt(a_1 * a_1 + lab1.b * lab1.b)
-      c_2 = Math.sqrt(a_2 * a_2 + lab2.b * lab2.b)
-      
-      avgc_ = (c_1+c_2.to_f)/2.0
-      
-      h1 = (Math.atan2(lab1.b, a_1) >= 0 ? Math.atan2(lab1.b, a_1) : Math.atan2(lab1.b, a_1) + 360.0)
-      h2 = (Math.atan2(lab2.b, a_1) >= 0 ? Math.atan2(lab2.b, a_1) : Math.atan2(lab2.b, a_1) + 360.0)
-      
-      h = (h1 - h2 > 180.0 ? (h1 + h2 + 360.0) / 2.0 : (h1 + h2) / 2.0)
-      
-      t = 1
-      t -= 0.17 * Math.cos(h - 30)
-      t += 0.24 * Math.cos(2 * h)
-      t += 0.32 * Math.cos(3 * h + 6)
-      t -= 0.20 * Math.cos(4 * h - 63)    
-      
-      deltah = 0
-      if (h2 - h1 <= 180)
-        deltah = h2 - h1
-      elsif (h2 <= h1)
-        deltah = h2 - h1 + 360.0
-      else
-        deltah = h2 - h1 - 360.0    
-      end
-      
-      avgl = (lab1.l + lab2.l) / 2.0
-      deltal_ = lab2.l-lab1.l
-      deltac_ = c_2-c_1
-      deltah_ = 2 * Math.sqrt(c_1*c_2)*Math.sin(deltah/2.0)
-      
-      
-      sl = 1 + (0.015 * ((avgl - 50) ** 2)) / Math.sqrt(20 + ((avgl - 50) ** 2))
-      sc = 1 + 0.045 * avgc_
-      sh = 1 + 0.015 * avgc_ * t
-      
-      exp = ((h - 275) / 25) ** 2;
-      teta = 30 ** -exp
-      
-      rc = 2.0 * Math.sqrt((avgc_** 7) / ((avgc_ ** 7) + p25))
-      rt = -rc * Math.sin(2*teta)
-      
-      deltae = 0
-      deltae = (deltal_ / sl) ** 2.0
-      deltae += (deltac_ / sc) ** 2.0
-      deltae += (deltah_ / sh) ** 2.0
-      deltae += rt * (deltac_ / sc) * (deltah_ / sh)
-      deltae = Math.sqrt(deltae)
-      return deltae
-    end
-    
-  end
-  
-  
-  class RGB
-    
-    attr_accessor :red, :green, :blue
-    
-    def initialize(r,g,b)
-      @red = r
-      @green = g
-      @blue = b
-    end
-    
-    def to_s
-      return "rgb(#{@red},#{@green},#{@blue})"
-    end
-    
-  end
-  
-  class ColorSpaceHelper
-    
-    def self.hsl_to_rgb(h,s,l)
-      
-      if(s==0)
-        val = (l * 255).to_i
-        return RGB.new(val,val,val)
-      else
-        
-        q = (l<0.5)?(l * (1.0+s)):(l+s - (l*s))
-        p = (2.0 * l) - q
-        
-        hk = h.to_f/360.0
-        t = Array.new
-        t[0] = hk + (1.0/3.0)
-        t[1] = hk
-        t[2] = hk - (1.0/3.0)
-        
-        3.times do |i|
-					 t[i] += 1.0 if(t[i] < 0)
-					 t[i] -= 1.0 if(t[i] > 1)
-
-					if((t[i]*6) < 1)
-						t[i] = p + ((q-p)*6.0*t[i])
-					elsif((t[i]*2.0) < 1) #//(1.0/6.0)<=t[i] && t[i]<0.5
-						t[i] = q;
-					elsif((t[i]*3.0) < 2) #// 0.5<=T[i] && T[i]<(2.0/3.0)
-						t[i] = p + (q-p) * ((2.0/3.0) - t[i]) * 6.0
-					else 
-            t[i] = p
-          end
-        end
-      end
-
-      return RGB.new((t[0].to_f*255).to_i,(t[1].to_f*255).to_i,(t[2].to_f*255).to_i)      
-    end
-    
-    def self.get_color_distance_cie_lab(c1,c2)
-      return CIELab.get_distance_between_cie2000(rgbtolab(c1), rgbtolab(c2))
-    end
-    
-    def self.rgbtolab(col)
-      return xyztolab(rgbtoxyz(col.red, col.green, col.blue))
-    end
-    
-    def self.rgbtoxyz(red,green,blue)
-      rLinear = red.to_f/255
-      gLinear = green.to_f/255
-      bLinear = blue.to_f/255
-      
-      r = (rLinear > 0.4045)?((rLinear+0.055)/(1+0.055))**2.4 : rLinear/12.92
-      g = (gLinear > 0.4045)?((gLinear+0.055)/(1+0.055))**2.4 : gLinear/12.92
-      b = (bLinear > 0.4045)?((bLinear+0.055)/(1+0.055))**2.4 : bLinear/12.92
-      
-      return CIEXYZ.new((r * 0.4124564 + g * 0.3575761 + b * 0.1804375),
-                (r * 0.2126729 + g * 0.7151522 + b * 0.0721750),
-                (r * 0.0193339 + g * 0.1191920 + b * 0.9503041))
-    end
-
-    #def self.xyztolab(x,y,z)
-    def self.xyztolab(xyz)
-      x= xyz.x
-      y= xyz.y
-      z= xyz.z
-      
-      lab = CIELab.new
-      
-      # uses D65 (white)
-      lab.l = 116.0 * fxyz( y/D65.y ) -16;
-      lab.a = 500.0 * (fxyz( x/D65.x ) - fxyz( y/D65.y) );
-      lab.b = 200.0 * (fxyz( y/D65.y ) - fxyz( z/D65.z) );
-      return lab      
-      
-    end
-    
-    def self.fxyz(t)
-      return ((t > 0.008856)? t**(1.0/3.0) : (7.787*t + 16.0/116.0))
-    end
-    
-    
-  end
-  
-  class ColorRatio
-    attr_accessor :color, :keep_away_ratio
-    
-    def initialize(color, keepAwayRatio=1.0)
-      @color = color
-      @keep_away_ratio = keepAwayRatio
-    end
-    
-  end
-  
-end
-
-
 require 'optparse'
 require 'ostruct'
 include Magick
@@ -509,20 +209,12 @@ class PhenotypeHolder
   
   def initialize(params)
     @pheno_number = 1
-    if params[:color]=='web'
-      @colormaker = WebColorMaker.new
-    elsif params[:color]=='generator'
-      @colormaker = ColorGenColorMaker.new
-    elsif params[:color]=='group'
+    if params[:color]=='group'
       @colormaker = GroupColorMaker.new
-		elsif params[:color]=='list'
-			@colormaker = ListColorMaker.new
-		elsif params[:color]=='exhaustive'
+		elsif params[:color]=='exhaustive' or parms[:color] == 'optimized'
 			@colormaker = ExhaustiveSearchColorMaker.new
 		elsif params[:color]=='grayscale'
 			@colormaker = GrayScaleColorMaker.new
-    else
-      @colormaker = RandomColorMaker.new
     end
     @phenonames = Hash.new
 		@maxname = 0
@@ -682,7 +374,7 @@ class Chromosome
     @centromere_triangle=Array.new
 		@note_length=0
 		@cytobands = Array.new
-		@maxphenos=0
+		@maxphenos=0		
   end
   
   def add_snp(params)
@@ -751,113 +443,8 @@ class ColorMaker
   end
 	
 	def set_color_num(nColors)
+		@nColors = nColors
 	end
-  
-  def rgb_to_hsv(r,g,b)
-    # Input rgb values 1...255
-    # based on http://forums.devshed.com/c-programming-42/rgb-to-hsv-conversion-rountine-162526.html
-
-    r = r / 255.0
-    g = g / 255.0
-    b = b / 255.0
-    max = [r, g, b].max
-    min = [r, g, b].min
-    delta = max - min
-    v = max * 100
-
-    if (max != 0.0)
-      s = delta / max *100
-    else
-      s = 0.0
-    end
-
-    if (s == 0.0) 
-      h = 0.0
-    else
-      if (r == max)
-        h = (g - b) / delta
-      elsif (g == max)
-        h = 2 + (b - r) / delta
-      elsif (b == max)
-        h = 4 + (r - g) / delta
-      end
-
-      h *= 60.0
-
-      if (h < 0)
-        h += 360.0
-      end
-    end
-    return [h,s,v]
-  end
-  
-
-  def rgb_to_hsl(r,g,b,l_adjust=0.0)
-     r /= 255.to_f 
-     g /= 255.to_f
-     b /= 255.to_f
-     max = [r,g,b].max
-     min = [r,g,b].min
-    
-     l = (max+min)/2.to_f
-     
-     if(max==min)
-       h=s=0 # achromatic
-     else
-       d = max-min
-       s = l > 0.5 ? d / (2-max-min) : d / (max+min)
-       if max==r
-         h = (g - b) / d + (g < b ? 6 : 0)
-       elsif max==g         
-         h = (b - r) / d + 2
-       else
-         h = (r - g) / d + 4
-       end
-       h /= 6
-     end
-    
-    # l adjustment can make them brighter
-    l = l + (1-l)*l_adjust
-    
-    return [h*100.0,s*100.0,l*100.0]
-  end
-  
-  
-  # HSV values in [0..1[
-# returns [r, g, b] values from 0 to 255
-# adapted from http://martin.ankerl.com/2009/12/09/how-to-create-random-colors-programmatically/
-  def hsv_to_rgb(h, s, v)
-    h_i = (h*6).to_i
-    f = h*6 - h_i
-    p = v * (1 - s)
-    q = v * (1 - f*s)
-    t = v * (1 - (1 - f) * s)
-    r, g, b = v, t, p if h_i==0
-    r, g, b = q, v, p if h_i==1
-    r, g, b = p, v, t if h_i==2
-    r, g, b = p, q, v if h_i==3
-    r, g, b = t, p, v if h_i==4
-    r, g, b = v, p, q if h_i==5
-    color_array=[(r*256).to_i, (g*256).to_i, (b*256).to_i]
-  end
-    
-end
-
-
-class RandomColorMaker < ColorMaker
-	
-  def initialize
-    @golden_rule_conjugate = 0.618033988749895
-    @h = rand
-  end
-  
-  def gen_html(groupname) 
-    @h += @golden_rule_conjugate
-    @h %= 1
-    color_array = hsv_to_rgb(@h, 0.8, 0.95)
-    return "rgb(#{color_array[0]},#{color_array[1]},#{color_array[2]})"
-  end
-  
 end
 
 class ColorRange
@@ -883,43 +470,35 @@ class ColorRange
  
 end
 
-
-class ColorList
-  attr_accessor :name
-  
-  def initialize(n, *c)
-    @colors = c
-    @curr_color = 0
-  end
-  
-  def get_color
-    colors = @colors[@curr_color]
-    if @curr_color < @colors.length
-      @curr_color += 1
-    else
-      @curr_color = 0
+  class HSL
+    attr_accessor :hue, :saturation, :luminance
+    
+    def initialize(hue, sat, lum)
+      @hue = hue
+      @saturation = sat
+      @luminance = lum
     end
-        
-    return colors
+    
+#    def to_color
+#      return ColorSpaceHelper.hsl_to_rgb(@hue, @saturation, @luminance)
+#    end
+    
   end
-  
-end
-
 
 class GroupColorMaker < ColorMaker
   
   def initialize
     @color_ranges = Array.new 
     
-    @color_ranges << ColorRange.new('blue', ColorGen::HSL.new(67, 100, 50))
-    @color_ranges << ColorRange.new('red', ColorGen::HSL.new(0, 100, 50))
-    @color_ranges << ColorRange.new('yellow', ColorGen::HSL.new(17, 100, 50),90)
-    @color_ranges << ColorRange.new('gray', ColorGen::HSL.new(0, 0, 50),95)
-    @color_ranges << ColorRange.new('green', ColorGen::HSL.new(33.3, 100, 25))
-    @color_ranges << ColorRange.new('orange', ColorGen::HSL.new(6.7, 100, 50))
-    @color_ranges << ColorRange.new('purple', ColorGen::HSL.new(83.3, 100, 25))
-    @color_ranges << ColorRange.new('brown', ColorGen::HSL.new(7.2, 70, 22),80)
-    @color_ranges << ColorRange.new('pink-jeep', ColorGen::HSL.new(93.6, 72, 57)) 
+    @color_ranges << ColorRange.new('blue', HSL.new(67, 100, 50))
+    @color_ranges << ColorRange.new('red', HSL.new(0, 100, 50))
+    @color_ranges << ColorRange.new('yellow', HSL.new(17, 100, 50),90)
+    @color_ranges << ColorRange.new('gray', HSL.new(0, 0, 50),95)
+    @color_ranges << ColorRange.new('green', HSL.new(33.3, 100, 25))
+    @color_ranges << ColorRange.new('orange', HSL.new(6.7, 100, 50))
+    @color_ranges << ColorRange.new('purple', HSL.new(83.3, 100, 25))
+    @color_ranges << ColorRange.new('brown', HSL.new(7.2, 70, 22),80)
+    @color_ranges << ColorRange.new('pink-jeep', HSL.new(93.6, 72, 57)) 
     
     
     @curr_group=0
@@ -951,74 +530,28 @@ class GroupColorMaker < ColorMaker
   
 end
 
-
-
-class ColorGenColorMaker < ColorMaker
-  
-  def initialize
-    @generator = ColorGen::ColorGenerator.new
-    # add colors to avoid (like black and white)
-    black = ColorGen::RGB.new(0,0,0)
-    white = ColorGen::RGB.new(255,255,255)
-    @generator.add_used_color(black, 2.0)
-    @generator.add_used_color(white, 1.2)
-    
-    # add basic colors to start
-    @colors = Array.new
-    blue = ColorGen::RGB.new(0,0,255)
-    red = ColorGen::RGB.new(255,0,0)
-    green = ColorGen::RGB.new(0,255,0)
-    yellow = ColorGen::RGB.new(255,255,0)
-    orange = ColorGen::RGB.new(255,165,0)
-    purple = ColorGen::RGB.new(160,32,240)
-    pink = ColorGen::RGB.new(255,192,203)
-    brown = ColorGen::RGB.new(165,42,42)
-    gray = ColorGen::RGB.new(190,190,190)
-    black = ColorGen::RGB.new(0,0,0)
-    
-    @colors << blue
-    @colors << red
-    @colors << green
-    @colors << yellow
-    @colors << purple
-    @colors << orange
-    @colors << pink
-    @colors << brown
-    @colors << gray
-    @colors << black
-    
-    @generator.add_used_color(blue, 1.0)
-    @generator.add_used_color(red, 1.0)
-    @generator.add_used_color(green, 1.0)
-    @generator.add_used_color(yellow, 1.0)
-    @generator.add_used_color(purple, 1.0)
-    @generator.add_used_color(orange, 1.0)
-    @generator.add_used_color(pink, 1.0)
-    @generator.add_used_color(brown, 1.0)
-    @generator.add_used_color(gray, 2.0)
-    
-    @colors_used = 0
-    
-  end
-  
-  def gen_html(groupname)
-    if @colors_used < @colors.length
-      color = @colors[@colors_used]
-      @colors_used += 1
-    else
-      color = @generator.get_next_color
-    end
-    return color.to_s
-  end
-  
-end
-
 class ExhaustiveSearchColorMaker < ColorMaker
 	
 	def initialize
 		@index=0
-		@colors = ['rgb(0,0,255)','rgb(0,255,0)','rgb(255,0,0)','rgb(0,0,52)','rgb(255,0,176)','rgb(0,79,0)','rgb(255,213,0)','rgb(155,147,255)','rgb(12,255,188)','rgb(152,79,63)','rgb(0,124,144)','rgb(62,1,145)','rgb(177,198,112)','rgb(255,150,200)','rgb(254,143,57)','rgb(225,2,255)','rgb(125,0,87)','rgb(29,24,0)','rgb(225,2,82)','rgb(1,172,38)','rgb(37,242,255)','rgb(196,255,70)','rgb(139,108,0)','rgb(126,101,143)','rgb(254,184,152)','rgb(149,199,255)','rgb(8,157,118)','rgb(105,112,80)','rgb(0,98,255)','rgb(238,118,255)','rgb(165,24,0)','rgb(3,66,156)','rgb(180,255,213)','rgb(69,0,20)','rgb(255,204,105)','rgb(254,120,106)','rgb(162,255,142)','rgb(160,0,155)','rgb(180,164,167)','rgb(0,51,71)','rgb(130,172,0)','rgb(0,255,115)','rgb(2,123,192)','rgb(124,48,235)','rgb(180,99,183)','rgb(247,209,255)','rgb(82,54,0)','rgb(251,255,123)','rgb(218,65,137)','rgb(123,189,183)','rgb(0,66,43)','rgb(143,0,50)','rgb(64,8,95)','rgb(255,242,188)','rgb(94,67,69)','rgb(79,151,64)','rgb(139,83,211)','rgb(182,163,1)','rgb(176,91,121)','rgb(171,88,22)','rgb(178,153,96)','rgb(77,33,73)','rgb(94,216,0)','rgb(250,255,0)','rgb(251,92,48)','rgb(90,110,0)','rgb(13,187,224)','rgb(237,170,255)','rgb(112,211,141)','rgb(255,171,0)','rgb(109,15,0)','rgb(230,30,212)','rgb(35,221,192)','rgb(28,1,22)','rgb(255,115,211)','rgb(45,62,113)','rgb(129,169,123)','rgb(0,114,234)','rgb(255,3,59)','rgb(166,154,219)','rgb(237,141,147)','rgb(42,56,0)','rgb(105,115,124)','rgb(182,253,255)','rgb(3,216,116)','rgb(202,211,30)','rgb(106,69,143)','rgb(220,148,83)','rgb(211,79,102)','rgb(51,120,102)','rgb(254,194,202)','rgb(196,208,184)','rgb(196,144,179)','rgb(185,134,115)','rgb(255,0,130)','rgb(197,132,2)','rgb(0,0,181)','rgb(4,59,183)','rgb(199,82,255)','rgb(109,166,255)','rgb(206,255,173)','rgb(106,145,184)','rgb(67,117,63)','rgb(185,209,227)','rgb(142,100,50)','rgb(179,222,96)','rgb(133,0,181)','rgb(101,112,194)','rgb(120,39,70)','rgb(187,70,56)','rgb(155,151,54)','rgb(56,73,68)','rgb(2,92,132)','rgb(196,6,142)','rgb(113,38,147)','rgb(149,110,120)','rgb(61,24,0)','rgb(121,215,74)','rgb(97,93,30)','rgb(0,173,243)','rgb(1,72,255)','rgb(243,232,140)','rgb(0,22,122)','rgb(137,66,120)','rgb(209,120,91)','rgb(166,0,255)','rgb(193,125,239)','rgb(2,128,0)','rgb(0,160,153)','rgb(156,255,0)','rgb(255,112,0)','rgb(0,173,96)','rgb(132,152,137)','rgb(209,36,50)','rgb(77,67,40)','rgb(2,29,99)','rgb(0,36,32)','rgb(238,198,135)','rgb(240,214,75)','rgb(74,75,99)','rgb(253,220,199)','rgb(117,55,0)','rgb(210,1,8)','rgb(133,94,255)','rgb(126,138,74)','rgb(121,120,255)','rgb(255,115,158)','rgb(204,87,0)','rgb(216,72,196)','rgb(152,45,138)','rgb(121,205,169)','rgb(123,199,96)','rgb(183,217,162)','rgb(166,44,96)','rgb(207,101,162)','rgb(129,96,76)','rgb(139,224,255)','rgb(97,91,198)','rgb(180,173,208)','rgb(77,50,202)','rgb(124,255,96)','rgb(190,194,74)','rgb(106,47,46)','rgb(139,206,0)','rgb(36,34,64)','rgb(230,116,67)','rgb(199,158,63)','rgb(86,137,0)','rgb(200,175,146)','rgb(128,255,238)','rgb(5,235,55)','rgb(45,40,45)','rgb(130,255,197)','rgb(150,0,26)','rgb(181,68,209)','rgb(193,0,89)','rgb(45,27,231)','rgb(254,148,255)','rgb(255,84,100)','rgb(44,0,57)','rgb(230,255,219)','rgb(0,90,93)','rgb(252,173,68)','rgb(120,72,98)','rgb(0,130,69)','rgb(8,34,0)','rgb(134,166,179)','rgb(150,112,181)','rgb(82,102,157)','rgb(138,173,63)','rgb(169,0,221)','rgb(255,75,129)','rgb(69,31,45)','rgb(16,127,223)','rgb(162,64,78)','rgb(209,136,200)','rgb(52,198,207)','rgb(236,215,231)','rgb(111,245,157)','rgb(255,255,255)']
-
+		@exhaustiveColors = ['rgb(0,0,255)','rgb(0,255,0)','rgb(255,0,0)','rgb(0,0,52)','rgb(255,0,176)','rgb(0,79,0)','rgb(255,213,0)','rgb(155,147,255)','rgb(12,255,188)','rgb(152,79,63)','rgb(0,124,144)','rgb(62,1,145)','rgb(177,198,112)','rgb(255,150,200)','rgb(254,143,57)','rgb(225,2,255)','rgb(125,0,87)','rgb(29,24,0)','rgb(225,2,82)','rgb(1,172,38)','rgb(37,242,255)','rgb(196,255,70)','rgb(139,108,0)','rgb(126,101,143)','rgb(254,184,152)','rgb(149,199,255)','rgb(8,157,118)','rgb(105,112,80)','rgb(0,98,255)','rgb(238,118,255)','rgb(165,24,0)','rgb(3,66,156)','rgb(180,255,213)','rgb(69,0,20)','rgb(255,204,105)','rgb(254,120,106)','rgb(162,255,142)','rgb(160,0,155)','rgb(180,164,167)','rgb(0,51,71)','rgb(130,172,0)','rgb(0,255,115)','rgb(2,123,192)','rgb(124,48,235)','rgb(180,99,183)','rgb(247,209,255)','rgb(82,54,0)','rgb(251,255,123)','rgb(218,65,137)','rgb(123,189,183)','rgb(0,66,43)','rgb(143,0,50)','rgb(64,8,95)','rgb(255,242,188)','rgb(94,67,69)','rgb(79,151,64)','rgb(139,83,211)','rgb(182,163,1)','rgb(176,91,121)','rgb(171,88,22)','rgb(178,153,96)','rgb(77,33,73)','rgb(94,216,0)','rgb(250,255,0)','rgb(251,92,48)','rgb(90,110,0)','rgb(13,187,224)','rgb(237,170,255)','rgb(112,211,141)','rgb(255,171,0)','rgb(109,15,0)','rgb(230,30,212)','rgb(35,221,192)','rgb(28,1,22)','rgb(255,115,211)','rgb(45,62,113)','rgb(129,169,123)','rgb(0,114,234)','rgb(255,3,59)','rgb(166,154,219)','rgb(237,141,147)','rgb(42,56,0)','rgb(105,115,124)','rgb(182,253,255)','rgb(3,216,116)','rgb(202,211,30)','rgb(106,69,143)','rgb(220,148,83)','rgb(211,79,102)','rgb(51,120,102)','rgb(254,194,202)','rgb(196,208,184)','rgb(196,144,179)','rgb(185,134,115)','rgb(255,0,130)','rgb(197,132,2)','rgb(0,0,181)','rgb(4,59,183)','rgb(199,82,255)','rgb(109,166,255)','rgb(206,255,173)','rgb(106,145,184)','rgb(67,117,63)','rgb(185,209,227)','rgb(142,100,50)','rgb(179,222,96)','rgb(133,0,181)','rgb(101,112,194)','rgb(120,39,70)','rgb(187,70,56)','rgb(155,151,54)','rgb(56,73,68)','rgb(2,92,132)','rgb(196,6,142)','rgb(113,38,147)','rgb(149,110,120)','rgb(61,24,0)','rgb(121,215,74)','rgb(97,93,30)','rgb(0,173,243)','rgb(1,72,255)','rgb(243,232,140)','rgb(0,22,122)','rgb(137,66,120)','rgb(209,120,91)','rgb(166,0,255)','rgb(193,125,239)','rgb(2,128,0)','rgb(0,160,153)','rgb(156,255,0)','rgb(255,112,0)','rgb(0,173,96)','rgb(132,152,137)','rgb(209,36,50)','rgb(77,67,40)','rgb(2,29,99)','rgb(0,36,32)','rgb(238,198,135)','rgb(240,214,75)','rgb(74,75,99)','rgb(253,220,199)','rgb(117,55,0)','rgb(210,1,8)','rgb(133,94,255)','rgb(126,138,74)','rgb(121,120,255)','rgb(255,115,158)','rgb(204,87,0)','rgb(216,72,196)','rgb(152,45,138)','rgb(121,205,169)','rgb(123,199,96)','rgb(183,217,162)','rgb(166,44,96)','rgb(207,101,162)','rgb(129,96,76)','rgb(139,224,255)','rgb(97,91,198)','rgb(180,173,208)','rgb(77,50,202)','rgb(124,255,96)','rgb(190,194,74)','rgb(106,47,46)','rgb(139,206,0)','rgb(36,34,64)','rgb(230,116,67)','rgb(199,158,63)','rgb(86,137,0)','rgb(200,175,146)','rgb(128,255,238)','rgb(5,235,55)','rgb(45,40,45)','rgb(130,255,197)','rgb(150,0,26)','rgb(181,68,209)','rgb(193,0,89)','rgb(45,27,231)','rgb(254,148,255)','rgb(255,84,100)','rgb(44,0,57)','rgb(230,255,219)','rgb(0,90,93)','rgb(252,173,68)','rgb(120,72,98)','rgb(0,130,69)','rgb(8,34,0)','rgb(134,166,179)','rgb(150,112,181)','rgb(82,102,157)','rgb(138,173,63)','rgb(169,0,221)','rgb(255,75,129)','rgb(69,31,45)','rgb(16,127,223)','rgb(162,64,78)','rgb(209,136,200)','rgb(52,198,207)','rgb(236,215,231)','rgb(111,245,157)','rgb(255,255,255)']
+		@colors20 = ['rgb(255,246,255)','rgb(13,112,105)','rgb(31,22,50)','rgb(5,153,36)','rgb(255,255,0)','rgb(241,20,15)','rgb(37,183,255)','rgb(69,10,255)','rgb(22,250,228)','rgb(120,0,127)','rgb(32,115,255)','rgb(255,166,255)','rgb(255,22,254)','rgb(255,164,2)','rgb(74,255,15)','rgb(99,1,2)','rgb(123,110,29)','rgb(255,146,128)','rgb(255,31,137)','rgb(226,255,162)']
+		@colors21 = ['rgb(74,0,255)','rgb(32,255,255)','rgb(9,112,7)','rgb(72,107,255)','rgb(8,255,5)','rgb(234,255,6)','rgb(255,31,255)','rgb(106,76,0)','rgb(255,161,2)','rgb(48,0,91)','rgb(251,160,255)','rgb(255,146,129)','rgb(58,173,255)','rgb(0,5,21)','rgb(80,127,119)','rgb(255,3,143)','rgb(115,0,44)','rgb(249,239,150)','rgb(255,43,19)','rgb(251,240,255)','rgb(106,255,154)']
+		@colors25 = ['rgb(255,62,134)','rgb(109,78,27)','rgb(255,80,0)','rgb(37,251,255)','rgb(98,140,130)','rgb(138,192,255)','rgb(255,164,118)','rgb(150,7,21)','rgb(21,96,18)','rgb(49,13,160)','rgb(7,0,255)','rgb(255,176,214)','rgb(243,255,0)','rgb(132,37,113)','rgb(253,131,255)','rgb(5,66,121)','rgb(254,253,150)','rgb(66,127,254)','rgb(245,255,243)','rgb(255,184,13)','rgb(43,5,18)','rgb(55,255,174)','rgb(220,0,255)','rgb(112,192,41)','rgb(18,255,15)']
+		@colors = @exhaustiveColors
+		@final_color_index = @colors.length-1
+	end
+	
+	def set_color_num(nColors)
+		if nColors <= 15 or nColors > 25
+			@colors = @exhaustiveColors
+		elsif nColors <= 20
+			@colors = @colors20
+		elsif nColors == 21
+			@colors = @colors21
+		else
+			@colors = @colors25
+		end
 		@final_color_index = @colors.length-1
 	end
 	
@@ -1061,60 +594,6 @@ class GrayScaleColorMaker < ColorMaker
 	
 end
 
-class ListColorMaker < ColorMaker
-	
-	def initialize
-		@index=0
-		@colors = [ 'blue', 'red', 'medium purple', 'green', 'gray', 'lightskyblue','gold', 'brown',
-			'orange', 'hotpink', 'chartreuse', 'silver', 'black', 'darkgoldenrod',
-			'tan']
-	end
-	
-	def gen_html(groupname)
-		@index = 0 if @index > @final_color_index
-		colorname = @colors[@index]
-		@index += 1
-		return colorname
-  end
-	
-end
-
-
-class WebColorMaker < ColorMaker
-  
-  def initialize
-    @outer_loop=0
-    @inner_loop=0
-    @colors = Array.new
-    
-    @inner_loop_array  = [2,6,4,8,3,5,7,1,0]
-    
-    hex = ["00", "33", "66", "99", "CC", "FF"]
-    hex.each do |red|
-      hex.each do |green|
-        hex.each do |blue|
-          @colors << "##{red}#{green}#{blue}"
-        end
-      end
-    end
-    @colors.reverse!
-  end
-  
-  
-  def gen_html(groupname)
-    index = @outer_loop * 9 + @inner_loop_array[@inner_loop]
-    @outer_loop+=1
-    if @outer_loop == 24
-      @inner_loop+=1
-      @outer_loop=0
-    end
-    return @colors[index]
-  end
-  
-  
-end
-
-
 class FileHandler
   
   def close()
@@ -1143,7 +622,7 @@ class CytoBandFileReader < FileHandler
 	end
 	
 	def parse_file(filename, genome)
-		
+#print "["		
 		open(filename)
 	    while oline=@file.gets
       oline.each_line("\r") do |line|
@@ -2768,7 +2247,7 @@ def draw_plot(genome, phenoholder, options)
   # total y for now
   width_in = 8
 
-  padded_width = circle_size
+	padded_width = circle_size
 	x_per_chrom = chrom_width + num_circles_in_row * circle_size
   # total_y is 2 for chromsome width 6 for circles * number of chroms + space on sides
   options.zoomchr ? total_x = x_per_chrom * 4 + padded_width*2 : total_x = x_per_chrom * 12 + padded_width * 2
@@ -2794,10 +2273,17 @@ def draw_plot(genome, phenoholder, options)
 			# look at num_circles_in_row and then see if maxphenos plus notes will fit
 			options.big_font ? chars_per_circle=1.2 : chars_per_circle=1.8
 			upper_circles_needed = genome.chromosomes[i-1].maxphenos * Plotter.get_circle_multiplier + genome.chromosomes[i-1].note_length/chars_per_circle.to_f + 1
-			lower_circles_needed = genome.chromosomes[i+12-1].maxphenos * Plotter.get_circle_multiplier + genome.chromosomes[i+12-1].note_length/chars_per_circle.to_f + 1
+			lower_circles_needed = genome.chromosomes[i+12-1].maxphenos * Plotter.get_circle_multiplier + genome.chromosomes[i+11].note_length/chars_per_circle.to_f + 1
 			
 			upper_circles_needed > lower_circles_needed ? circles_needed = upper_circles_needed : circles_needed = lower_circles_needed
-			
+			if genome.chromosomes[i-1].note_length == genome.chromosomes[i+11].note_length  and genome.chromosomes[i-1].note_length == 0
+				if circles_needed < num_circles_in_row
+					circles_needed = 4 * Plotter.get_circle_multiplier
+				else
+					circles_needed += 0.5 * Plotter.get_circle_multiplier
+				end
+			end				
+#			circles_needed += 0.5 if genome.chromosomes[i-1].note_length == genome.chromosomes[i+11].note_length  and genome.chromosomes[i-1].note_length == 0
 			size_needed = circles_needed * circle_size
 			x_chr_start[i] = chrom_width + x_chr_start[i-1] + size_needed 
 			# shrinks or expands overall size
