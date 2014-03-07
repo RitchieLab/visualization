@@ -740,7 +740,7 @@ end
 #
 #############################################################################
 class SNP
-	attr_accessor :name, :location, :results, :groups, :info
+	attr_accessor :name, :location, :results, :groups, :info, :text_color
 
 	def initialize(name, location, anc=nil)
 		@name = name
@@ -752,6 +752,7 @@ class SNP
 		# info can contain values related to the entire SNP rather than a group
 		@info = Hash.new
 		@info['ancestry'] = anc
+		@text_color = 'black'
 	end
 
 	def group_calculated?(groupname)
@@ -2643,7 +2644,8 @@ class PlotWriter
     snp_list.included_snps.each do |snp_index|
       snp = snp_list.snps[snp_index]
       @canvas.g.translate(x_start,y_start).text(x_text-box_adjust, y_text).rotate(rotate_angle) do |text|
-          text.tspan(snp.name).styles(:font_size=>font_size, :text_anchor=>txt_anchor)
+          text.tspan(snp.name).styles(:font_size=>font_size, :text_anchor=>txt_anchor,
+					:fill=>snp.text_color)
       end
       end_x = x_text
 
@@ -3473,6 +3475,7 @@ class SynthesisViewReader<FileReader
     @snpname = -1
     @chromnum = nil
     @location = nil
+		@snpcolorcol = nil
 		@anccol = Array.new
   end
 
@@ -3564,6 +3567,7 @@ class SynthesisViewReader<FileReader
           chromosome.snp_list.add_snp(snp)
           snp = chromosome.snp_list.get_snp(data[@snpname])
         end
+				snp.text_color = data[@snpcolorcol] if @snpcolorcol and data[@snpcolorcol] =~ /\w/
         # add results to SNP
         if !subgroup_column and !group_column
           glisthash.each_value do |glist|
@@ -3802,6 +3806,8 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
       @chromnum = i
     elsif header =~ /location|^pos$|^bp$/i
       @location = i
+		elsif header =~ /^snp_color/i
+			@snpcolorcol = i
 		elsif header =~ /anc\d/i
 			# should be anc0, anc1, or anc2
 			allelenum = /anc(\d)/.match(header)[1]
@@ -3924,6 +3930,8 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
       @chromnum = i
     elsif header =~ /location|^pos$|^bp$/i
       @location = i
+		elsif header =~ /^snp_color/i
+			@snpcolorcol = i
 		elsif header =~ /anc\d/i
 			# should be anc0, anc1, or anc2
 			allelenum = /anc(\d)/.match(header)[1]
