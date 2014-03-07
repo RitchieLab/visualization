@@ -2003,7 +2003,6 @@ class PlotWriter
 			else
 				sum=anc_array.inject{|sum,n| sum+n.to_f}
 				anc_array.map!{|element| element =  element/sum.to_f * 100}
-#				anc_array.each{|element| puts element}
 				# determine start and end of each block - put first element at bottom and so on up to top
 				box_y_end = ymax
 				bar_width = @box_size/1.5
@@ -5418,17 +5417,28 @@ elsif options.rotate
       writer.draw_dashed(x_original_start, ystart_stat_boxes[1], x_line_end, 0, maxbeta, minbeta, options.rotate)
     end
   end
-	
+
 	# draw group legend when needed
-  if grouplisthash.length == 1 and y_group_legend_rows.length > 0
+	if y_group_legend_rows.length > 0
 		options.rotate ? text_rotate=90 : text_rotate=0
-		grouplist = grouplisthash[GroupList.get_default_name]
-		if chromlist.results_complete?(grouplist.groups.length)
-			grouplist.groups.each_with_index do |group, index|
-				writer.group_membership_plot(group.name, group.colorstr,  chromlist.chromhash[chromlist.chromarray.first].snp_list, 
-					x_group_legend_rows[index], y_group_legend_rows[index], :first_plot=>true, :text_rotate=>text_rotate,
-					:show_one=>true, :grayscale=>options.grayscale, :rotate=>options.rotate, :last_plot=>true)
+		if grouplisthash.length == 1 
+			grouplist = grouplisthash[GroupList.get_default_name]
+			if chromlist.results_complete?(grouplist.groups.length)
+				grouplist.groups.each_with_index do |group, index|
+					writer.group_membership_plot(group.name, group.colorstr,  chromlist.chromhash[chromlist.chromarray.first].snp_list, 
+						x_group_legend_rows[index], y_group_legend_rows[index], :first_plot=>true, :text_rotate=>text_rotate,
+						:show_one=>true, :grayscale=>options.grayscale, :rotate=>options.rotate, :last_plot=>true)
+				end
 			end
+		else
+			keys = grouplisthash.keys
+			glist = grouplisthash[keys[0]]
+			glist.groups.each_with_index do |group, index|
+				writer.group_membership_plot(group.name, group.colorstr,  chromlist.chromhash[chromlist.chromarray.first].snp_list, 
+					x_group_legend_rows[index], y_group_legend_rows[index], 
+					:first_plot=>true, :show_one=>true, :grayscale=>options.grayscale, 
+					:rotate=>options.rotate, :last_plot=>true, :text_rotate=>text_rotate)
+			end	
 		end
   end
 
@@ -5467,8 +5477,11 @@ else # multiple grouplists for ethnicity so different lines need to be drawn
   end
 
 
+	skipped_beta=0
+	options.plot_pval ? beta_offset_start = 1 : beta_offset_start = 0
   grouplistkeys.each_with_index do |grouplistname, i|
-    i = grouplistkeys.length + i
+    #i = grouplistkeys.length + i
+		i = beta_offset_start + i - skipped_beta
     grouplist = grouplisthash[grouplistname]
     # draw dotted line across beta
     if grouplist.plot_betas? and options.plot_beta
@@ -5480,6 +5493,8 @@ else # multiple grouplists for ethnicity so different lines need to be drawn
       if 0 > minbeta and 0 < maxbeta
         writer.draw_dashed(x_original_start, ystart_stat_boxes[i], x_line_end, 0, maxbeta, minbeta, options.rotate)
       end
+		else
+			skipped_beta += 1
     end
   end
 
