@@ -104,6 +104,7 @@ class Arg
     options.grayscale = false
     options.color_key_bottom = false
 		options.forest_plot = false
+		options.plot_rank =true
     options.additional_columns = Array.new
 
     return options
@@ -206,6 +207,9 @@ class Arg
       end
 			opts.on("-x", "--ancestry-track", "Plot ancestry track") do |ancestry|
 				options.plot_ancestry = true
+			end
+			opts.on("-Z", "--rank-track", "Plot rank track") do |rank|
+				options.plot_rank = true
 			end
       opts.on("-u [columns]", Array, "Columns to plot that are not standard") do |columns|
         options.additional_columns = columns
@@ -401,6 +405,8 @@ class ChromosomeList
     @minscore['betauci'] = 1000000
     @minscore['betalci'] = 1000000
     @maxscore['betalci'] = -100000
+		@minscore['rank']=0
+		@maxscore['rank']=-1
   end
 
   
@@ -760,7 +766,7 @@ class SNP
 	end
 
 	def add_result(groupname, pval, betaval, maf, sampsizeval, orval, lci, uci, ca, con, cafca, cafcon,
-	  studynum, pownum, betauci, betalci, add_columns)
+	  studynum, pownum, betauci, betalci, add_columns, rankval)
 
 		@results[groupname] =  RegressResult.new
 		@results[groupname].values['pvalue'] = pval
@@ -776,6 +782,7 @@ class SNP
 	  @results[groupname].values['cafcontrols'] = cafcon
 	  @results[groupname].values['study'] = studynum
     @results[groupname].values['power'] = pownum
+		@results[groupname].values['rank'] = rankval
 		if betauci.to_f > betalci.to_f
 			@results[groupname].values['betauci'] = betauci
 			@results[groupname].values['betalci'] = betalci
@@ -1009,7 +1016,7 @@ end
 class Group
   attr_accessor :name, :pcol, :betacol, :colorstr, :mafcafcol, :values, :Ncol, :subgroups,
     :orcol, :ucicol, :lcicol, :casescol, :controlscol, :cafcasescol, :cafcontrolscol, :studycol,
-    :fullname, :highlighted, :powercol, :betaucicol, :betalcicol, :additional_cols
+    :fullname, :highlighted, :powercol, :betaucicol, :betalcicol, :additional_cols, :rankcol
 
   #def initialize(n, pc, bc, freqcol, col, sampsizecol, oddsratio, uci, lci, cacol, concol,
   #  cafcacol, cafconcol, studycol, powcol, beta_ucicol, beta_lcicol, hilite=false)
@@ -1036,6 +1043,7 @@ class Group
     @highlighted = hilite
     @betaucicol = -1
     @betalcicol = -1
+		@rankcol = -1
     @additional_cols = Hash.new
   end
 
@@ -1195,6 +1203,17 @@ class GroupList
     end
     return plot
   end
+	
+	def plot_ranks?
+    plot = false
+    @groups.each do |g|
+      if g.rankcol > -1
+        plot = true
+        break
+      end
+    end
+    return plot		
+	end
 
   def plot_pvals?
     plot = false
@@ -3675,7 +3694,7 @@ def read_group_data(snp, group, data)
     mafval = nil
     sampsizeval = nil
     orval = lowerci = upperci = cases = controls = studynum = nil
-    powernum = cafcases = cafcontrols = betauci = betalci = nil
+    powernum = cafcases = cafcontrols = betauci = betalci = rankval = nil
     add_columns = Hash.new
     
     if group.betacol > -1
@@ -3720,11 +3739,13 @@ def read_group_data(snp, group, data)
     if group.betalcicol > -1
       betalci = data[group.betalcicol]
     end
+		rankval = data[group.rankcol] if group.rankcol > -1
 
     group.additional_cols.each_pair {|key,index| add_columns[key]=data[index] if data[index]}
     
     snp.add_result(group.name, data[group.pcol], betaval, mafval, sampsizeval, orval, lowerci, upperci,
-      cases, controls, cafcases, cafcontrols, studynum, powernum, betauci, betalci, add_columns)
+      cases, controls, cafcases, cafcontrols, studynum, powernum, betauci, betalci, add_columns,
+			rankval)
 
   end
 
@@ -3838,6 +3859,8 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
         groupkeys.each {|key| groups[key].mafcafcol = i}
       elsif column_type =~ /^or$/i
         groupkeys.each {|key| groups[key].orcol = i}
+      elsif column_type =~ /^rank$/i
+        groupkeys.each {|key| groups[key].rankcol = i}				
       elsif column_type =~ /^upper_ci|uci$/i
         groupkeys.each {|key| groups[key].ucicol = i}
       elsif column_type =~ /lower_ci|lci/i
@@ -3988,6 +4011,8 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
         end
       elsif column_type =~ /or/i
         currgroup.orcol = i
+      elsif column_type =~ /^rank$/i
+        currgroup.rankcol = i
       elsif column_type =~ /upper_ci|uci/i
         currgroup.ucicol = i
       elsif column_type =~ /lower_ci|lci/i
@@ -4587,6 +4612,7 @@ if grouplisthash.length == 1 and !options.rotate
 	total_stat_boxes +=2 if options.cafcasecontrol
 	total_stat_boxes +=1 if options.circlecafcasecontrol
   total_stat_boxes +=1 if grouplist.plot_oddsratio?
+	total_stat_boxes +=1 if options.plot_rank and grouplist.plot_ranks?
   
   # add any additional columns to plot
   total_stat_boxes += options.additional_columns.length
@@ -4609,6 +4635,7 @@ elsif options.rotate and (grouplisthash.length == 1 or options.forest_plot)
 	total_stat_boxes += 1 if options.circlecasecon
   total_stat_boxes +=2 if options.cafcasecontrol
 	total_stat_boxes +=1 if options.circlecafcasecontrol
+	total_stat_boxes +=1 if options.plot_rank and grouplist.plot_ranks?
   
   total_stat_boxes += options.additional_columns.length
 
@@ -4629,6 +4656,7 @@ else # multiple group lists usually for ethnicity so one plot per ethnicity
 		if group.plot_sample_sizes?
 			total_stat_boxes +=1
 		end
+		total_stat_boxes +=1 if options.plot_rank and group.plot_ranks?
   end
 end
 
@@ -4940,6 +4968,18 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       curr_stat_box+=1
     end
 
+		if options.plot_rank and grouplist.plot_ranks?
+			rmin = 0
+			rmax = chromlist.maxscore['rank'].to_f
+      if options.clean_axes
+        increment, nmin, nmax = writer.calculate_increments(rmin, rmax)
+      end			
+	      writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
+        :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>rmax, :stat_min=>rmin,
+        :data_key=>'rank', :plot_labels=>first_chrom, :title=>'Rank', :precision=>0)		
+			curr_stat_box +=1				
+		end	
+			
     if options.plot_power
       powmin = 0
       powmax = 100
@@ -5170,8 +5210,20 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
         :data_key=>'N', :plot_labels=>plot_labels, :title=>'Sample Size', 
 				:precision=>0, :rotate=>options.rotate)
       curr_stat_box+=1
-    end			
-			
+    end
+		
+		if options.plot_rank and grouplist.plot_ranks?
+			rmin = 0
+			rmax = chromlist.maxscore['rank'].to_f
+      if options.clean_axes
+        increment, nmin, nmax = writer.calculate_increments(rmin, rmax)
+      end	
+	      writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
+        :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>rmax, :stat_min=>rmin,
+        :data_key=>'rank', :plot_labels=>plot_labels, :title=>'Rank', :precision=>0, :rotate=>options.rotate)		
+			curr_stat_box +=1	
+		end
+
     if options.circlecasecon
       if first_chrom
         writer.add_circle_plot_legend('Cases', 'Controls', options.rotate, x_start, ystart_stat_boxes[curr_stat_box])
@@ -5276,7 +5328,24 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
 			end
 		end
 			
-
+		if options.plot_rank
+			grouplistkeys.each_with_index do |grouplistname, i|
+				grouplist = grouplisthash[grouplistname]
+				if grouplist.plot_ranks?
+					rmin = chromlist.minscore['rank'].to_f
+					rmax = chromlist.maxscore['rank'].to_f
+					if options.clean_axes
+						increment, nmin, nmax = writer.calculate_increments(rmin, rmax)
+					end
+					writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
+					:x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>rmax, :stat_min=>rmin,
+					:data_key=>'rank', :plot_labels=>first_chrom, :title=>'Rank', :precision=>0, 
+					:prefix_title=>grouplistname + "\n", :rotate=>options.rotate)
+					curr_stat_box+=1
+				end
+			end
+		end
+			
   end
 
   # draw d' grid when more than one snp to draw
