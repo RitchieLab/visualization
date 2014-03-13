@@ -3508,7 +3508,6 @@ class SynthesisViewReader<FileReader
     firstline = true
    begin
       File.open(synthfile, "r") do |file|
-
       # read in all lines
       lines = Array.new
       #file.each_line("\r") do |line|
@@ -4039,7 +4038,6 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
   # add groups to the grouplist
   grouporder.each do |g|
     namepcs = g.split /:/
-
     # add to default grouplist
     if namepcs.length == 1
       if !glisthash.has_key?(defaultkey)
@@ -4746,12 +4744,15 @@ else #when working with multiple ethnicities include legend anyway
 				x_group_legend_rows << x_start
 		end
 	else
+		options.largetext ? adjust=1 : adjust=2
 		glist.groups.length.times do |i|
 			  y_group_legend_rows << ymax/2  # + box_size/8
 				ymax = writer.calculate_coordinate(yside)
-				options.largetext ? adjust=1 : adjust=2
-				x_group_legend_rows << x_start - box_size - i * box_size/adjust.to_f
-		end		
+				x_group_legend_rows << box_size + i * box_size/adjust.to_f
+		end
+		xdiff = x_group_legend_rows.last + box_size/adjust.to_f - x_start
+		xmax += xdiff
+		x_start =  x_group_legend_rows.last + box_size/adjust.to_f 
   end
 end
 
@@ -5261,7 +5262,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
 
   else # multiple grouplists with each one being a different ethnicity
 		curr_stat_box=0
-		
+
     pvalmin = chromlist.minscore['pvalue']
     if options.pmin
       pvalmin=options.pmin
@@ -5479,19 +5480,25 @@ elsif options.rotate
       chromlist.minscore['pvalue'], options.p_thresh, options.rotate)
   end
 
-  # draw dotted line across beta
-  if grouplist.plot_betas? and options.plot_beta
-    minbeta = chromlist.minscore['beta'].to_f
-    maxbeta = chromlist.maxscore['beta'].to_f
-		if grouplist.groups.first.betaucicol > -1
-      minbeta = chromlist.minscore['betalci'].to_f
-      maxbeta = chromlist.maxscore['betauci'].to_f
-    end 
-    if options.clean_axes
-       increment, minbeta, maxbeta = writer.calculate_increments_include_zero(minbeta, maxbeta)
-    end
-    if 0 > minbeta and 0 < maxbeta
-      writer.draw_dashed(x_original_start, ystart_stat_boxes[1], x_line_end, 0, maxbeta, minbeta, options.rotate)
+	skipped_beta=0
+	options.plot_pval ? beta_offset_start = 1 : beta_offset_start = 0
+	grouplistkeys = grouplisthash.keys
+  grouplistkeys.each_with_index do |grouplistname, i|
+    #i = grouplistkeys.length + i
+		i = beta_offset_start + i - skipped_beta
+    grouplist = grouplisthash[grouplistname]
+    # draw dotted line across beta
+    if grouplist.plot_betas? and options.plot_beta
+      minbeta = chromlist.minscore['beta'].to_f
+      maxbeta = chromlist.maxscore['beta'].to_f
+      if options.clean_axes
+        increment, minbeta, maxbeta = writer.calculate_increments_include_zero(minbeta, maxbeta)
+      end
+      if 0 > minbeta and 0 < maxbeta
+        writer.draw_dashed(x_original_start, ystart_stat_boxes[i], x_line_end, 0, maxbeta, minbeta, options.rotate)
+      end
+		else
+			skipped_beta += 1
     end
   end
 
@@ -5552,7 +5559,6 @@ else # multiple grouplists for ethnicity so different lines need to be drawn
 			end
 		end
   end
-
 
 	skipped_beta=0
 	options.plot_pval ? beta_offset_start = 1 : beta_offset_start = 0
