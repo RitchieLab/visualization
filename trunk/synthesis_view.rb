@@ -4549,7 +4549,7 @@ if options.largetext
 else
   modification = 0
   #mod_mult = 0.0038
-  mod_mult = 0.0034
+  mod_mult = 0.0041
 end
 
 if max_snp_name > 7
@@ -5262,7 +5262,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
 
   else # multiple grouplists with each one being a different ethnicity
 		curr_stat_box=0
-
+		options.rotate ? include_labels = (chromindex == chromlist.chromarray.length-1) : include_labels = first_chrom 
     pvalmin = chromlist.minscore['pvalue']
     if options.pmin
       pvalmin=options.pmin
@@ -5273,7 +5273,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
 				writer.draw_pvalue_plot(:jitter=>options.jitter, :no_triangles=>options.no_triangles, :grouplist=>grouplisthash[grouplistkeys[i]],
 					:snp_list=>current_chrom.snp_list, :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box],
 					:stat_max=>chromlist.maxscore['pvalue'], :stat_min=>pvalmin, :original_min=>chromlist.minscore['pvalue'],
-					:first_plot=>first_chrom, :prefix_title=>grouplistkeys[i] + "\n", :rotate=>options.rotate,
+					:first_plot=>include_labels, :prefix_title=>grouplistkeys[i] + "\n", :rotate=>options.rotate,
 					:clean_axis=>options.clean_axes)
 				curr_stat_box += 1
 			end
@@ -5295,7 +5295,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
         end
         writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
           :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>maxbeta,
-          :stat_min=>minbeta, :data_key=>'beta', :plot_labels=>first_chrom, :title=>options.effect_name,
+          :stat_min=>minbeta, :data_key=>'beta', :plot_labels=>include_labels, :title=>options.effect_name,
           :precision=>2, :rotate=>options.rotate, :prefix_title=>grouplistname + "\n", :lci_key=>'betalci', :uci_key=>'betauci') 
         curr_stat_box+=1
       end
@@ -5306,7 +5306,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
 		  if grouplist.plot_maf?
 				writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
 					:x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>1.0, :stat_min=>0.0,
-					:data_key=>'maf', :plot_labels=>first_chrom, :title=>grouplist.mafcoltitle, :precision=>2,
+					:data_key=>'maf', :plot_labels=>include_labels, :title=>grouplist.mafcoltitle, :precision=>2,
 					:prefix_title=>grouplistname + "\n", :rotate=>options.rotate)
         
 				curr_stat_box+=1
@@ -5323,7 +5323,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
 				end
 				writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
 					:x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>nmax, :stat_min=>nmin,
-					:data_key=>'N', :plot_labels=>first_chrom, :title=>'Sample Size', :precision=>0, 
+					:data_key=>'N', :plot_labels=>include_labels, :title=>'Sample Size', :precision=>0, 
 					:prefix_title=>grouplistname + "\n", :rotate=>options.rotate)
 				curr_stat_box+=1
 			end
@@ -5340,7 +5340,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
 					end
 					writer.draw_basic_plot(:jitter=>options.jitter, :grouplist=>grouplist, :snp_list=>current_chrom.snp_list,
 					:x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box], :stat_max=>rmax, :stat_min=>rmin,
-					:data_key=>'rank', :plot_labels=>first_chrom, :title=>'Rank', :precision=>0, 
+					:data_key=>'rank', :plot_labels=>include_labels, :title=>'Rank', :precision=>0, 
 					:prefix_title=>grouplistname + "\n", :rotate=>options.rotate)
 					curr_stat_box+=1
 				end
@@ -5475,14 +5475,22 @@ elsif options.rotate
     writer.draw_plot_boundaries(x_original_start, x_line_end, ystart_half_boxes[i], 0.5)
   end
 
+	grouplistkeys = grouplisthash.keys
   if options.p_thresh > 0
-    writer.draw_red_line(x_original_start, ystart_stat_boxes[0], x_line_end, chromlist.maxscore['pvalue'],
-      chromlist.minscore['pvalue'], options.p_thresh, options.rotate)
+		grouplistkeys.each_with_index do |grouplistname, i|
+			writer.draw_red_line(x_original_start, ystart_stat_boxes[i], x_line_end, chromlist.maxscore['pvalue'],
+				chromlist.minscore['pvalue'], options.p_thresh, options.rotate) if grouplisthash[grouplistname].plot_pvals?
+		end
   end
 
 	skipped_beta=0
 	options.plot_pval ? beta_offset_start = 1 : beta_offset_start = 0
-	grouplistkeys = grouplisthash.keys
+	beta_offset_start=0
+	if options.plot_pval
+		beta_offset_start=0
+		grouplistkeys.each {|group| beta_offset_start += 1 if grouplisthash[group].plot_pvals?}
+	end
+	
   grouplistkeys.each_with_index do |grouplistname, i|
     #i = grouplistkeys.length + i
 		i = beta_offset_start + i - skipped_beta
