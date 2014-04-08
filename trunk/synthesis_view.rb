@@ -427,6 +427,19 @@ class ChromosomeList
     end
     return max_name
   end
+	
+	 # returns text of longest SNP name in chromosome list
+	def get_longest_snp_name
+    name = ""
+		max_length = 0
+    chromhash.each_value do |chrom|
+      if chrom.get_max_snp_name > max_length
+        max_length = chrom.get_max_snp_name
+				name = chrom.get_longest_snp_name
+      end
+    end
+    return name		
+	end
 
   def add_chrom(chrom)
     @chromhash[chrom.chrom_num] = chrom
@@ -693,6 +706,10 @@ class Chromosome
   def get_max_snp_name
     return @snp_list.max_snp_name
   end
+	
+	def get_longest_snp_name
+		return @snp_list.longest_name
+	end
 
 end
 
@@ -826,7 +843,7 @@ end
 
 class SNPList
   attr_accessor :snps, :ld_scores, :stats, :snpinfo_tracks, :snp_hash, :included_snps, :included_snps_hash,
-    :index_of_included_snps, :maximum, :minimum, :blocks, :max_snp_name
+    :index_of_included_snps, :maximum, :minimum, :blocks, :max_snp_name, :longest_name
 
   def initialize()
     @snps = Array.new
@@ -841,6 +858,7 @@ class SNPList
     @included_snps_hash = Hash.new
     @index_of_included_snps = Hash.new
     @max_snp_name = 0
+		@longest_name = ""
   end
 
   # returns nil when not found
@@ -872,6 +890,7 @@ class SNPList
     @snp_hash[snp.name] = snp
     if snp.name.length > @max_snp_name
       @max_snp_name = snp.name.length
+			@longest_name = snp.name
     end
   end
 
@@ -1519,6 +1538,25 @@ class PlotWriter
     @maxx=0
   end
 
+	# return width (in pixels) of a string
+	def get_text_width(text, params)
+		pointsize = params[:pointsize] || 20
+		font_family = params[:font_family] || nil
+		font_style = params[:font_style] || nil
+		density_fraction = RVG::dpi
+		gc = Magick::Draw.new
+		img = Magick::Image.new(900,50){
+			self.density="#{density_fraction}x#{density_fraction}"
+			self.format='png'
+		}
+		gc.pointsize = pointsize
+		gc.font_family = font_family if font_family
+		metrics = gc.get_type_metrics(img,text)
+#		gc.text(0,20,text)
+		
+		return metrics.width
+	end
+	
   # took calculations from the haploview code
   # for the block colors
   def get_ld_block_color(snp_combo, use_dprime=true)
@@ -1620,17 +1658,6 @@ class PlotWriter
 
     start_plot_x = @box_size
     end_plot_x = x_end - x_start -@box_size * 0.7
-#   start_plot_y = 0
-#   end_plot_y = y_end - y_start - @box_size * 0.5
-
-    # needs a box all the way around to denote area
-#    @canvas.g.translate(x_start, y_start) do |plot|
-#      plot.styles(:stroke_width=>1, :stroke=>'black')
-#      plot.line(start_plot_x, start_plot_y, end_plot_x, start_plot_y)
-#      plot.line(start_plot_x, end_plot_y, end_plot_x, end_plot_y)
-#      plot.line(start_plot_x, start_plot_y, start_plot_x, end_plot_y)
-#      plot.line(end_plot_x, start_plot_y, end_plot_x, end_plot_y)
-#    end
 
     # make row be the size of one box
     row_size = @box_size
@@ -2621,6 +2648,115 @@ class PlotWriter
     @map_pos << ipos
   end
 
+
+	def draw_distance_track(chrom_num, snp_list, x_start, y_start, y_end, rotate, add_snp_locs)
+
+		x_text = @box_size
+    start_x = x_text
+		end_x = x_text
+		snp_list.included_snps.each do |snp_index| 
+			end_x = x_text
+			x_text = label_step(x_text)
+		end
+    font_size = standard_font_size
+
+    rotate_angle = -90
+    txt_anchor = 'start'
+    box_adjust=0
+    if rotate
+      rotate_angle = 90
+      txt_anchor = 'end'
+      box_adjust = @box_size * Math.sqrt(2) *0.25 - (@box_size * Math.sqrt(2) *0.25)*0.25
+    end
+	
+    # add the physical distance bar and
+    # draw lines from that to the titles above
+      min_pos = snp_list.get_min
+      max_pos = snp_list.get_max
+      interval_pos = max_pos - min_pos
+			interval_pos != 0 ? x_interval = end_x - start_x : x_interval = 0
+
+      box_height = @box_size/3
+
+			y_text_line = y_end - y_start - @box_size/4
+      # start lower when larger text
+      if @font_size_multiple <= 1
+        box_y_start = @box_size*3
+      else
+        box_y_start = @box_size*4.5
+      end
+
+      font_style = 'italic'
+      font_family = 'Arial'
+      if snp_list.included_snps.length > 1 and interval_pos != 0
+        @canvas.g.translate(x_start, y_start).text(end_x+@box_size/4-box_adjust,box_y_start-box_height).rotate(rotate_angle) do |text|
+          text.tspan(snp_list.get_max.to_s).styles(:font_size=>font_size/1.3, :text_anchor=>txt_anchor, :font_style=>font_style, :font_family=>font_family)
+        end
+      else
+      end
+
+      @canvas.g.translate(x_start, y_start).text(start_x+@box_size/4-box_adjust, box_y_start-box_height).rotate(rotate_angle) do |text|
+        text.tspan(snp_list.get_min.to_s).styles(:font_size=>font_size/1.3, :text_anchor=>txt_anchor, :font_style=>font_style, :font_family=>font_family)
+      end
+
+      @canvas.g.translate(x_start, y_start).text((end_x-start_x)/2+@box_size*1.22-box_adjust-@box_size.to_f/5,0) do |text|
+        text.tspan("chr #{chrom_num.to_s}").styles(:font_size=>font_size/1.5, :text_anchor=>'middle', :font_style=>font_style, :font_family=>font_family)
+      end
+
+      # draw narrow rectangle with white fill
+      @canvas.g.translate(x_start, y_start) do |chromosome|
+        chromosome.styles(:fill=>'white', :stroke_width=>1, :stroke=>'black')
+        chromosome.rect(x_interval, box_height, start_x, box_y_start)
+      end
+
+      x_text_line = @box_size + 1
+
+      last_x_position = ((snp_list.snps[snp_list.included_snps.first].location.to_f - min_pos) / interval_pos) * x_interval + start_x
+			
+      # draw lines connecting text labels to the position
+      if snp_list.included_snps.length > 1 
+				if interval_pos != 0
+					final_x_position = ((snp_list.snps[snp_list.included_snps.last].location.to_f - min_pos) / interval_pos) * x_interval + start_x
+					snp_list.included_snps.each do |snp_index|
+						snp = snp_list.snps[snp_index]
+						# determine relative position
+						x_end_position = ((snp.location.to_f - min_pos) / interval_pos) * x_interval + start_x
+
+						# when enough room to label add the current basepair location
+						# distance should be 1/2 of a box size
+						if add_snp_locs
+						  if x_end_position - last_x_position > @box_size.to_f/1.8 and final_x_position - x_end_position > @box_size.to_f/1.8
+								@canvas.g.translate(x_start, y_start).text(x_end_position+@box_size/4-box_adjust, box_y_start-box_height).rotate(rotate_angle) do |text|
+									text.tspan(snp.location.to_s).styles(:font_size=>font_size/1.3, :text_anchor=>txt_anchor, :font_style=>font_style, :font_family=>font_family)
+								end
+								last_x_position = x_end_position
+							end
+						end
+
+						@canvas.g.translate(x_start, y_start) do |pos_line|
+							# draw a vertical line across the box
+							pos_line.styles(:stroke=>'gray', :stroke_width=>1)
+							pos_line.line(x_end_position, box_y_start, x_end_position, box_y_start+box_height)
+							pos_line.line(x_text_line, y_text_line, x_end_position, box_y_start+box_height)
+						end
+						x_text_line = label_step(x_text_line)
+					end
+				else # interval_pos is zero (all SNPs from same position
+					snp_list.included_snps.each do |snp_index|
+						@canvas.g.translate(x_start, y_start) do |pos_line|
+							pos_line.line(x_text_line,y_text_line,start_x, box_y_start+box_height)
+						end
+						x_text_line = label_step(x_text_line)
+					end
+				end
+      else
+        # only one SNP to draw line
+        @canvas.g.translate(x_start, y_start) do |pos_line|
+          pos_line.line(start_x, y_text_line, start_x, box_y_start+box_height)
+        end
+      end
+	end
+	
   # add labels for SNPs and physical distance
   # conversion -- store y coordinates for use in creating
   # an html map if needed
@@ -2664,7 +2800,7 @@ class PlotWriter
       snp = snp_list.snps[snp_index]
       @canvas.g.translate(x_start,y_start).text(x_text-box_adjust, y_text).rotate(rotate_angle) do |text|
           text.tspan(snp.name).styles(:font_size=>font_size, :text_anchor=>txt_anchor,
-					:fill=>snp.text_color)
+					:fill=>snp.text_color, :font_family=>'arial')
       end
       end_x = x_text
 
@@ -2673,96 +2809,6 @@ class PlotWriter
       map_label(x1, x2, snp.name, rotate, fraction)
 
       x_text = label_step(x_text)
-    end
-
-    # add the physical distance bar and
-    # draw lines from that to the titles above
-    if draw_dist
-      min_pos = snp_list.get_min
-      max_pos = snp_list.get_max
-      interval_pos = max_pos - min_pos
-			interval_pos != 0 ? x_interval = end_x - start_x : x_interval = 0
-
-      box_height = @box_size/3
-
-      # start lower when larger text
-      if @font_size_multiple <= 1
-        box_y_start = @box_size*3
-        y_text_line = @box_size*5.9
-      else
-        box_y_start = @box_size*4.5
-        y_text_line = @box_size*7.4
-      end
-
-      font_style = 'italic'
-      font_family = 'Arial'
-      if snp_list.included_snps.length > 1 and interval_pos != 0
-        @canvas.g.translate(x_start, y_start).text(end_x+@box_size/4-box_adjust,box_y_start-box_height).rotate(rotate_angle) do |text|
-          text.tspan(snp_list.get_max.to_s).styles(:font_size=>font_size/1.3, :text_anchor=>txt_anchor, :font_style=>font_style, :font_family=>font_family)
-        end
-      else
-      end
-
-      @canvas.g.translate(x_start, y_start).text(start_x+@box_size/4-box_adjust, box_y_start-box_height).rotate(rotate_angle) do |text|
-        text.tspan(snp_list.get_min.to_s).styles(:font_size=>font_size/1.3, :text_anchor=>txt_anchor, :font_style=>font_style, :font_family=>font_family)
-      end
-
-      @canvas.g.translate(x_start, y_start).text((end_x-start_x)/2+@box_size*1.22-box_adjust-@box_size.to_f/5,0) do |text|
-        text.tspan("chr #{chrom_num.to_s}").styles(:font_size=>font_size/1.5, :text_anchor=>'middle', :font_style=>font_style, :font_family=>font_family)
-      end
-
-      # draw narrow rectangle with white fill
-      @canvas.g.translate(x_start, y_start) do |chromosome|
-        chromosome.styles(:fill=>'white', :stroke_width=>1, :stroke=>'black')
-        chromosome.rect(x_interval, box_height, start_x, box_y_start)
-      end
-
-      x_text_line = @box_size + 1
-
-      last_x_position = ((snp_list.snps[snp_list.included_snps.first].location.to_f - min_pos) / interval_pos) * x_interval + start_x
-			
-      # draw lines connecting fonts to the position
-      if snp_list.included_snps.length > 1 
-				if interval_pos != 0
-					final_x_position = ((snp_list.snps[snp_list.included_snps.last].location.to_f - min_pos) / interval_pos) * x_interval + start_x
-					snp_list.included_snps.each do |snp_index|
-						snp = snp_list.snps[snp_index]
-						# determine relative position
-						x_end_position = ((snp.location.to_f - min_pos) / interval_pos) * x_interval + start_x
-
-						# when enough room to label add the current basepair location
-						# distance should be 1/2 of a box size
-						if add_snp_locs
-						  if x_end_position - last_x_position > @box_size.to_f/1.8 and final_x_position - x_end_position > @box_size.to_f/1.8
-								@canvas.g.translate(x_start, y_start).text(x_end_position+@box_size/4-box_adjust, box_y_start-box_height).rotate(rotate_angle) do |text|
-									text.tspan(snp.location.to_s).styles(:font_size=>font_size/1.3, :text_anchor=>txt_anchor, :font_style=>font_style, :font_family=>font_family)
-								end
-								last_x_position = x_end_position
-							end
-						end
-
-						@canvas.g.translate(x_start, y_start) do |pos_line|
-							# draw a vertical line across the box
-							pos_line.styles(:stroke=>'gray', :stroke_width=>1)
-							pos_line.line(x_end_position, box_y_start, x_end_position, box_y_start+box_height)
-							pos_line.line(x_text_line, y_text_line, x_end_position, box_y_start+box_height)
-						end
-						x_text_line = label_step(x_text_line)
-					end
-				else # interval_pos is zero (all SNPs from same position
-					snp_list.included_snps.each do |snp_index|
-						@canvas.g.translate(x_start, y_start) do |pos_line|
-							pos_line.line(x_text_line,y_text_line,start_x, box_y_start+box_height)
-						end
-						x_text_line = label_step(x_text_line)
-					end
-				end
-      else
-        # only one SNP to draw line
-        @canvas.g.translate(x_start, y_start) do |pos_line|
-          pos_line.line(start_x, y_text_line, start_x, box_y_start+box_height)
-        end
-      end
     end
 
     # add space to end and return for marking next chromosome
@@ -3431,12 +3477,14 @@ class PlotWriter
     return size_in_inches + @box_size * fraction
   end
 
-  def add_space_for_labels(size_in_inches, fraction, distance_track_included)
-    dist = @box_size * fraction + (@font_size_multiple - 1.0) * 0.3 * @box_size * fraction
-    unless distance_track_included
-      dist /= 3
-    end
-    return size_in_inches + dist
+  def add_space_for_labels(size_in_inches,label)
+		
+		font_size = standard_font_size
+		font_size *= 2.14
+		pixels = get_text_width(label, :pointsize=>font_size, :font_family=>'arial')
+		# convert back to inches from pixels
+		return size_in_inches + pixels/RVG::dpi
+		
   end
 
   def add_space_for_snpinfo(size_in_inches, fraction)
@@ -4535,34 +4583,14 @@ if options.manhattanfile
   y_manhattan_end = ymax - ((ymax-y_manhattan_start)*0.1)
 end
 
-y_label_start = ymax
-
+y_distance_track_start = ymax
 max_snp_name = chromlist.get_max_snp_name
+longest_snp_name = chromlist.get_longest_snp_name
+yside = yside + box_size * (max_snp_name.to_f/96 * 2 + 3) *  0.01667
+ymax = writer.calculate_coordinate(yside)
 
-# add more space in general if it is large text option
-modification = 0
-
-if options.largetext
-  modification = 0.005
-  #mod_mult = 0.0080
-  mod_mult = 0.0075
-else
-  modification = 0
-  #mod_mult = 0.0038
-  mod_mult = 0.0041
-end
-
-if max_snp_name > 7
- modification += (max_snp_name - 7) * mod_mult
- if options.include_dist_track 
-   if options.largetext
-   modification /= 2.5
-    else
-   modification /= 1.5
-   end
- end
-end
-yside = writer.add_space_for_labels(yside, 0.065 + modification, options.include_dist_track)
+y_label_start = ymax
+yside = writer.add_space_for_labels(yside, longest_snp_name)
 
 ymax = writer.calculate_coordinate(yside)
 y_label_end = ymax
@@ -4825,6 +4853,8 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
 		last_chrom = true if chromindex == chromlist.chromarray.length-1
     # add labels to top of chart
     chrom_x_starts << x_start
+		writer.draw_distance_track(current_chrom.name, current_chrom.snp_list, x_start,
+			y_distance_track_start, y_label_start, options.rotate,  options.add_snp_locs) if options.include_dist_track
     x_new_start= writer.add_labels(current_chrom.name, current_chrom.snp_list, x_start,
       y_label_start, y_label_end, true, options.rotate,  options.add_snp_locs, options.include_dist_track)
     chrom_x_ends << x_new_start
