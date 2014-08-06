@@ -31,7 +31,9 @@ include Magick
 
 Version = '0.1.0'
 Name = 'pheno_gram_genie.rb'
-GeneFile = '/gpfs/group1/m/mdr23/software/visualization/bin/knownGene.symbol.txt'
+GeneFile = '/gpfs/group1/m/mdr23/software/visualization/data/knownGene.symbol.txt'
+#GeneFile = '/Users/dudeksm/lab/visualization/test/pheno_genie/build38/knownGene.symbol.build38.txt'
+#GeneFile = '/Users/dudeksm/lab/visualization/test/pheno_genie/knownGene.symbol.txt'
 
 # check for windows and select alternate font based on OS
 Font_family_style = RUBY_PLATFORM =~ /mswin/ ? "Verdana" : "Times"
@@ -62,6 +64,8 @@ class Arg
 		options.genename = nil
 		options.exon_color = 'gray'
 		options.sequence_color = 'blue'
+		options.include_snps = false
+		options.label=nil
 		help_selected = false
     version_selected = false
 
@@ -75,6 +79,8 @@ class Arg
 			opts.on("-s", "--transcript-separate", "Make a separate plot for each transcript"){|trans_plot|options.plot_trans_separately=true}
 			opts.on("-E [exon_color]", "Color for exons"){|exon_color|options.exon_color=exon_color}
 			opts.on("-S [sequence_color]", "Color for sequence blocks"){|sequence_color|options.sequence_color=sequence_color}
+			opts.on("-P", "--include-single", "Include single base positions (SNPs) specified in input"){|inc_snps| options.include_snps=true}
+			opts.on("-L [label]", "Specify identifier to label in plot along top"){|label| options.label=label}
       opts.on("-o [out_name]", "Optional output name for image"){|out_name| options.out_name = out_name}
       opts.on_tail("-h", "--help", "Show this usage statement") do
         puts opts
@@ -435,14 +441,9 @@ class PhenoGramFileReader < FileHandler
 			seqstart = data[@bpcol].to_i
 			seqend = data[@bpendcol].to_i
 			# skip unless specified gene region
-#if seqchr == genechr and seqstart != seqend
-#		puts "seqstart=#{seqstart} seqend=#{seqend} genestart=#{genestart} genestop=#{genestop}"
-#		puts "seqstart inside" if seqstart >= genestart and seqstart <= genestop
-#end
 			next unless seqchr == genechr and (seqstart >= genestart and seqstart <= genestop) or 
 				(seqend >= genestart and seqend <= genestop) or (seqstart <= genestart and seqend >= genestop)
       @idcol ? name = data[@idcol] : name = "."
-#puts "included"
 			sequences.addseq(seqstart, seqend, name)
     end
 		close
@@ -486,18 +487,31 @@ class Plotter
 		xwidth = params[:width]
 		sequences = params[:sequences]
 		sequence_color = params[:sequence_color]
+		include_snps = params[:include_snps] || false	
+		label = params[:label] || nil
 		
 		box_height = 28
 		box_y_start = height - box_height
+		font_weight=700
 		canvas.g.translate(xstart, ystart) do |draw|
 			sequences.seqs.each do |seq|
-				next if seq.start == seq.stop
-				startx = xscaler.get_coordinate(seq.start)
-				startx = 0 if startx < 0
-				next if startx > xwidth
-				endx = xscaler.get_coordinate(seq.stop)
-				endx = xwidth if endx > xwidth
-				draw.rect(endx-startx, box_height, startx, box_y_start).styles(:fill=>sequence_color)
+				# plot regions
+				if seq.start != seq.stop
+					startx = xscaler.get_coordinate(seq.start)
+					startx = 0 if startx < 0
+					next if startx > xwidth
+					endx = xscaler.get_coordinate(seq.stop)
+					endx = xwidth if endx > xwidth
+					draw.rect(endx-startx, box_height, startx, box_y_start).styles(:fill=>sequence_color)
+				elsif include_snps
+					# draw a line at location for SNP
+					linex = xscaler.get_coordinate(seq.start)
+					draw.line(linex, box_y_start, linex, box_y_start+box_height).styles(:stroke=>sequence_color)
+					if seq.id == label
+						draw.text(linex, box_y_start-standard_font_size/5, seq.id).styles(:font_weight=>font_weight,
+				:text_anchor=>'middle', :fill=>'black', :font_size=>standard_font_size)
+					end
+				end
 			end
 		end
 		
@@ -607,7 +621,8 @@ class Plotter
 			
 			draw_sequences(:xstart=>margin, :ystart=>seq_track_ystart, :xscale=>x_scale,
 				:height=>seq_track_yheight, :canvas=>canvas, :width=>draw_width,
-				:sequences=>sequences, :sequence_color=>options.sequence_color)
+				:sequences=>sequences, :sequence_color=>options.sequence_color, 
+				:label=>options.label)
 			
 			draw_gene(:gene=>gene, :xstart=>margin, :ystart=>gene_y_start,
 				:xscale=>x_scale, :height=>gene_y_height, :canvas=>canvas,
@@ -677,7 +692,8 @@ class Plotter
 			
 			draw_sequences(:xstart=>margin, :ystart=>seq_track_ystart, :xscale=>x_scale,
 				:height=>seq_track_yheight, :canvas=>canvas, :width=>draw_width,
-				:sequences=>sequences, :sequence_color=>options.sequence_color)
+				:sequences=>sequences, :sequence_color=>options.sequence_color,
+				:include_snps=>options.include_snps, :label=>options.label)
 			genes.each_with_index do |gene,i|
 				gene.name = ' '
 				if i == genes.length-1 
