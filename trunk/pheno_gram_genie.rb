@@ -31,9 +31,10 @@ include Magick
 
 Version = '0.1.0'
 Name = 'pheno_gram_genie.rb'
-GeneFile = '/gpfs/group1/m/mdr23/software/visualization/data/knownGene.symbol.txt'
+#GeneFile = '/gpfs/group1/m/mdr23/software/visualization/data/knownGene.symbol.txt'
 #GeneFile = '/Users/dudeksm/lab/visualization/test/pheno_genie/build38/knownGene.symbol.build38.txt'
 #GeneFile = '/Users/dudeksm/lab/visualization/test/pheno_genie/knownGene.symbol.txt'
+GeneFile = '/Users/dudeksm/lab/visualization/test/pheno_genie/build38/knownGene.symbol.build38.txt'
 
 # check for windows and select alternate font based on OS
 Font_family_style = RUBY_PLATFORM =~ /mswin/ ? "Verdana" : "Times"
@@ -66,12 +67,13 @@ class Arg
 		options.sequence_color = 'blue'
 		options.include_snps = false
 		options.label=nil
+		options.seq_id = nil
 		help_selected = false
     version_selected = false
 
     
     opts = OptionParser.new do |opts|
-       opts.banner = "Usage: #{Name}.rb [options]"
+      opts.banner = "Usage: #{Name}.rb [options]"
       opts.on("-e [vcf_file]", "VCF input file"){|input_file| options.vcf = input_file}
 			opts.on("-i [pheno_input]", "Phenogram input file for plotting"){|pheno_input| options.pheno_inputfile=pheno_input}
 			opts.on("-f [image_type]", "Image format for output (png default)."){|image_type| options.imageformat = image_type}
@@ -79,6 +81,7 @@ class Arg
 			opts.on("-s", "--transcript-separate", "Make a separate plot for each transcript"){|trans_plot|options.plot_trans_separately=true}
 			opts.on("-E [exon_color]", "Color for exons"){|exon_color|options.exon_color=exon_color}
 			opts.on("-S [sequence_color]", "Color for sequence blocks"){|sequence_color|options.sequence_color=sequence_color}
+			opts.on("-r [rs_sequence]", "Specify ID for SNP or region sequence to include above plot"){|id|options.seq_id=id}
 			opts.on("-P", "--include-single", "Include single base positions (SNPs) specified in input"){|inc_snps| options.include_snps=true}
 			opts.on("-L [label]", "Specify identifier to label in plot along top"){|label| options.label=label}
       opts.on("-o [out_name]", "Optional output name for image"){|out_name| options.out_name = out_name}
@@ -350,7 +353,7 @@ class VCFParser < FileHandler
 end
 
 class Sequence
-	attr_accessor :start, :stop, :id
+	attr_accessor :start, :stop, :id, :seq5, :seq3, :seqmark
 	
 	def initialize(start,stop,id)
 		@start = start
@@ -369,11 +372,16 @@ class SequenceHolder
 	
 	def addseq(start,stop,id=nil)
 		@seqs << Sequence.new(start,stop,id)
+		return @seqs.last
+	end
+	
+	def getseq(seq_id)
+		@seqs.each do |seq| 
+			return seq if seq.id == seq_id
+		end
 	end
 	
 end
-
-
 class PhenoGramFileReader < FileHandler
 
   def open(filename)
@@ -381,11 +389,12 @@ class PhenoGramFileReader < FileHandler
   end
   
   def set_columns(headerline)
-    @idcol = @chromcol = @bpcol  = @bpendcol = nil
+    @idcol = @chromcol = @bpcol  = @bpendcol = @seq5col = @seq3col= @seqmarkcol = nil
     headers = strip_and_split_delim(headerline, "\t")
     
     headers.each_with_index do |header, i|
-      if header =~ /^snp$|^snp_id$|^ID$/i
+#      if header =~ /^snp$|^snp_id$|^ID$/i
+			if header =~ /ID$|^SNP/i
         @idcol = i
       elsif header =~ /^chrom|^chr$/i
         @chromcol = i
@@ -393,9 +402,14 @@ class PhenoGramFileReader < FileHandler
         @bpcol = i
       elsif header =~ /^end/i
         @bpendcol = i
+			elsif header =~ /^seq5/i
+				@seq5col = i
+			elsif header =~ /^seq3/i
+				@seq3col = i
+			elsif header =~ /^seqmark/i
+				@seqmarkcol = i
       end
     end
-
     unless @chromcol and @bpcol
 			error_string = 'Input file must include chrom, pos' 
 			error_string = error_string + ' columns'
@@ -411,7 +425,6 @@ class PhenoGramFileReader < FileHandler
     return true if chrnum.to_i >=1 and chrnum.to_i <=24
     return false
   end
-  
   
   def parse_file(filename, sequences, params)
 		genes = params[:genes]
@@ -444,7 +457,11 @@ class PhenoGramFileReader < FileHandler
 			next unless seqchr == genechr and (seqstart >= genestart and seqstart <= genestop) or 
 				(seqend >= genestart and seqend <= genestop) or (seqstart <= genestart and seqend >= genestop)
       @idcol ? name = data[@idcol] : name = "."
-			sequences.addseq(seqstart, seqend, name)
+			new_seq = sequences.addseq(seqstart, seqend, name)
+			#:seq5, :seq3, :seqmark
+			new_seq.seq5 = data[@seq5col] if @seq5col
+			new_seq.seq3 = data[@seq3col] if @seq3col
+			new_seq.seqmark = data[@seqmarkcol].to_i if @seqmarkcol
     end
 		close
   end
@@ -477,6 +494,90 @@ class Plotter
 		return val * RVG::dpi/2
 	end
 	
+	# return width (in pixels) of a string
+	def get_text_width(text, params)
+		pointsize = params[:pointsize] || 20
+		font_family = params[:font_family] || nil
+		font_style = params[:font_style] || nil
+		density_fraction = RVG::dpi
+		gc = Magick::Draw.new
+		img = Magick::Image.new(900,50){
+			self.density="#{density_fraction}x#{density_fraction}"
+			self.format='png'
+		}
+		gc.pointsize = pointsize
+		gc.font_family = font_family if font_family
+		metrics = gc.get_type_metrics(img,text)
+#		gc.text(0,20,text)
+		
+		return metrics.width
+	end
+	
+	
+	# add gray boxes with sequences contained for display
+	def draw_sequence_boxes(params)
+		xstart = params[:xstart] || 0
+		ystart = params[:ystart] || 0
+		height = params[:height]
+		width = params[:width]
+		canvas = params[:canvas]
+		box_seq = params[:box_seq]
+		xscaler = params[:xscale]
+		
+		font_size = standard_font_size * 1.2
+		seq_mark = box_seq.seqmark - 1 # make zero based
+		number_bases_max = 44
+		
+		# determine which position will hold the SNP bases
+		snpx = xscaler.get_coordinate(box_seq.start)
+		snp_index = (snpx/width * number_bases_max).to_i
+		text_step_size = width / number_bases_max
+		startbase = seq_mark - snp_index
+		endbase = seq_mark + (number_bases_max - snp_index)-1
+		start_index=0
+		
+		if startbase < 0
+			start_index = -startbase
+			startbase = 0
+		end
+		if endbase > box_seq.seq5.length
+			endbase = box_seq.seq5.length -1
+		end
+		
+		seq_mark = seq_mark + start_index if seq_mark
+		top_line_y = height/4 * 2
+		bottom_line_y = height
+		seq5 = box_seq.seq5.split("")
+		seq3 = box_seq.seq3.split("")
+
+		gray_box_width = (endbase - startbase + 1) * text_step_size
+		# draw gray boxes to highlight sequences
+		top_shift = 3
+		
+		xtext = start_index * text_step_size
+		canvas.g.translate(xstart, ystart) do |draw|
+			draw.rect(gray_box_width, height/2-3, xtext-text_step_size/4,top_shift).styles(:fill=>'gray')
+			draw.rect(gray_box_width, height/2-3, xtext-text_step_size/4,top_line_y+3).styles(:fill=>'gray')
+		end
+		
+		font_weight=500
+		fill = 'white'
+		canvas.g.translate(xstart, ystart) do |draw|
+			for i in startbase..endbase
+				draw.text(xtext, top_line_y, seq5[i]).styles(:font_weight=>font_weight,
+					:text_anchor=>'start', :fill=>fill, :font_size=>font_size)
+				draw.text(xtext, bottom_line_y, seq3[i]).styles(:font_weight=>font_weight,
+					:text_anchor=>'start', :fill=>fill, :font_size=>font_size)
+				xtext += text_step_size
+			end
+		end
+		
+		box_center = (snp_index-1) * text_step_size + text_step_size/1.65
+		canvas.g.translate(xstart,ystart) do |draw|
+			draw.rect(1.4 * text_step_size, height+4, box_center, 0).round(5).styles(:fill=>'none', :stroke=>'red',
+				:stroke_width=>2)
+		end
+	end
 	
 	def draw_sequences(params)
 		xstart = params[:xstart] || 0
@@ -602,9 +703,24 @@ class Plotter
 		# always have the gene track
 		height = 1
 		
+		current_start_y=0
+		include_seq=false
+		# add height for sequence data if included
+		if options.seq_id
+			box_seq = sequences.getseq(options.seq_id)
+			if box_seq.start >= gene.start and box_seq.stop <= gene.stop
+				seq_box_ystart = current_start_y
+				seq_box_height= 0.32
+				sequence_boxes_yheight = inches_to_coords(seq_box_height)
+				height += seq_box_height
+				current_start_y += sequence_boxes_yheight
+				include_seq = true
+			end
+		end
+		
 		# add height for seq track
-		seq_track_height =0.5
-		seq_track_ystart = 0
+		seq_track_height =0.45
+		seq_track_ystart = current_start_y
 		seq_track_yheight = inches_to_coords(seq_track_height)
 		height += seq_track_height
 		
@@ -618,11 +734,16 @@ class Plotter
 		rvg=RVG.new(width.in, height.in).viewbox(0,0,xmax,ymax) do |canvas|
 			canvas.background_fill = 'rgb(255,255,255)'
 			x_scale = Scale.new(xmax - margin*2, gene.stop-gene.start, gene.start)
-			
+			if options.seq_id and include_seq
+				box_seq = sequences.getseq(options.seq_id)
+				draw_sequence_boxes(:xstart=>margin, :ystart=>seq_box_ystart, 
+					:canvas=>canvas, :width=>draw_width, :height=>sequence_boxes_yheight,
+					:box_seq=>box_seq, :xscale=>x_scale) 
+			end			
 			draw_sequences(:xstart=>margin, :ystart=>seq_track_ystart, :xscale=>x_scale,
 				:height=>seq_track_yheight, :canvas=>canvas, :width=>draw_width,
 				:sequences=>sequences, :sequence_color=>options.sequence_color, 
-				:label=>options.label)
+				:label=>options.label, :include_snps=>options.include_snps)
 			
 			draw_gene(:gene=>gene, :xstart=>margin, :ystart=>gene_y_start,
 				:xscale=>x_scale, :height=>gene_y_height, :canvas=>canvas,
@@ -654,12 +775,22 @@ class Plotter
 		
 		# determine height - dependent on which tracks included
 		# always have the gene track
-		each_gene_track = 0.34
+		each_gene_track = 0.32
 		height = each_gene_track * genes.length + 0.3 # add 0.5 for bottom gene name
 		
+		current_start_y=0
+		# add height for sequence data if included
+		if options.seq_id
+			seq_box_ystart = current_start_y
+			seq_box_height= 0.32
+			sequence_boxes_yheight = inches_to_coords(seq_box_height)
+			height += seq_box_height
+			current_start_y += sequence_boxes_yheight
+		end
+		
 		# add height for seq track
-		seq_track_height =0.5
-		seq_track_ystart = 0
+		seq_track_height =0.45
+		seq_track_ystart = current_start_y
 		seq_track_yheight = inches_to_coords(seq_track_height)
 		height += seq_track_height
 		
@@ -690,6 +821,13 @@ class Plotter
 			canvas.background_fill = 'rgb(255,255,255)'
 			x_scale = Scale.new(xmax - margin*2, genestop-genestart, genestart)
 			
+			if options.seq_id
+				box_seq = sequences.getseq(options.seq_id)
+				draw_sequence_boxes(:xstart=>margin, :ystart=>seq_box_ystart, 
+					:canvas=>canvas, :width=>draw_width, :height=>sequence_boxes_yheight,
+					:box_seq=>box_seq, :xscale=>x_scale) 
+			end
+			
 			draw_sequences(:xstart=>margin, :ystart=>seq_track_ystart, :xscale=>x_scale,
 				:height=>seq_track_yheight, :canvas=>canvas, :width=>draw_width,
 				:sequences=>sequences, :sequence_color=>options.sequence_color,
@@ -718,8 +856,6 @@ class Plotter
 		outfile = options.out_name + '.' + options.imageformat
 		create_file(outfile, rvg)
 	end
-	
-	
 end
 
 
