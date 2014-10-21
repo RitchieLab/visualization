@@ -34,7 +34,7 @@ require 'optparse'
 require 'ostruct'
 include Magick
 
-Version = '1.1.0'
+Version = '1.2.0'
 Name = 'pheno_gram.rb'
 
 # check for windows and select alternate font based on OS
@@ -82,6 +82,7 @@ class Arg
 		options.zoomchr = nil
 		options.zoomstart = nil
 		options.zoomend = nil
+		options.restrict_chroms = false
     help_selected = false
     version_selected = false
     
@@ -111,15 +112,16 @@ class Arg
       end
 			opts.on("-Z [zoom_location]", "Zoom on chromosome (7) or portion of chromsome (7:10000000-25000000)") do |zoom_location|
 				unless zoom_location =~ /:/
-					options.zoomchr = zoom_location
+					options.zoomchr = Arg::split_nums(zoom_location)
 				else
-					# split on : and then on -
-					loc = zoom_location.split(/:|-/)
-					options.zoomchr = loc[0]
-					options.zoomstart = loc[1].to_i
-					options.zoomend = loc[2].to_i
+					loc = zoom_location.split(/:/)
+					options.zoomchr = Arg::split_nums(loc[0])
+					positions = loc[1].split(/:|-/)
+					options.zoomstart = positions[0].to_i
+					options.zoomend = positions[1].to_i
 				end
 			end
+			opts.on("-G", "--restrict-chroms", "Include only chromosomes with input data on plot"){|restrict|options.restrict_chroms=true}
 			opts.on("-a", "--include-annotation", "Include any annotation on plot"){|notes|options.include_notes=true}
       opts.on("-z", "--high-res", "Set resolution to 1200 dpi") {|hres| options.highres=true}
       opts.on("-T", "--trans-lines", "Make lines on chromosome more transparent") {|trans| options.transparent_lines=true}
@@ -186,6 +188,22 @@ class Arg
     
     return options
   end
+	
+	# splits string up to list individual values
+	def self.split_nums(str)
+		values = Array.new
+		pcs = str.split(/,/)
+		pcs.each do |p|
+			nums = p.split(/-/)
+			if nums.length > 1
+				(nums[0].to_i..nums[1].to_i).each {|n| values << n}
+			else
+				values << nums[0]
+			end
+		end
+		return values
+	end
+	
 end
 
 
@@ -263,6 +281,41 @@ class Genome
 			@max_chr_size=chr.size if chr.size > @max_chr_size
 			@chrNames[chr.display_num.to_s]=chr
 		end
+	end
+	
+	# remove any chromosomes that have no data points
+	def remove_empty
+		newchroms = Array.new
+		newchroms << Chromosome.new(:number=>0, :size=>0)
+		new_chr_names = Hash.new
+		@max_chr_size = 0
+		@chromosomes.each do |chr|
+			unless chr.snps.empty?
+				@max_chr_size=chr.size if chr.size > @max_chr_size
+				new_chr_names[chr.display_num.to_s]=chr
+				newchroms << chr
+			end
+		end
+		@chromosomes = newchroms
+		@chrNames = new_chr_names
+	end
+	
+	def remove_unwanted(keepers)
+		keep = Hash.new
+		keepers.each{|k|keep[k.to_s]=1}
+		newchroms = Array.new
+		newchroms << Chromosome.new(:number=>0, :size=>0)
+		new_chr_names = Hash.new
+		@max_chr_size = 0
+		@chromosomes.each do |chr|
+			if keep.has_key?(chr.display_num.to_s)
+				@max_chr_size=chr.size if chr.size > @max_chr_size
+				new_chr_names[chr.display_num.to_s]=chr
+				newchroms << chr				
+			end
+		end
+		@chromosomes = newchroms
+		@chrNames = new_chr_names
 	end
 	
   def add_snp(params)
@@ -768,7 +821,10 @@ class PhenoGramFileReader < FileHandler
   
   def parse_file(filename, genome, phenoholder, params)
 		chr_only = params[:chr_only] || false
-		
+		if(params[:zoomchr])
+			included_chroms = Hash.new
+			params[:zoomchr].each {|name| included_chroms[name.to_s]=1}
+		end
     open(filename)
     lines = Array.new
     # read in all lines and split to accommodate Mac files
@@ -800,7 +856,9 @@ class PhenoGramFileReader < FileHandler
 				notecol = data[@notecol] if @notecol
 				raise "Problem in #{filename} with line:\n#{line}\nAnnotation may be no longer than 10 characters in length" if notecol and notecol.length > 10
 			end
-			if(!params[:zoomchr] or (chromosome.display_num == params[:zoomchr] and 
+#			if(!params[:zoomchr] or (chromosome.display_num == params[:zoomchr] and 
+#							(!params[:zoomstart] or (data[@bpcol].to_i >= params[:zoomstart] and endbp <= params[:zoomend]))))
+			if(!params[:zoomchr] or (included_chroms.has_key?(chromosome.display_num)  and 
 							(!params[:zoomstart] or (data[@bpcol].to_i >= params[:zoomstart] and endbp <= params[:zoomend]))))
 				pheno = phenoholder.add_phenotype(phenotype, group)
 				genome.add_snp(:name => name, :chr=>chromosome, :pos=>data[@bpcol].to_i,
@@ -2287,7 +2345,7 @@ def draw_plot(genome, phenoholder, options)
 		max_chrom_size = genome.max_chrom_size
 		chrom_width = circle_size * 1.5
 	end
-	
+
 	Plotter.set_circle(circle_size, :size=>options.circle_size)
 	Plotter.set_maxchrom(max_chrom_size)
   chrom_circles_width = circle_size * num_circles_in_row
@@ -2307,16 +2365,19 @@ def draw_plot(genome, phenoholder, options)
 	row_box_max << max_chrom_box
 	last_max_chrom_box = max_chrom_box
   # X chromosome will be largest chromosome in second row
-	for i in 1..num_chr_rows-1
-		second_row_start = last_max_chrom_box + row_starts[i-1]
-		second_row_start -= circle_size*5 if alternative_pheno_spacing == :standard
-		row_starts << second_row_start
-		total_num_chromosomes < (i+1) * chroms_in_row ? lastrange = total_num_chromosomes : lastrange = (i+1) * chroms_in_row
-		last_max_chrom_box = max_chrom_box * genome.max_in_range((chroms_in_row*i)+1..lastrange)/max_chrom_size.to_f
-		row_box_max << last_max_chrom_box
+	if(options.zoomchr)
+		last_max_chrom_box *= 1.5
+	else
+		for i in 1..num_chr_rows-1
+			second_row_start = last_max_chrom_box + row_starts[i-1]
+			second_row_start -= circle_size*5 if alternative_pheno_spacing == :standard
+			row_starts << second_row_start
+			total_num_chromosomes < (i+1) * chroms_in_row ? lastrange = total_num_chromosomes : lastrange = (i+1) * chroms_in_row
+			last_max_chrom_box = max_chrom_box * genome.max_in_range((chroms_in_row*i)+1..lastrange)/max_chrom_size.to_f
+			row_box_max << last_max_chrom_box
+		end
 	end
 
-	
 	phenotypes_per_row = PhenotypeLabels.phenotypes_per_row(phenoholder.maxname,
 		:big_font=>options.big_font, :zoom=>options.zoomchr, :chroms_in_row=>chroms_in_row)
 	
@@ -2325,7 +2386,7 @@ def draw_plot(genome, phenoholder, options)
   phenotype_rows = phenoholder.phenonames.length/phenotypes_per_row
   phenotype_rows += 1 unless phenoholder.phenonames.length % phenotypes_per_row == 0
 
-  total_y = row_starts.last + last_max_chrom_box
+  total_y = row_starts.last + last_max_chrom_box 
 	single_chrom_total_y = total_y - row_starts[0]
   # add row showing shapes/ethnicities when needed
   eth_shapes = genome.get_eth_shapes
@@ -2497,6 +2558,15 @@ begin
 	if options.shade_inaccessible and File.exists?(options.cytobandfile)
 		cytoreader = CytoBandFileReader.new
 		cytoreader.parse_file(options.cytobandfile, genome)
+	end
+	genome.remove_empty if options.restrict_chroms
+	if options.zoomchr
+		if options.zoomchr.length > 1
+			genome.remove_unwanted(options.zoomchr)
+			options.zoomchr = nil
+		elsif options.zoomchr.length == 1
+			options.zoomchr = options.zoomchr[0]
+		end
 	end
 rescue => e
   puts "ERROR:"
