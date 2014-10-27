@@ -105,6 +105,8 @@ class Arg
     options.color_key_bottom = false
 		options.forest_plot = false
 		options.plot_rank =true
+		options.interaction_plot = false
+		options.snp_info_file = nil
     options.additional_columns = Array.new
 
     return options
@@ -160,9 +162,10 @@ class Arg
       opts.on("-b [abbrev_file]", "Abbreviation definition file") do |abbrev_file|
         options.abbrevfile = abbrev_file
       end
-
+			opts.on("-i [SNP info file]", "Tags each SNP with information (such as source)"){|infofile| options.snp_info_file=infofile}
+			
       opts.on("-t [title_str]", "Main title for plot (enclose in quotes)") do |title_str|
-        if title_str 
+        if title_str =~ /\w/
           options.title = title_str
         else
           options.title = " "
@@ -246,6 +249,7 @@ class Arg
 				options.forest_plot = true
 				options.rotate = true
 			end
+			opts.on("-I", "--interaction", "Draw interaction plot"){|inter| options.interaction_plot=true}
       opts.on("-D", "--forest-legend", "Draw legend on Forest plot") do |for_legend|
         options.forest_legend = true
       end
@@ -1026,6 +1030,22 @@ class SNPList
 
 end
 
+class TagSNPInfo
+	attr_accessor :snps, :tags
+	
+	def initialize
+		@snps = Hash.new
+		@tags = Hash.new
+	end
+	
+	def add_tag(snpname, tag)
+		@snps[snpname]=Array.new unless @snps.has_key?(snpname)
+		@snps[snpname] << tag;
+		@tags[tag]='none';
+	end
+
+end
+
 
 #############################################################################
 #
@@ -1439,7 +1459,7 @@ end
 
 #############################################################################
 #
-# Class Triangle -- Records basic information for plotting a triangle
+# Class Diamond -- Records basic information for plotting a diamond
 #
 #############################################################################
 class Diamond < Shape
@@ -1475,6 +1495,44 @@ class Diamond < Shape
   end
 
 end
+
+#############################################################################
+#
+# Class Rect -- Records basic information for plotting a rectangle
+#
+#############################################################################
+
+class Rect < Shape
+	def initialize(width, height, x, y, col)
+		@width = width
+		@height = height
+		@x = x
+		@y = y
+		@color = col
+		@xmidpoint = x+width/2
+		@ymidpoint = y+height/2
+	end
+	
+	def draw(pen)
+    @stroke = @color
+    @stroke = 'black' if @@grayscale
+    pen.styles(:fill=>@color, :stroke=>@stroke)
+		pen.rect(@width,@height,@x,@y)
+  end
+
+  def draw_open(pen)
+    pen.styles(:fill=>'none', :stroke=>@color)
+    pen.rect(@width,@height,@x,@y)
+  end
+
+  def adjust_x(xval)
+		@x += xval
+		@xmidpoint += xval
+  end
+	
+	
+end
+
 
 #############################################################################
 #
@@ -1710,13 +1768,30 @@ class PlotWriter
 	   return Triangle.new(x_points, y_points, colorstr)
   end
 
+	def create_square(box_y_start, value_x, box_mult, colorstr)
+		# box_y_start is center of box
+		width = box_mult * @box_size
+		height = width
+		x = value_x - width/2
+		y = box_y_start - height/2
+		return Rect.new(width, height, x, y, colorstr)
+	end
+	
   # returns a new diamond shape
-  def create_diamond(box_y_start, value_x, box_mult, colorstr)
+  def create_diamond(box_y_start, value_x, box_mult, colorstr, params={})
 
+		if(params[:on_side])
+			x_offset = 0.35
+			y_offset = 0.35
+		else
+			x_offset = 0.2
+			y_offset = 0.35
+		end
+		
     # establish x coordinates
     x_points = Array.new
-    left_x = value_x - @box_size*box_mult * Math.sqrt(2)*0.2
-    right_x = value_x + @box_size*box_mult * Math.sqrt(2)*0.2
+    left_x = value_x - @box_size*box_mult * Math.sqrt(2)*x_offset
+    right_x = value_x + @box_size*box_mult * Math.sqrt(2)*x_offset
     x_points << (left_x + right_x)/2
 
     x_points << right_x
@@ -1725,11 +1800,10 @@ class PlotWriter
 
     # establish y coordinates
     y_points = Array.new
-    y_points << box_y_start - @box_size*box_mult * Math.sqrt(2) *0.35
+    y_points << box_y_start - @box_size*box_mult * Math.sqrt(2) * y_offset
 	  y_points << box_y_start
-    y_points << box_y_start + @box_size*box_mult * Math.sqrt(2) *0.35
+    y_points << box_y_start + @box_size*box_mult * Math.sqrt(2) * y_offset
     y_points << box_y_start
-
     return Diamond.new(x_points, y_points, colorstr)
   end
 
@@ -1750,7 +1824,8 @@ class PlotWriter
     prefix_title = params[:prefix_title] || ''
     rotate = params[:rotate] || false
     clean_axis = params[:clean_axis] || false
-    
+		interaction_shapes = params[:interaction_shapes] || false
+		   
     x = @box_size
     xmin = x
     ymin = 0
@@ -1783,13 +1858,13 @@ class PlotWriter
     if !check_max and stat_max - stat_max.floor > 0
       stat_max = stat_max.floor + 1
     end
-
+		
     # store for later use based when adding features
     @functional_max = stat_max
 
     stat_interval = stat_max - stat_min
     value_x = xmin * 0.7 + (@box_size * Math.sqrt(2)*0.25)/2
-
+		
     # draw box (change to triangle) with correct color
     snp_list.included_snps.each do |snp_index|
       snp = snp_list.snps[snp_index]
@@ -1811,14 +1886,12 @@ class PlotWriter
           end
 
           box_y_start = ((stat_max-pvalue) / stat_interval) * y_interval
-	        if (!no_triangles and group.has_beta?)
+	        if (!no_triangles and group.has_beta? and !interaction_shapes)
 	          if over_max and result.values['beta'].to_f <= 0
   	            box_y_start = 0
 	          end
 
-	          if rotate
-              box_y_start = y_interval - box_y_start
-            end
+            box_y_start = y_interval - box_y_start if rotate
 
             if (result.values['beta'].to_f > 0 and !rotate) or (result.values['beta'].to_f <= 0 and rotate)
               up_triangle = true
@@ -1827,16 +1900,29 @@ class PlotWriter
             end
 
             points << create_triangle(box_y_start, value_x, up_triangle, box_mult, group.colorstr)
-
+					elsif(interaction_shapes)
+						box_y_start = @box_size * box_mult * Math.sqrt(2)*0.125/2 if over_max
+						box_y_start = y_interval - box_y_start if rotate
+						if(group.has_beta?)
+							if(result.values['beta'].to_i==1)
+									points << create_square(box_y_start, value_x, box_mult*0.4, group.colorstr)
+							elsif(result.values['beta'].to_i==2)
+									points << create_triangle(box_y_start, value_x, true, box_mult*0.8, group.colorstr)
+							elsif(result.values['beta'].to_i==3)
+									points << create_diamond(box_y_start, value_x, box_mult*0.5, group.colorstr,
+										:on_side=>true)
+							else
+									#circle
+									points << Circle.new(value_x, box_y_start, @box_size * box_mult * Math.sqrt(2)*0.125, group.colorstr)
+							end
+						else
+							box_y_start = @box_size * box_mult * Math.sqrt(2)*0.125/2 if over_max
+							box_y_start = y_interval - box_y_start if rotate
+							points << Circle.new(value_x, box_y_start, @box_size * box_mult * Math.sqrt(2)*0.125, group.colorstr)
+						end
   	      elsif !group.highlighted
-
-  	        if over_max
-  	          box_y_start = @box_size * box_mult * Math.sqrt(2)*0.125/2
-  	        end
-
-  	        if rotate
-              box_y_start = y_interval - box_y_start
-            end
+  	        box_y_start = @box_size * box_mult * Math.sqrt(2)*0.125/2 if over_max
+            box_y_start = y_interval - box_y_start if rotate
     	      points << Circle.new(value_x, box_y_start, @box_size * box_mult * Math.sqrt(2)*0.125, group.colorstr)
     	    else
     	      #draw diamond for highlighted group
@@ -2757,6 +2843,65 @@ class PlotWriter
       end
 	end
 	
+	# draws a box with colors matching the needed tags
+	def draw_interaction_tag_boxes(x_start, x_end, y_start, y_end, tagSNPMap, snpname)
+		
+		tagnames = tagSNPMap.snps[snpname].sort
+		# determine start and end for each color
+		y_interval = y_end-y_start
+		interval = y_interval/tagnames.length.to_f
+		ypts = Array.new
+		last_y = y_start
+		tagnames.length.times do |i|
+			ypts << last_y + interval
+			last_y = ypts.last
+		end
+		
+		width = (x_end-x_start).to_f/2
+		current_y = y_start
+		tagnames.each_with_index do |tagname,i|
+			@canvas.g do |plot|
+				colorstr = tagSNPMap.tags[tagname]
+				plot.styles(:stroke=>colorstr, :fill=>colorstr)
+				plot.rect(width, ypts[i]-current_y, x_start-width/2, current_y)
+			end
+			current_y = ypts[i]
+		end
+	end
+
+	# add boxes denoting tag information for interaction plots
+	def add_interaction_boxes(snp_list, x_start, y_label_start,
+			y_label_end, rotate, tagSNPMap)
+		
+		fraction = 1.0
+		@maxx > @maxy ? max_dim = @maxx : max_dim = @maxy
+		
+		max_dim > Maximum_html_image_x ? fraction = Maximum_html_image_x / max_dim : fraction = 1.0
+		x_text = @box_size
+
+    start_x = x_text
+    end_x = start_x
+		
+		y_interval = y_label_end - y_label_start
+		ymidpt = y_interval.to_f/2 + y_label_start
+		mid_interval = y_interval * 0.05
+		y1_start = y_label_start
+		y1_end = ymidpt - mid_interval
+		y2_start = ymidpt + mid_interval
+		y2_end = y_label_end
+		snp_list.included_snps.each do |snp_index|
+			combined_name = snp_list.snps[snp_index].name
+			(snp1, snp2) = combined_name.split(/_/)
+			x_text = end_x
+			end_x = label_step(x_text)
+			draw_interaction_tag_boxes(x_text+x_start, end_x+x_start, y1_start, y1_end, tagSNPMap, snp1)
+			draw_interaction_tag_boxes(x_text+x_start, end_x+x_start, y2_start, y2_end, tagSNPMap, snp2)
+		end
+
+		# add space to end and return for marking next chromosome
+		return x_start + x_text
+	end
+	
   # add labels for SNPs and physical distance
   # conversion -- store y coordinates for use in creating
   # an html map if needed
@@ -3080,9 +3225,7 @@ class PlotWriter
     end
   
     snp_list.included_snps.each do |snp_index|
-      if show_one
-        break
-      end
+      break if show_one
       snp = snp_list.snps[snp_index]
 	    if snp.results[groupname] != nil
           @canvas.g.translate(x_start,y_start) do |check|
@@ -3168,8 +3311,15 @@ class PlotWriter
 
     # add label for R-squared and D-prime
     if @first_grid
-      @canvas.g.text(label_x, y_text) do |text|
-        text.tspan(grid_label).styles(:font_size=>font_size, :text_anchor=>'end')
+			if rotate 
+				rot=90 
+				anchor = 'start'
+			else 
+				rot=0
+				anchor = 'end'
+			end
+      @canvas.g.text(label_x, y_text).rotate(rot) do |text|
+        text.tspan(grid_label).styles(:font_size=>font_size, :text_anchor=>anchor)
       end
     end
 
@@ -3524,8 +3674,48 @@ class FileReader
     line.strip!
     line.split(/\t/)
   end
+	
+	def strip_and_split_delim(line,delim)
+    line.rstrip!
+    line.split(/#{delim}/)
+  end 
 
 end
+
+#############################################################################
+#
+# Class SNPInfoReader -- Read SNP tag information
+#
+#############################################################################
+class SNPInfoReader < FileReader
+	
+	def read_file(tagfilename)
+		snpTags = TagSNPInfo.new
+		
+		begin
+      File.open(tagfilename, "r") do |file|
+				first = true
+				file.each_line("\n") do |line|
+					line.each_line("\r") do |splitline|
+						if first
+							first =false
+							next
+						end
+						(snpname, tag) = strip_and_split_delim(splitline, "\s+")
+						snpTags.add_tag(snpname,tag.upcase!)
+					end
+				end
+			end		
+		rescue StandardError => e
+      puts e
+      exit(1)
+		end			
+		return snpTags
+	end
+	
+end
+
+
 
 #############################################################################
 #
@@ -3543,6 +3733,8 @@ class SynthesisViewReader<FileReader
     @chromnum = nil
     @location = nil
 		@snpcolorcol = nil
+		@snp1 = nil
+		@snp2 = nil
 		@anccol = Array.new
   end
 
@@ -3551,9 +3743,10 @@ class SynthesisViewReader<FileReader
   end
 
   # fills chromosome list with data from synthesis_view format file
-  def read_synthesisview_file(synthfile, chromlist, glisthash, highlighted_group="")
+  def read_synthesisview_file(synthfile, chromlist, glisthash, highlighted_group="",
+			snpTags=nil)
     defaultkey = GroupList.get_default_name
-    firstline = true
+    firstline = true		
    begin
       File.open(synthfile, "r") do |file|
       # read in all lines
@@ -3566,25 +3759,19 @@ class SynthesisViewReader<FileReader
       end
       group_column, subgroup_column = check_subgroup(lines[0])  
       unless subgroup_column || group_column
-        set_groups(glisthash, lines[0], defaultkey, highlighted_group)
+        set_groups(glisthash, lines[0], defaultkey, highlighted_group, snpTags)
       else
-        set_groups_subgroup(glisthash, lines, defaultkey, group_column, subgroup_column, highlighted_group)
+        set_groups_subgroup(glisthash, lines, defaultkey, group_column, subgroup_column, 
+					highlighted_group,snpTags)
       end
 
-      # if no SNP name in file set SNP name to be same as SNPID
-      if @snpname == -1
-        @snpname = @snpid
-      end
-        
       # if there is built-in MySQL support for looking up position
       # information
-      snp_positions = get_locations(lines, synthfile)
+      snp_positions = get_locations(lines, synthfile, :has_positions=>@location)
 
       lines.each do |line|
         # skip blank lines
-        if line !~ /\w/
-          next
-        end
+        next if line !~ /\w/
 
         # read column headers to create groups
         if firstline
@@ -3596,11 +3783,11 @@ class SynthesisViewReader<FileReader
         data = strip_and_split(line)
 
         # if no location information present skip
-        if !snp_positions.has_key?(data[@snpid])
-          next
-        end
-
-        chrnum = snp_positions[data[@snpid]]['chr']
+				@snpid ? snpid = data[@snpid] : snpid = data[@snp1] + '_' + data[@snp2]
+				# if no SNP name in file set SNP name to be same as SNPID
+				@snpname == -1 ? snpname = snpid : snpname = data[@snpname]
+        next if !snp_positions.has_key?(snpid)
+        chrnum = snp_positions[snpid]['chr']
         chrname = chrnum.to_s
         if chrnum =~ /mt/i
           chrnum = "26"
@@ -3618,10 +3805,9 @@ class SynthesisViewReader<FileReader
         end
 
         # location will be first num listed
-        location = snp_positions[data[@snpid]]['pos']
-
+        location = snp_positions[snpid]['pos']
         location = location.to_i
-        snp = chromosome.snp_list.get_snp(data[@snpname])       
+        snp = chromosome.snp_list.get_snp(snpid)       
         unless snp
 					unless @anccol.empty?
 						anc_array = Array.new
@@ -3629,9 +3815,9 @@ class SynthesisViewReader<FileReader
 						anc_array << data[@anccol[1]].to_f
 						anc_array << data[@anccol[2]].to_f
 					end
-          snp = SNP.new(data[@snpname], location, anc_array)
+          snp = SNP.new(snpname, location, anc_array)
           chromosome.snp_list.add_snp(snp)
-          snp = chromosome.snp_list.get_snp(data[@snpname])
+          snp = chromosome.snp_list.get_snp(snpname)
         end
 				snp.text_color = data[@snpcolorcol] if @snpcolorcol and data[@snpcolorcol] =~ /\w/
         # add results to SNP
@@ -3671,48 +3857,67 @@ class SynthesisViewReader<FileReader
 
 # searches a MySQL database for locations of SNPs that do not
 # have chromosome and position information in input file
-def get_locations(lines, filename)
+def get_locations(lines, filename, params)
   positions = Hash.new
   missing_pos = Array.new
   first = true
-  lines.each do |line|
-    if first
-      first = false
-      next
-    end
-    data = strip_and_split(line)
-    snpid = data[@snpid]
-    if data[@location] =~ /\d/
-      positions[snpid] = Hash.new
-      positions[snpid]['chr'] = data[@chromnum]
-      positions[snpid]['chr'] =~ /(\d+)/ or positions[snpid]['chr'] =~ /(\w+)/
-      positions[snpid]['chr'] = $1
-      positions[snpid]['pos'] = data[@location]
-    elsif data[@snpid] =~ /\w/
-      # missing so will try to get information from database
-      missing_pos << snpid
-    end
-  end
+	
+	if(params[:has_positions])
+		lines.each do |line|
+			if first
+				first = false
+				next
+			end
+			data = strip_and_split(line)
+			snpid = data[@snpid]
+			if data[@location] =~ /\d/
+				positions[snpid] = Hash.new
+				positions[snpid]['chr'] = data[@chromnum]
+				positions[snpid]['chr'] =~ /(\d+)/ or positions[snpid]['chr'] =~ /(\w+)/
+				positions[snpid]['chr'] = $1
+				positions[snpid]['pos'] = data[@location]
+			elsif data[@snpid] =~ /\w/
+				# missing so will try to get information from database
+				missing_pos << snpid
+			end
+		end
 
-  # if any missing try database for location if have mysql support
-  if @@mysql_support and !missing_pos.empty?
-    finder = SNPpos.new
-    snpsinfo = finder.get_pos(missing_pos)
-    still_missing = Array.new
-    missing_pos.each do |rsid|
-      if snpsinfo.has_key?(rsid) and snpsinfo[rsid]['chr'] != nil
-        positions[rsid] = snpsinfo[rsid]
-      else
-        still_missing << rsid
-      end
-    end
+		# if any missing try database for location if have mysql support
+		if @@mysql_support and !missing_pos.empty?
+			finder = SNPpos.new
+			snpsinfo = finder.get_pos(missing_pos)
+			still_missing = Array.new
+			missing_pos.each do |rsid|
+				if snpsinfo.has_key?(rsid) and snpsinfo[rsid]['chr'] != nil
+					positions[rsid] = snpsinfo[rsid]
+				else
+					still_missing << rsid
+				end
+			end
 
-    missing_pos = still_missing
-  end
+			missing_pos = still_missing
+		end
 
-  if !missing_pos.empty?
-    write_missing_log(filename, missing_pos)
-  end
+		if !missing_pos.empty?
+			write_missing_log(filename, missing_pos)
+		end
+	else
+		# set arbitrary positions in order of input
+		pos=1
+		lines.each do |line|
+			if first
+				first = false
+				next
+			end
+			data = strip_and_split(line)
+			snpid = data[@snp1] + '_' + data[@snp2]
+			next if positions.has_key?(snpid)
+			positions[snpid] = Hash.new
+			positions[snpid]['chr'] = 1
+			positions[snpid]['pos'] = pos
+			pos += 1
+		end
+	end
 
   return positions
 end
@@ -3744,48 +3949,20 @@ def read_group_data(snp, group, data)
     powernum = cafcases = cafcontrols = betauci = betalci = rankval = nil
     add_columns = Hash.new
     
-    if group.betacol > -1
-      betaval = data[group.betacol]
-    end
-    if group.mafcafcol > -1
-      mafval = data[group.mafcafcol]
-    end
-    if group.Ncol > -1
-      sampsizeval = data[group.Ncol]
-    end
-    if group.orcol > -1
-      orval = data[group.orcol]
-    end
-    if group.lcicol > -1
-      lowerci = data[group.lcicol]
-    end
-    if group.ucicol > -1
-      upperci = data[group.ucicol]
-    end
-    if group.casescol > -1
-      cases = data[group.casescol]
-    end
-    if group.controlscol > -1
-      controls = data[group.controlscol]
-    end
-    if group.casescol > -1
-      cafcases = data[group.cafcasescol]
-    end
-    if group.controlscol > -1
-      cafcontrols = data[group.cafcontrolscol]
-    end
-    if group.studycol > -1
-      studynum = data[group.studycol]
-    end
-    if group.powercol > -1
-      powernum = data[group.powercol]
-    end
-    if group.betaucicol > -1
-      betauci = data[group.betaucicol]
-    end
-    if group.betalcicol > -1
-      betalci = data[group.betalcicol]
-    end
+    betaval = data[group.betacol] if group.betacol > -1
+    mafval = data[group.mafcafcol] if group.mafcafcol > -1
+    sampsizeval = data[group.Ncol] if group.Ncol > -1
+    orval = data[group.orcol] if group.orcol > -1
+    lowerci = data[group.lcicol] if group.lcicol > -1
+    upperci = data[group.ucicol] if group.ucicol > -1
+    cases = data[group.casescol] if group.casescol > -1
+    controls = data[group.controlscol] if group.controlscol > -1
+    cafcases = data[group.cafcasescol] if group.casescol > -1
+    cafcontrols = data[group.cafcontrolscol] if group.controlscol > -1
+    studynum = data[group.studycol] if group.studycol > -1
+    powernum = data[group.powercol] if group.powercol > -1
+    betauci = data[group.betaucicol] if group.betaucicol > -1
+    betalci = data[group.betalcicol] if group.betalcicol > -1
 		rankval = data[group.rankcol] if group.rankcol > -1
 
     group.additional_cols.each_pair {|key,index| add_columns[key]=data[index] if data[index]}
@@ -3815,7 +3992,8 @@ end
 
 # creates groups and sets the columns in all groups based on header line
 # this version uses a subgroup column
-def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, highlighted_group="")
+def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, 
+		highlighted_group="", snpTags=nil)
   # set up hash for holding columns for main group names
   subnames = Hash.new
   subgrouporder = Array.new
@@ -3841,13 +4019,17 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
   groups = Hash.new
   grouporder = Array.new
   groupkeys = Array.new 
+	groupcolors = Hash.new 
   
   # construct the groups
   groupnameorder.each do |gname|
     gname == highlighted_group ? highlighted = true : highlighted = false
     if subnames.empty?
       key = gname
-      groups.store(key, Group.new(key, highlighted,GroupList.get_next_color))
+#			snpTags.tags.has_key?(key) ? colorstr = snpTags.tags[key] : colorstr = GroupList.get_next_color
+			colorstr = GroupList.get_next_color
+      groups.store(key, Group.new(key, highlighted,colorstr))
+			groupcolors[key]=colorstr
       grouporder << key
       groupkeys << key
     else
@@ -3874,7 +4056,7 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
       @chromnum = i
     elsif header =~ /location|^pos$|^bp$/i
       @location = i
-		elsif header =~ /^snp_color/i
+		elsif header =~ /^snpcolor|snp\scolor/i
 			@snpcolorcol = i
 		elsif header =~ /anc\d/i
 			# should be anc0, anc1, or anc2
@@ -3962,7 +4144,10 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
     end
     colorhash = Hash.new
     unique_names.each_key do |name|
-      colorhash[name] = GroupList.get_next_color
+#			snpTags.tags.has_key?(name) ? colorstr = snpTags.tags[name] : colorstr = GroupList.get_next_color
+			colorstr = GroupList.get_next_color
+      colorhash[name] = colorstr
+			groupcolors[group.name]=colorstr
     end
 
     glisthash.each_value do |glist|
@@ -3973,12 +4158,24 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol, hig
     end
 
   end
+	
+	# set group list colors for the tags (if any)
+	if(snpTags)
+		snpTags.tags.each_key do |key|
+			if(groupcolors.has_key?(key))
+				snpTags.tags[key]=groupcolors[key]
+			else
+				snpTags.tags[key]=GroupList.get_next_color
+			end
+		end
+	end
   
 end
 
 # sets groups in the grouplist based on header columns
 # from Synthesis-View file
-def set_groups(glisthash, line, defaultkey, highlighted_group="")
+def set_groups(glisthash, line, defaultkey, highlighted_group="", 
+		snpTags=nil)
   
   unless line =~ /\t/
     puts "\nERROR:\tInput file must be tab-delimited\n"
@@ -3988,19 +4185,23 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
   data = strip_and_split(line)
   groups = Hash.new
   grouporder = Array.new
-
+	groupcolors = Hash.new
+	
   mafcoltitle = 'MAF'
-
   data.each_with_index do |header, i|
     if header =~ /snp\s*id/i || header =~ /snp_id/i || header =~ /^snp$/i
       @snpid = i
+		elsif header =~ /snp1/
+			@snp1 = i
+		elsif header =~ /snp2/
+			@snp2 = i
     elsif header =~ /snp\s*name/i
       @snpname = i
     elsif header =~ /chromosome|CHR/i
       @chromnum = i
     elsif header =~ /location|^pos$|^bp$/i
       @location = i
-		elsif header =~ /^snp_color/i
+		elsif header =~ /^snpcolor|snp\scolor/i
 			@snpcolorcol = i
 		elsif header =~ /anc\d/i
 			# should be anc0, anc1, or anc2
@@ -4019,7 +4220,9 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
         if !groups.has_key?(pcs[0])
           pcs[0] == highlighted_group ? highlighted = true : highlighted = false
           #groups.store(pcs[0], Group.new(pcs[0],-1,-1,-1, GroupList.get_next_color,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,highlighted))
-          groups.store(pcs[0], Group.new(pcs[0], highlighted, GroupList.get_next_color))
+					colorstr = GroupList.get_next_color
+          groups.store(pcs[0], Group.new(pcs[0], highlighted, colorstr))
+					groupcolors[pcs[0]]=colorstr
           grouporder << pcs[0]
         end
         currgroup = groups.fetch(pcs[0])
@@ -4078,11 +4281,11 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
     end
   end
 
-  unless @snpid and @location and @chromnum
-    puts "ERROR:  Need SNP, CHR, and POS columns in input file"
+  unless (@snpid and @location and @chromnum) or (@snp1 and @snp2)
+    puts "ERROR:  Need SNP, CHR, and POS or SNP1 and SNP2 columns in input file"
     exit
   end
-  
+
   # add groups to the grouplist
   grouporder.each do |g|
     namepcs = g.split /:/
@@ -4114,7 +4317,9 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
     end
     colorhash = Hash.new
     unique_names.each_key do |name|
-      colorhash[name] = GroupList.get_next_color
+			colorstr = GroupList.get_next_color
+      colorhash[name] = colorstr
+			groupcolors[group.name]=colorstr
     end
 
     glisthash.each_value do |glist|
@@ -4123,9 +4328,19 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="")
         group.colorstr = colorhash[namepcs[0]]
       end
     end
-
   end
 
+	# set group list colors for the tags (if any)
+	if(snpTags)
+		snpTags.tags.each_key do |key|
+			if(groupcolors.has_key?(key))
+				snpTags.tags[key]=groupcolors[key]
+			else
+				snpTags.tags[key]=GroupList.get_next_color
+			end
+		end
+	end	
+	
 end
 
 # reads the group total file headers and sets the indexes in a hash that is returned
@@ -4377,13 +4592,15 @@ synth_reader = SynthesisViewReader.new
 
 grouplisthash = Hash.new
 
+tagSNPMap = TagSNPInfo.new
+tag_reader = SNPInfoReader.new
+tagSNPMap = tag_reader.read_file(options.snp_info_file) if options.snp_info_file
+
 synth_reader.read_synthesisview_file(options.eaglefile, chromlist, grouplisthash, 
-  options.highlighted_group)
+  options.highlighted_group, tagSNPMap)
 
 chromlist.sort_chroms!
-if options.rotate
-  chromlist.reverse!
-end
+chromlist.reverse! if options.rotate
 
 if options.manhattanfile
   manhattan_reader = Manhattan::ManhattanReader.new
@@ -4452,12 +4669,9 @@ else
 end
 
 xside_end_addition = 0.005 * box_size * 2
-if box_size > 20
-  xside_end_addition *=2.5
-end
+xside_end_addition *=2.5 if box_size > 20
 
 x_start = 0
-
 if options.groupfile
   synth_reader.read_group_total_file(options.groupfile,grouplisthash)
 end
@@ -4495,11 +4709,12 @@ if grouplisthash.length > 0
   end
 	standard_label_length=15
   adjust_label_length = max_label_length - standard_label_length
+	adjust_label_length = 0 if adjust_label_length < 0
 #  xleftside_addition = (0.00122 * box_size * max_label_length) + 0.012 * box_size
 #  xleftside_addition += (writer.font_size_multiple-1.0) * 0.98 *  xleftside_addition
-	xleftside_addition = 0.034 * box_size
+	xleftside_addition = 0.03 * box_size
   xleftside_addition += (0.00152 * box_size * adjust_label_length)# + 0.012 * box_size
-  xleftside_addition += (writer.font_size_multiple-1.0) * 0.98 *  xleftside_addition
+  xleftside_addition += (writer.font_size_multiple-1.0) * 0.48 *  xleftside_addition
 	
 # current give 6 rows for small font and 3.5 rows for large font
 # when have rotate and need key need to add some more to xleft_side
@@ -4514,9 +4729,7 @@ if grouplisthash.length > 0
 	
   x_start = writer.calculate_coordinate(xside_end_addition)
   xside_end_addition = xside_end_addition + xleftside_addition
-  if !options.rotate
-    x_start = writer.calculate_coordinate(xleftside_addition)
-  end
+  x_start = writer.calculate_coordinate(xleftside_addition) if !options.rotate
 end
 
 
@@ -4586,10 +4799,15 @@ end
 y_distance_track_start = ymax
 max_snp_name = chromlist.get_max_snp_name
 longest_snp_name = chromlist.get_longest_snp_name
-yside = yside + box_size * (max_snp_name.to_f/96 * 2 + 3) *  0.01667
-ymax = writer.calculate_coordinate(yside)
+
+if options.include_dist_track
+	yside = yside + box_size * (max_snp_name.to_f/96 * 2 + 3) *  0.01667
+	ymax = writer.calculate_coordinate(yside)
+end
 
 y_label_start = ymax
+# temporary fix for interaction bars
+longest_snp_name = "rs12781860_rs17541818x" if options.interaction_plot 
 yside = writer.add_space_for_labels(yside, longest_snp_name)
 
 ymax = writer.calculate_coordinate(yside)
@@ -4601,7 +4819,7 @@ ygroup_boxes_start = Array.new
 ystart_block_stat_box = ymax
 
 # add if need to show which groups have data for each SNP
-if grouplisthash.length == 1 and !options.foreast_plot and !options.color_key_bottom
+if grouplisthash.length == 1 and !options.color_key_bottom #and !options.forest_plot 
   grouplist = grouplisthash[GroupList.get_default_name]
   if !chromlist.results_complete?(grouplist.groups.length)
     grouplist.groups.length.times do |i|
@@ -4616,7 +4834,6 @@ yside = yside + box_size/5 * 1 * 0.01667
 ymax = writer.calculate_coordinate(yside)
 
 yforest_legend_start = ymax
-
 # when only one group list do standard plot
 if grouplisthash.length == 1 and !options.rotate
   total_stat_boxes = 0
@@ -4750,16 +4967,26 @@ end
 y_group_legend = ymax
 y_group_legend_rows = Array.new
 x_group_legend_rows = Array.new
+tag_snp_legend_rows = Array.new
+tag_snp_legend_x = x_start - box_size * 2
 # add if need to show which groups have data for each SNP
 if grouplisthash.length == 1 and !options.rotate
   grouplist = grouplisthash[GroupList.get_default_name]
   if chromlist.results_complete?(grouplist.groups.length)
-    grouplist.groups.length.times do |i|
+		total_rows = grouplist.groups.length #+ tagSNPMap.tags.length
+#    grouplist.groups.length.times do |i|
+		total_rows.times do |i|
       y_group_legend_rows << ymax  # + box_size/8
       yside = yside + box_size/4 * 1 * 0.01666 + (writer.font_size_multiple-1.0)*box_size/4*1*0.01667#0.0125
       ymax = writer.calculate_coordinate(yside)
 			x_group_legend_rows << x_start
     end
+	y_tag_row = y_label_start
+	tagSNPMap.tags.length.times do |i|
+		tag_snp_legend_rows << y_tag_row
+		y_tag_row += box_size
+	end
+		
   end
 else #when working with multiple ethnicities include legend anyway
   keys = grouplisthash.keys
@@ -4773,7 +5000,10 @@ else #when working with multiple ethnicities include legend anyway
 		end
 	else
 		options.largetext ? adjust=1 : adjust=2
-		glist.groups.length.times do |i|
+		total_rows =  tagSNPMap.tags.length
+		glist.groups.each {|group| total_rows += 1 unless tagSNPMap.tags[group.name]}
+#		glist.groups.length.times do |i|
+		total_rows.times do |i|
 			  y_group_legend_rows << ymax/2  # + box_size/8
 				ymax = writer.calculate_coordinate(yside)
 				x_group_legend_rows << box_size + i * box_size/adjust.to_f
@@ -4855,9 +5085,14 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     chrom_x_starts << x_start
 		writer.draw_distance_track(current_chrom.name, current_chrom.snp_list, x_start,
 			y_distance_track_start, y_label_start, options.rotate,  options.add_snp_locs) if options.include_dist_track
-    x_new_start= writer.add_labels(current_chrom.name, current_chrom.snp_list, x_start,
-      y_label_start, y_label_end, true, options.rotate,  options.add_snp_locs, options.include_dist_track)
-    chrom_x_ends << x_new_start
+		if options.interaction_plot
+			x_new_start = writer.add_interaction_boxes(current_chrom.snp_list, x_start, y_label_start,
+			y_label_end, options.rotate, tagSNPMap)
+		else
+			x_new_start= writer.add_labels(current_chrom.name, current_chrom.snp_list, x_start,
+				y_label_start, y_label_end, true, options.rotate,  options.add_snp_locs, options.include_dist_track)
+		end
+		chrom_x_ends << x_new_start
   # add gene information if necessary
   if gene_rows > 0
     writer.add_gene_rows(current_chrom, x_start, y_gene_start, x_new_start, y_label_start, gene_rows)
@@ -4905,12 +5140,12 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
 
     if options.plot_pval
       pmaxscore = chromlist.maxscore['pvalue']
-      pminscore = chromlist.minscore['pvalue']
-      
+      pminscore = chromlist.minscore['pvalue']     
       writer.draw_pvalue_plot(:jitter=>options.jitter, :no_triangles=>options.no_triangles, :grouplist=>grouplist,
         :snp_list=>current_chrom.snp_list, :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box],
         :stat_max=>pmaxscore, :original_min=>pminscore, :first_plot=>first_chrom,
-        :rotate=>options.rotate, :stat_min=>pvalmin, :clean_axis=>options.clean_axes)
+        :rotate=>options.rotate, :stat_min=>pvalmin, :clean_axis=>options.clean_axes, 
+				:interaction_shapes=>options.interaction_plot)
       curr_stat_box += 1
     end
 
@@ -5106,7 +5341,8 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
       writer.draw_pvalue_plot(:jitter=>options.jitter, :no_triangles=>options.no_triangles, :grouplist=>grouplist,
         :snp_list=>current_chrom.snp_list, :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box],
         :stat_max=>chromlist.maxscore['pvalue'], :stat_min=>pvalmin, :original_min=>chromlist.minscore['pvalue'],
-        :first_plot=>plot_labels, :rotate=>options.rotate, :clean_axis=>options.clean_axes)
+        :first_plot=>plot_labels, :rotate=>options.rotate, :clean_axis=>options.clean_axes,
+				:interaction_shapes=>options.interaction_plot)
       curr_stat_box +=1
     end
 
@@ -5304,7 +5540,7 @@ rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
 					:snp_list=>current_chrom.snp_list, :x_start=>x_start, :y_start=>ystart_stat_boxes[curr_stat_box],
 					:stat_max=>chromlist.maxscore['pvalue'], :stat_min=>pvalmin, :original_min=>chromlist.minscore['pvalue'],
 					:first_plot=>include_labels, :prefix_title=>grouplistkeys[i] + "\n", :rotate=>options.rotate,
-					:clean_axis=>options.clean_axes)
+					:clean_axis=>options.clean_axes, :interaction_shapes=>options.interaction_plot)
 				curr_stat_box += 1
 			end
     end
@@ -5474,6 +5710,11 @@ if grouplisthash.length == 1 and !options.rotate
       writer.group_membership_plot(group.name, group.colorstr,  chromlist.chromhash[chromlist.chromarray.first].snp_list, x_original_start, y_group_legend_rows[index], 
 				:first_plot=>true, :show_one=>true, :grayscale=>options.grayscale, :rotate=>options.rotate, :last_plot=>true)
     end
+		tags = tagSNPMap.tags.keys.sort!
+		tags.each_with_index do |tag, index|
+			writer.group_membership_plot(tag, tagSNPMap.tags[tag],  chromlist.chromhash[chromlist.chromarray.first].snp_list, tag_snp_legend_x, tag_snp_legend_rows[index], 
+				:first_plot=>true, :show_one=>true, :grayscale=>options.grayscale, :rotate=>options.rotate, :last_plot=>true)		
+		end
   end
 
   # draw group summary plots
@@ -5547,9 +5788,36 @@ elsif options.rotate
 			grouplist = grouplisthash[GroupList.get_default_name]
 			if chromlist.results_complete?(grouplist.groups.length)
 				grouplist.groups.each_with_index do |group, index|
+					index = tagSNPMap.tags.length - grouplist.groups.length + index
 					writer.group_membership_plot(group.name, group.colorstr,  chromlist.chromhash[chromlist.chromarray.first].snp_list, 
 						x_group_legend_rows[index], y_group_legend_rows[index], :first_plot=>true, :text_rotate=>text_rotate,
 						:show_one=>true, :grayscale=>options.grayscale, :rotate=>options.rotate, :last_plot=>true)
+				end
+			end
+			# WORKING TAG KEY HERE HERE
+			if tagSNPMap.tags.length > 0
+				if options.rotate 
+					y_adjust_key = box_size * 10
+					x_adjust_key = 0
+				else
+					y_adjust_key = box_size * 10
+					x_adjust_key = 0
+				end
+				used_tags = Hash.new
+				grouplist.groups.each_with_index do |group, index|
+					used_tags[group.name] = 1
+					index = tagSNPMap.tags.length - grouplist.groups.length + index
+					writer.group_membership_plot(group.name, group.colorstr,  chromlist.chromhash[chromlist.chromarray.first].snp_list, 
+						x_group_legend_rows[index]-x_adjust_key, y_group_legend_rows[index]-y_adjust_key, :first_plot=>true, :text_rotate=>text_rotate,
+						:show_one=>true, :grayscale=>options.grayscale, :rotate=>options.rotate, :last_plot=>true)				
+				end
+				index = 0
+				tagSNPMap.tags.keys.each do |tag|
+					next if used_tags[tag]
+					writer.group_membership_plot(tag, tagSNPMap.tags[tag],  chromlist.chromhash[chromlist.chromarray.first].snp_list, 
+						x_group_legend_rows[index]-x_adjust_key, y_group_legend_rows[index]-y_adjust_key, :first_plot=>true, :text_rotate=>text_rotate,
+						:show_one=>true, :grayscale=>options.grayscale, :rotate=>options.rotate, :last_plot=>true)					
+					index+=1
 				end
 			end
 		else
