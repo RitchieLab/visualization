@@ -560,12 +560,14 @@ class ChromosomeList
       chrom.genes.each do |gene|
 				if gene.end <= minpos or gene.start >= maxpos
 					deletions << gene
-				elsif gene.start < minpos
-					gene.start = minpos
-				elsif gene.end > maxpos
-					gene.end = maxpos
-				end
-				
+				else
+					if gene.start < minpos
+						gene.start = minpos
+					end
+					if gene.end > maxpos
+						gene.end = maxpos
+					end
+				end			
       end
 
       deletions.each do |d_gene|
@@ -3957,8 +3959,8 @@ def read_group_data(snp, group, data)
     upperci = data[group.ucicol] if group.ucicol > -1
     cases = data[group.casescol] if group.casescol > -1
     controls = data[group.controlscol] if group.controlscol > -1
-    cafcases = data[group.cafcasescol] if group.casescol > -1
-    cafcontrols = data[group.cafcontrolscol] if group.controlscol > -1
+    cafcases = data[group.cafcasescol] if group.cafcasescol > -1
+    cafcontrols = data[group.cafcontrolscol] if group.cafcontrolscol > -1
     studynum = data[group.studycol] if group.studycol > -1
     powernum = data[group.powercol] if group.powercol > -1
     betauci = data[group.betaucicol] if group.betaucicol > -1
