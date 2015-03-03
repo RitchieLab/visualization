@@ -2370,7 +2370,7 @@ def draw_plot(genome, phenoholder, options)
 	else
 		for i in 1..num_chr_rows-1
 			second_row_start = last_max_chrom_box + row_starts[i-1]
-			second_row_start -= circle_size*5 if alternative_pheno_spacing == :standard
+			second_row_start -= circle_size*2 if alternative_pheno_spacing == :standard
 			row_starts << second_row_start
 			total_num_chromosomes < (i+1) * chroms_in_row ? lastrange = total_num_chromosomes : lastrange = (i+1) * chroms_in_row
 			last_max_chrom_box = max_chrom_box * genome.max_in_range((chroms_in_row*i)+1..lastrange)/max_chrom_size.to_f
@@ -2387,6 +2387,7 @@ def draw_plot(genome, phenoholder, options)
   phenotype_rows += 1 unless phenoholder.phenonames.length % phenotypes_per_row == 0
 
   total_y = row_starts.last + last_max_chrom_box 
+	total_y += last_max_chrom_box / 10 if options.chr_only
 	single_chrom_total_y = total_y - row_starts[0]
   # add row showing shapes/ethnicities when needed
   eth_shapes = genome.get_eth_shapes

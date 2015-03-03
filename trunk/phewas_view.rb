@@ -83,6 +83,7 @@ class Arg
 		options.boldfont = false
     options.p_thresh = 0.0
     options.phenofile = nil
+		options.group_colors = false
     options.ethlist = Array["AA","EA","MA", "H", "AP", "NA"]
     options.snpid = nil
     options.maxp_to_plot = 1.0
@@ -150,7 +151,8 @@ class Arg
       end
       opts.on("-l [group_map]", "Optional group map file") do |ancestry_map|
         options.ethmapfile = ancestry_map
-      end    
+      end
+			opts.on("-D", "--group-color", "Use colors from group file for point colors"){|gcolor| options.group_colors=true}
       opts.on("-c [class_name]", "Only results matching this phenotype class name are plotted") do |class_name|
         options.classname = class_name
       end   
@@ -275,6 +277,7 @@ Usage: phewas_view.rb [options]
                                      are plotted
     -B, --showbest                   Display detailed information for best score at each 
                                      phenotype
+    -D, --group-color                Use colors from group file for point colors
     -x [pheno_file]                  PheWAS expected phenotypes file
     -r [groups]                      List of groups to include (AA, EA, MA)
     -s [snp_id]                      SNP to display from input file
@@ -571,8 +574,9 @@ class ResultHolder
   
   # creates array of arrays of ResultValues to plot
   # each sub array contains the values for one phenotype
-  def generate_result_values(pval_thresh)
+  def generate_result_values(pval_thresh, params)
 
+		params[:group_colors] ? group_colors = true : group_colors = false
     @pval_threshold = pval_thresh
 
     resultvalues = Array.new
@@ -596,10 +600,10 @@ class ResultHolder
           resval.betaval = resultScore.beta
           resval.sampsize = resultScore.sampsize
           resval.snpname = resultScore.snpname
-          if !@single_snp
-            resval.colorstr = get_pval_color(resultScore.pval, result)
-          else
+					if @single_snp or group_colors
             resval.colorstr = get_single_pval_color(resultScore.pval, result, ethnicity)
+          else
+            resval.colorstr = get_pval_color(resultScore.pval, result)
           end
 
           if resval.pval < @pval_threshold
@@ -1976,10 +1980,37 @@ class DotPlotter
   def standard_font_size
     return @font_size_multiple * @diameter/0.8 + 1
   end
+	
+	# return space taken by text in coordinate system
+	def space_for_text(coordinates_per_pixel,label)	
+		font_size = standard_font_size
+		font_size *= 2.14
+		pixels = get_text_width(label, :pointsize=>font_size, :font_family=>'arial')
+		return pixels * coordinates_per_pixel
+  end
 
+	# return text width
+	def get_text_width(text, params)
+		pointsize = params[:pointsize] || 20
+		font_family = params[:font_family] || nil
+		font_style = params[:font_style] || nil
+		density_fraction = RVG::dpi
+		gc = Magick::Draw.new
+		img = Magick::Image.new(900,50){
+			self.density="#{density_fraction}x#{density_fraction}"
+			self.format='png'
+		}
+		gc.pointsize = pointsize
+		gc.font_family = font_family if font_family
+		metrics = gc.get_type_metrics(img,text)
+		return metrics.width
+	end
+	
   # draws legend identifying groups and colors associated with those groups
-  def draw_legend(canvas, ethcolors, xstart, ystart, rotate=false)
+  def draw_legend(canvas, ethcolors, xstart, ystart, params)
 
+		rotate = params[:rotate]
+		coordinates_per_pixel = params[:coordinates_per_pixel]
     legend_start = xstart + @offset_mult * @x_offset + @x_interior_offset
 
     length_x = @diameter * 5
@@ -1996,11 +2027,11 @@ class DotPlotter
     if rotate
       rotation = -90
       anchor = 'start'
-      length_x = @diameter * 3
+      length_x = @diameter * 2
       y_text_adjust=@diameter*2
     else
       rotation = 0
-      anchor = 'end'
+      anchor = 'start'
     end
 
     ethcolors.each do |eth, colorstr|
@@ -2008,16 +2039,17 @@ class DotPlotter
         text.tspan(eth).styles(:font_size => font_size, :text_anchor=>anchor)
       end
 
+			length_x = space_for_text(coordinates_per_pixel,eth) unless rotate
       canvas.g.translate(xstart, ystart) do |box|
         box.styles(:fill=>colorstr, :stroke=>'none', :stroke_width=>1, :fill_opacity=>0.8)
         if rotate
           box.rect(@diameter, @diameter, text_x-@diameter, @y_offset-@diameter)
         else
-          box.rect(@diameter, @diameter, text_x+@diameter, @y_offset-@diameter)
+          box.rect(@diameter, @diameter, text_x+length_x, @y_offset-@diameter)
+					length_x += @diameter + space_for_text(coordinates_per_pixel, " ")
         end
 
       end
-
       text_x += length_x
     end
   end
@@ -2343,7 +2375,6 @@ class DotPlotter
           samp_ystart = beta_ystart + y_interval + @y_offset * 0.75
         else
           samp_ystart = y_plots_start + y_interval + @y_offset * 0.75
-
         end
       end
       draw_sampsize_plot(canvas, pheno_order, plot_values, xstart, samp_ystart, xmax, y_interval, minsize, maxsize,
@@ -2559,7 +2590,6 @@ class DotPlotter
     stat_break = pval_interval.to_f/num_intervals
     y_interval = yend - ystart
     y_break = y_interval.to_f/num_intervals
-
     num_x = @x_offset * @offset_mult - @x_offset * 0.5
     current_stat_value = min
     precision=1
@@ -2598,7 +2628,8 @@ class DotPlotter
       end
     end
 
-    dist_mult = max_label_length.to_i/2 + 1.25
+#    dist_mult = max_label_length.to_i/2 + 1.25
+		dist_mult = 3.25
     # add title for this portion of plot
     canvas.g.translate(xstart,ystart).text(num_x-@diameter*dist_mult,y_interval/2).rotate(-90) do |text|
       text.tspan(plot_title).styles(:font_size=>font_size, :text_anchor=>'middle')
@@ -2645,7 +2676,6 @@ def draw_phewas(options)
   else
     resultholder.include_all_phenos = true
   end
-
 
   ethmap = EthMap.new
   ethmap.set_restricted_eths(options.ethlist)
@@ -2754,17 +2784,15 @@ def draw_phewas(options)
   # add room for the labels across bottom of plot
   max_pheno_length = resultholder.get_longest_label
 
-  # yside += (0.0018 * dotter.diameter * max_pheno_length) + 0.012 * dotter.diameter
-#  text_multiplier = 0.0020
   options.largetext ? text_multiplier = 0.0020 * dotter.font_size_multiple : text_multiplier = 0.0020
   if total_phenotypes < 10
-    text_multiplier = 0.0024
+    text_multiplier = 0.0025
   elsif total_phenotypes < 20
-    text_multiplier = 0.0023
+    text_multiplier = 0.0024
   elsif total_phenotypes < 30
-    text_multiplier = 0.0022
+    text_multiplier = 0.0023
   elsif total_phenotypes < 40
-    text_multiplier = 0.0021
+    text_multiplier = 0.0022
   end
   
   yside += (text_multiplier* dotter.diameter * max_pheno_length) + 0.012 * dotter.diameter
@@ -2789,10 +2817,24 @@ def draw_phewas(options)
     ymax = dotter.calculate_coordinate(yside)
   end
 
-  if !resultholder.single_snp.nil? and options.rotate
+  if (!resultholder.single_snp.nil? or options.group_colors) and options.rotate
     yside = yside + dotter.diameter * 0.00355
   end
 
+	legend_y_space=0
+	# add space for legend when rotated (add to Y)
+	if (!resultholder.single_snp.nil? or options.group_colors) and options.rotate
+		# need max label for ethnicity
+		max_label=""
+		resultholder.ethmap.ethindata.each do |ethname, tf|
+			max_label = ethname if ethname.length > max_label.length
+		end
+		legend_y_space = dotter.space_for_text(ymax/yside.in, max_label)
+		y_pval_start += legend_y_space
+		yside += legend_y_space/(ymax/yside.in) / RVG::dpi
+		ymax += legend_y_space
+	end
+	
   # set first color to be plotted
   dotter.first_color = resultholder.nonsigcolor
 
@@ -2805,12 +2847,12 @@ def draw_phewas(options)
       pval_threshold = resultholder.get_log10(options.p_thresh)
     end
 
-    plot_values = resultholder.generate_result_values(pval_threshold)
+    plot_values = resultholder.generate_result_values(pval_threshold, :group_colors=>options.group_colors)
 
     if options.rotate
-      dotter.draw_title(canvas, 0, 0, ymax, y_pval_start+dotter.diameter/4, options.title, options.rotate)
+      dotter.draw_title(canvas, 0, 0, ymax, y_pval_start+dotter.diameter/4-legend_y_space, options.title, options.rotate)
     else
-      dotter.draw_title(canvas, 0, 0, xmax, y_pval_start+dotter.diameter/2, options.title)
+      dotter.draw_title(canvas, 0, 0, xmax, y_pval_start+dotter.diameter/4, options.title)
     end
 
     if options.maxp_to_plot.to_f < 1.0
@@ -2819,7 +2861,7 @@ def draw_phewas(options)
 
     rotate_grid_offset = dotter.diameter*3.0
     # add legend when only single SNP plotted
-    if !resultholder.single_snp.nil? 
+    if !resultholder.single_snp.nil? or options.group_colors
       # only draw legend including ethnicities and colors selected
       ethcolorhash = Hash.new
       resultholder.ethmap.ethindata.each do |ethname, tf|
@@ -2828,7 +2870,8 @@ def draw_phewas(options)
         end
       end
       rotate_grid_offset = 0
-      dotter.draw_legend(canvas, ethcolorhash, 0, y_pval_start, options.rotate)
+      dotter.draw_legend(canvas, ethcolorhash, 0, y_pval_start, :rotate=>options.rotate,
+				:coordinates_per_pixel=>xmax/xside.in)
     end
 
     options.redline = resultholder.get_log10(options.redline.to_f) if options.redline
@@ -3051,10 +3094,6 @@ plotter.center_size_multiple = 0.59 # 0.5 is original
 plotter.title_text_adj = 0.5
 
 title_adjustment = 0.028 * plotter.font_size_multiple	
-
-	
-	
-puts "font_mult=#{plotter.font_size_multiple} total_radii=#{total_radii} title_size_fit=#{title_size_fit}"
 	
   xside_end_addition = 0
   resultholder.max_title_length += 2 if options.beta
@@ -3064,7 +3103,6 @@ puts "font_mult=#{plotter.font_size_multiple} total_radii=#{total_radii} title_s
   # add some space on both sides outside of plot
   if resultholder.max_title_length > title_size_fit
     xside_end_addition = title_adjustment * plotter.radius * (resultholder.max_title_length - title_size_fit)
-puts "xside_end_addition=#{xside_end_addition} plotter.radius=#{plotter.radius}"
   end
 
   xside = plotter.calculate_plot_width(total_radii, xside_end_addition)
@@ -3081,10 +3119,6 @@ puts "xside_end_addition=#{xside_end_addition} plotter.radius=#{plotter.radius}"
   # add vertical space for the main circle plot (which should be the same as plot width)
   yside += plotter.calculate_plot_width(total_radii, 0)/yside_mult
   ymax += plotter.calculate_coordinate(yside)
-puts "xmax=#{xmax} xside=#{xside} ymax=#{ymax} yside=#{yside}"
-
-yside = 4
-xside = 8
 	
   rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     canvas.background_fill = 'rgb(255,255,255)'

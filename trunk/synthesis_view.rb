@@ -21,7 +21,7 @@
 
 ENV['MAGICK_CONFIGURE_PATH']='/gpfs/group/mdr23/usr/tools/etc/ImageMagick'
 
-# Requres rubygems
+# Requires rubygems
 begin
   require 'rubygems'
 rescue LoadError => e
@@ -253,7 +253,7 @@ class Arg
       opts.on("-D", "--forest-legend", "Draw legend on Forest plot") do |for_legend|
         options.forest_legend = true
       end
-      opts.on("-W", "--power-plot", "Draw power plot") do |pow_plot|
+      opts.on("-W", "--power-plot", "Draw power track") do |pow_plot|
         options.plot_power = true
       end
       opts.on("-L", "--large-or", "Significant odds ratios larger in size on plot") do |large_or|
@@ -293,7 +293,7 @@ class Arg
 
     begin
       opts.parse!(args)
-    rescue => e
+    rescue StandardError => e
       puts e, "", opts
       exit(1)
     end
@@ -556,6 +556,10 @@ class ChromosomeList
     @chromhash.each_value do |chrom|
       minpos = chrom.snp_list.get_min
       maxpos = chrom.snp_list.get_max
+			if maxpos < minpos
+				maxpos = minpos
+				minpos = chrom.snp_list.get_max
+			end
       deletions = Array.new
       chrom.genes.each do |gene|
 				if gene.end <= minpos or gene.start >= maxpos
@@ -594,8 +598,7 @@ class ChromosomeList
 
       # mark ones that are used here
       used_gene = Hash.new
-      num_rows = 1
-			
+      num_rows = 1		
       while used_gene.length != num_genes
         total_indexes.times do |i|
           # when a gene is placed mark it as done
@@ -605,15 +608,13 @@ class ChromosomeList
           end
           # locate ending point (in terms of snps for this gene)
           end_snp = (chrom.genes[i].end.to_f - minpos)/snp_size
-          start_snp = (chrom.genes[i].start.to_f - minpos) /snp_size
-					
+          start_snp = (chrom.genes[i].start.to_f - minpos) /snp_size				
           # line_start and line_end mark location of actual bar on plot
           chrom.genes[i].line_start = start_snp / num_snps
           chrom.genes[i].line_end = end_snp / num_snps
           snp_length = end_snp - start_snp
           chrom.genes[i].alignment = 'middle'
           chrom.genes[i].text_anchor = (end_snp-start_snp)/num_snps + chrom.genes[i].line_start
-
           gene_space = original_gene_space
           # increase gene space for long gene names
 					# when gene isn't covering a long stretch of genome
@@ -4149,7 +4150,7 @@ def set_groups_subgroup(glisthash, lines, defaultkey, groupcol, subgroupcol,
 #			snpTags.tags.has_key?(name) ? colorstr = snpTags.tags[name] : colorstr = GroupList.get_next_color
 			colorstr = GroupList.get_next_color
       colorhash[name] = colorstr
-			groupcolors[group.name]=colorstr
+			groupcolors[name]=colorstr
     end
 
     glisthash.each_value do |glist|
@@ -4319,9 +4320,10 @@ def set_groups(glisthash, line, defaultkey, highlighted_group="",
     end
     colorhash = Hash.new
     unique_names.each_key do |name|
+			puts name
 			colorstr = GroupList.get_next_color
       colorhash[name] = colorstr
-			groupcolors[group.name]=colorstr
+			groupcolors[name]=colorstr
     end
 
     glisthash.each_value do |glist|
@@ -4972,6 +4974,7 @@ x_group_legend_rows = Array.new
 tag_snp_legend_rows = Array.new
 tag_snp_legend_x = x_start - box_size * 2
 # add if need to show which groups have data for each SNP
+puts "#{grouplisthash.length}"
 if grouplisthash.length == 1 and !options.rotate
   grouplist = grouplisthash[GroupList.get_default_name]
   if chromlist.results_complete?(grouplist.groups.length)
