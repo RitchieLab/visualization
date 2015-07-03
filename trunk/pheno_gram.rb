@@ -1,5 +1,5 @@
 #!/usr/bin/env ruby
-# Requres rubygems
+# Requires rubygems
 
 ENV['MAGICK_CONFIGURE_PATH'] = '/gpfs/group/mdr23/usr/tools/etc/ImageMagick'
 
@@ -8,6 +8,7 @@ SNPDefaultColor = 'black'
 DefaultEthnicity = '-'
 DefaultPhenotype = 'Unknown'
 $color_column_included = false
+#CytoBandFile = 'cytoBand.txt'
 CytoBandFile = '/Users/dudeksm/Documents/lab/rails/visualization/plot/cytoBand.txt'
 #CytoBandFile = '/gpfs/group1/m/mdr23/www/visualization/plot/cytoBand.txt'
 
@@ -724,7 +725,8 @@ class ChromosomeFileReader < FileHandler
 		open(filename)
 			headers = read_headers(@file.gets) # skip header line
 	    while oline=@file.gets
-      oline.each_line("\r") do |line|			
+      oline.each_line("\r") do |line|
+				next unless line =~ /\d/
 				cols = strip_and_split_delim(line, "\t")
 				!cols[@centcol].nil? ? cent_array = cols[@centcol].split(",") : cent_array = Array.new
 				centromere_info = cent_array.collect{|s| s.to_i}
@@ -835,7 +837,9 @@ class PhenoGramFileReader < FileHandler
     
     set_columns(lines.shift, chr_only)
     group = 'default'
+		lineno = 1
     lines.each do |line|
+			lineno += 1
       next unless line =~ /\w/
       data = strip_and_split_delim(line,"\t")
       # add SNP info 
@@ -843,7 +847,11 @@ class PhenoGramFileReader < FileHandler
 			
 			chromosome = genome.get_chrom(data[@chromcol])
       raise "Problem in #{filename} with line:\n#{line}\n#{data[@chromcol]} is not a valid chromsome number" unless chromosome
-      raise "Problem in #{filename} with line:\n#{line}\nPosition outside chromosome boundaries" unless chromosome.pos_good?(data[@bpcol])
+#      raise "Problem in #{filename} with line:\n#{line}\nPosition outside chromosome boundaries" unless chromosome.pos_good?(data[@bpcol])
+			unless(chromosome.pos_good?(data[@bpcol]))
+				print "#{filename}: line ##{lineno} pos: #{data[@bpcol]} is outside chr #{data[@chromcol]} boundaries\n";
+				next
+			end
 
       group = data[@groupcol] if @groupcol
 			@phenocol ? phenotype = data[@phenocol] : phenotype = DefaultPhenotype
@@ -944,6 +952,8 @@ class ShapeFactory
       return PhenoDiamond.new
     when 3
       return PhenoTriangle.new
+		when 4
+			return PhenoSquare.new
     else
       return PhenoCircle.new
     end  
@@ -2230,7 +2240,7 @@ class PhenotypeLabels < Plotter
 			if params[:zoom]
 				label_size = 40
 				char_per_row = label_size * 4
-			else 
+			else
 				label_size = 38
 				char_per_row = label_size * 5
 			end
@@ -2269,7 +2279,6 @@ class PhenotypeLabels < Plotter
       y_offset = 2
     end  
     phenokeys = phenoholder.phenonames.keys.sort{|a,b| phenoholder.phenonames[a].sortnumber <=> phenoholder.phenonames[b].sortnumber}
-    
     phenos_per_column = phenokeys.length / phenos_per_row 
     phenos_column_rem = phenokeys.length % phenos_per_row 
     curr_pheno = 0
@@ -2327,7 +2336,7 @@ def draw_plot(genome, phenoholder, options)
   # a circle will be 5Y in height
   # max chrom size (1) will be 40 circles (or 200Y) in height
   # chromosome will be 2 circles wide
-  options.thin_lines ? circle_size = 80 : circle_size = 20
+  options.thin_lines ? circle_size = 20 : circle_size = 20
 
 	total_num_chromosomes = genome.chromosomes.length-1
 	chroms_in_row = ChromosomePlotter.calc_chr_per_row(total_num_chromosomes)
@@ -2396,7 +2405,7 @@ def draw_plot(genome, phenoholder, options)
 		max_ethlength=0
 		eth_shapes.each_pair {|ethnicity,shape| max_ethlength = ethnicity.length if ethnicity.length > max_ethlength}
 		ethlabels_per_row = PhenotypeLabels.phenotypes_per_row(max_ethlength,
-			:big_font=>options.big_font, :zoom=>options.zoomchr)
+			:big_font=>options.big_font, :zoom=>options.zoomchr, :chroms_in_row=>chroms_in_row)
 		ethlabel_rows = eth_shapes.length / ethlabels_per_row
 		ethlabel_rows += 1 unless eth_shapes.length % ethlabels_per_row == 0
 		
@@ -2523,7 +2532,7 @@ def draw_plot(genome, phenoholder, options)
     eth_shapes = genome.get_eth_shapes
     Ethlabels.draw(:canvas=>canvas, :xstart=>padded_width, :bigtext=>options.big_font,
       :eth_shapes=>eth_shapes, :ystart=>eth_label_y_start, :shapes_per_row=>ethlabels_per_row,
-      :xtotal=>xmax-padded_width) if eth_shapes.length > 1
+      :xtotal=>xmax-padded_width) if eth_shapes.length > 1 and !options.chr_only
     
     eth_shapes.length > 1 ? label_shape=PhenoSquare.new : label_shape = PhenoCircle.new
     PhenotypeLabels.draw(:canvas=>canvas, :xstart=>padded_width, :ystart=>phenotype_labels_y_start,
@@ -2544,7 +2553,7 @@ end
 
 options = Arg.parse(ARGV)
 
-options.highres ? RVG::dpi=1800 : RVG::dpi=600
+options.highres ? RVG::dpi=1200 : RVG::dpi=300
 srand(options.rand_seed)
 
 genome = Genome.new

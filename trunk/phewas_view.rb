@@ -1762,7 +1762,8 @@ class RadialPlotter
     sigcolor = 'red'
 
     y_correction = 2.0 + (0.02 * (num_results-50))
-    
+#puts "line_size=#{line_size}"  
+#puts "number results = #{num_results}"
     num_results.times do |i|
       stroke_color = 'black'
       if p_thresh > 0
@@ -1787,24 +1788,33 @@ class RadialPlotter
       end
 
       y_shift = -length-line_size/5
-    
+#y_shift_orig = y_shift
+#print "rotation=#{rotation} y_shift(start)=#{y_shift} "    
       if rotation >= 140 and rotation < 180
+#print "140-> <180 #{(rotation-140)/20 * (@font_size_multiple*y_correction*@title_text_adj-1.0)}"
+#maxtmp=y_shift - line_size * (180-140)/20 * (@font_size_multiple*y_correction*@title_text_adj-1.0)	
         y_shift -= line_size * (rotation-140)/20 * (@font_size_multiple*y_correction*@title_text_adj-1.0)
+#puts "rotation 180 MAX=#{maxtmp/y_shift_orig} increase=#{maxtmp-y_shift_orig}"
       elsif rotation >= 180 and rotation < 220
+#maxtmp=y_shift - line_size * (220-180)/20 * (@font_size_multiple*y_correction*@title_text_adj-1.0)
         y_shift -= line_size * (220-rotation)/20 * (@font_size_multiple*y_correction*@title_text_adj-1.0)
+#puts "rotation 180 MAX=#{maxtmp/y_shift_orig}"
       elsif rotation == 0
 #        largetext ? y_shift -= line_size * (120-rotation)/120 * (@font_size_multiple*2-1.0) : y_shift -= line_size * 0.18 * @font_size_multiple
 				largetext ? y_shift -= line_size * (120-rotation)/120 * (@font_size_multiple*2.0*@title_text_adj-1.0) : y_shift -= line_size * 0.18 * @font_size_multiple 
       elsif rotation <= 40
+#print "UNDER 40 #{(40-rotation)/120} #{(40-rotation)/120 * (@font_size_multiple*@title_text_adj-1.0)}"
 #         y_shift -= line_size * (40-rotation)/120 * (@font_size_multiple*2-1.0)
 				y_shift -= line_size * (40-rotation)/120 * (@font_size_multiple*@title_text_adj-1.0)
         # adjust it based on length of line size at that position
         # make farther from original if line is shorter
       elsif rotation >= 320
 #        y_shift -= line_size * (rotation-320)/20 * (@font_size_multiple*2-1.0)
+#maxtmp=y_shift - line_size * (360-320)/20 * (@font_size_multiple*2*@title_text_adj-1.0)
+#puts "rotation 360 MAX=#{maxtmp/y_shift_orig} increase=#{maxtmp-y_shift_orig}"
 				y_shift -= line_size * (rotation-320)/20 * (@font_size_multiple*2*@title_text_adj-1.0)
       end
-
+#puts "y_shift(end)=#{y_shift} percent change=#{y_shift/y_shift_orig}"
 				label = reslist.ordered[i]
         if use_beta
           if reslist.scores[reslist.ordered[i]].beta < 0
@@ -1838,6 +1848,7 @@ class RadialPlotter
       end
       rotation += rotate_increment
     end
+#exit
     fill_color = '#FF7F24'
 #fill_color = 'none'
     circle_size = @radius * @line_size
