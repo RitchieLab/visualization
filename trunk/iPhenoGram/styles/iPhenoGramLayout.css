@@ -1,0 +1,138 @@
+/* iPhenoGramLayout.css */
+
+#phenolist {
+	position: absolute;
+	left: 935px;
+	top: 20px;
+	height: 404px;
+	width: 150px;
+}
+
+
+#chrommap {
+	position: absolute;
+	left: 10px;
+	top: 20px;
+}
+
+#drawing {
+	position: absolute;
+	left: 198px;
+	top: 20px;
+}
+
+#controlpanel{
+	position: absolute;
+	left: 935px;
+	top: 429px;
+	width: 150px;
+	height: 275px;
+	padding: 0px;
+	margin: 0px;
+	font-size: 0.7em;
+}
+
+#display{
+	position: absolute;
+	left: 10px;
+	top: 200px;
+	width: 183px;
+	height: 504px;
+}
+
+#displayFrame{
+	width: 183px;
+	height: 500px;
+	border-radius: 10px;
+}
+
+#chromSelectionPanel{
+	position: absolute;
+	left: 935px;
+	top: 429px;
+	width: 150px;
+	height: 275px;
+	overflow: auto;
+	display: none; 
+}
+
+#intermediateImage{
+	position: absolute;
+	left: 10px;
+	top: 750px;
+	display: none;
+}
+
+#svgdataurl{
+	position: absolute;
+	left: 10pxs;
+	top: 720px;
+}
+
+#pngdataurl{
+	position: absolute;
+	left: 400px;
+	top: 720px;
+	display: none;
+}
+
+
+div.scroll{
+	overflow: auto;
+/* 	overflow: scroll; */
+}
+
+div.tab-panel{
+	overflow: auto;
+	width: 134px;
+	height: 240px;
+}
+
+ul.increase-height{
+	line-height:180%;
+}
+
+ul.decrease-height{
+	line-height:80%;
+}
+
+.gray-background{
+	background-color: #E8E8E8;
+}
+/* 
+ul.nav li {
+ background-color:blue;
+}
+ */
+/* 
+ul.nav li.selected {
+ background-color:red;
+}
+ */
+
+ul.no-bullet{
+	margin: 0px;
+	padding: 0px;
+	list-style-type: none;
+}
+
+
+
+li.increase-margin{
+	padding: 2px;
+	margin: 0px;
+}
+
+.smallfont{
+	font-size: 0.9em;
+}
+
+div.containerBlock{
+	border: 2px solid;
+	position: absolute;
+	border-radius: 10px;
+	margin: 0px;
+	overflow: hidden;
+/* 	border-style: ridge; */
+}
+

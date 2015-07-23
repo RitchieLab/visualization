@@ -1,0 +1,42 @@
+div.tooltip {
+  position: absolute;	
+  text-align: center;		
+  padding: 10px;	
+  font: 0.8em sans-serif;	
+  background: lightsteelblue;	
+  border: 0px;					
+  border-radius: 8px;
+ /*  pointer-events: none;	This line needs to be removed */	
+}			
+			
+
+.cytoband{
+	pointer-events: all;
+}
+			
+			
+.overlay {
+	fill: none;
+	pointer-events: all;
+}
+	
+.mapping{
+	pointer-events: all;
+}
+				
+#cytobutton{
+	 position: absolute;
+	right: 70px;
+	top: 20px;
+}
+
+#resetbutton{
+	position: absolute;
+	right: 20px;
+	top: 20px;
+}
+			
+
+
+			
+			
