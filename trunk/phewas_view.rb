@@ -40,7 +40,7 @@ include Magick
 
 RVG::dpi=600
 
-Version = '0.30'
+Version = '0.3.1'
 
 # check for windows and select alternate font based on OS
 Font_family_style = RUBY_PLATFORM =~ /mswin/ ? "Verdana" : "Times"
@@ -2019,9 +2019,9 @@ class DotPlotter
 	
   # draws legend identifying groups and colors associated with those groups
   def draw_legend(canvas, ethcolors, xstart, ystart, params)
-
 		rotate = params[:rotate]
 		coordinates_per_pixel = params[:coordinates_per_pixel]
+		max_label = params[:max_label]
     legend_start = xstart + @offset_mult * @x_offset + @x_interior_offset
 
     length_x = @diameter * 5
@@ -2042,15 +2042,25 @@ class DotPlotter
       y_text_adjust=@diameter*2
     else
       rotation = 0
-      anchor = 'start'
+      anchor = 'end'
+			text_x = @offset_mult * @x_offset
+# 			text_x /= 1.25
     end
 
     ethcolors.each do |eth, colorstr|
-      canvas.g.translate(xstart, ystart).text(text_x, @y_offset-y_text_adjust).rotate(rotation) do |text|
-        text.tspan(eth).styles(:font_size => font_size, :text_anchor=>anchor)
-      end
+			length_x = space_for_text(coordinates_per_pixel,max_label) unless rotate
+			if rotate
+				canvas.g.translate(xstart, ystart).text(text_x, @y_offset-y_text_adjust).rotate(rotation) do |text|
+					text.tspan(eth).styles(:font_size => font_size, :text_anchor=>anchor)
+				end
+			else
+				canvas.g.translate(xstart, ystart).text(text_x+length_x-@diameter/5, @y_offset-y_text_adjust).rotate(rotation) do |text|
+					text.tspan(eth).styles(:font_size => font_size, :text_anchor=>anchor)
+				end
+			end
 
-			length_x = space_for_text(coordinates_per_pixel,eth) unless rotate
+#			length_x = space_for_text(coordinates_per_pixel,eth) unless rotate
+			
       canvas.g.translate(xstart, ystart) do |box|
         box.styles(:fill=>colorstr, :stroke=>'none', :stroke_width=>1, :fill_opacity=>0.8)
         if rotate
@@ -2202,7 +2212,6 @@ class DotPlotter
     y_interval = @y_plot_height
 
     pval_interval = maxpval - minpval
-
     x_circle_start = x_circle = xstart + @offset_mult * @x_offset + @x_interior_offset
 
     if plot_beta and plot_sampsizes
@@ -2276,7 +2285,6 @@ class DotPlotter
       end 
       x_circle = increment_x_phenotype(x_circle)
     end
-
     color_hash.each do |colorstr, points|
       canvas.g.translate(xstart, y_plots_start) do |pen|
         if !draw_triangle
@@ -2331,7 +2339,6 @@ class DotPlotter
     # calculate end positon of box around plot
     x_finish = decrement_x_phenotype(x_text)
     x_end_box = x_finish + @x_interior_offset - xstart
-
      # if selected draw red line at indicated p value
     if redlinep
       y_point = (1-((redlinep.to_f) / pval_interval)) * y_interval
@@ -2771,7 +2778,52 @@ def draw_phewas(options)
   title_fract = 0.008 if options.rotate
   yside = dotter.add_space_for_title(yside, title_fract)
   ymax = dotter.calculate_coordinate(yside)
+	y_title_start = ymax
 
+	 if (!resultholder.single_snp.nil? or options.group_colors) and options.rotate
+    yside = yside + dotter.diameter * 0.00355
+  end
+
+	dotter.x_offset = sidebuffer
+	legend_y_space=0
+	# add space for legend when rotated (add to Y)
+	if (!resultholder.single_snp.nil? or options.group_colors) 
+			# need max label for ethnicity
+			max_label=""
+			edata = Array.new
+			resultholder.ethmap.ethindata.each do |ethname, tf|
+				if tf
+					max_label = ethname if ethname.length > max_label.length
+					edata.push(ethname)
+				end
+			end
+		if options.rotate
+			legend_y_space = dotter.space_for_text(ymax/yside.in, max_label)
+#			y_pval_start += legend_y_space
+			yside += legend_y_space/(ymax/yside.in) / RVG::dpi
+			ymax += legend_y_space
+		else
+			legend_x_space = dotter.space_for_text(xmax/xside.in, max_label)
+			legend_x_start = dotter.offset_mult * dotter.x_offset + dotter.x_interior_offset
+			# determine end
+			distance_increment=dotter.increment_x_phenotype(0)
+			legend_x_end = resultholder.pheno_list.pheno_order.length * distance_increment
+			legend_x_space = legend_x_space + dotter.space_for_text(xmax/xside.in, " ") + dotter.diameter;
+			
+			# per labels per row 
+			labels_per_row = (legend_x_end / legend_x_space).to_i;
+			nlabel_rows = edata.length / labels_per_row
+			if((nlabel_rows - nlabel_rows.to_i) > 0.000000000001)
+				nlabel_rows +=1
+			end
+			legend_y_row =  dotter.diameter * 1.25
+			legend_y_space = (nlabel_rows-1) * legend_y_row
+#			y_pval_start += legend_y_space
+			yside += legend_y_space/(ymax/yside.in) / RVG::dpi
+			ymax += legend_y_space		
+		end
+	end
+	
   # add plot height for beta
   plot_height_mult=1
   plot_offset_mult=1
@@ -2828,23 +2880,7 @@ def draw_phewas(options)
     ymax = dotter.calculate_coordinate(yside)
   end
 
-  if (!resultholder.single_snp.nil? or options.group_colors) and options.rotate
-    yside = yside + dotter.diameter * 0.00355
-  end
-
-	legend_y_space=0
-	# add space for legend when rotated (add to Y)
-	if (!resultholder.single_snp.nil? or options.group_colors) and options.rotate
-		# need max label for ethnicity
-		max_label=""
-		resultholder.ethmap.ethindata.each do |ethname, tf|
-			max_label = ethname if ethname.length > max_label.length
-		end
-		legend_y_space = dotter.space_for_text(ymax/yside.in, max_label)
-		y_pval_start += legend_y_space
-		yside += legend_y_space/(ymax/yside.in) / RVG::dpi
-		ymax += legend_y_space
-	end
+ 
 	
   # set first color to be plotted
   dotter.first_color = resultholder.nonsigcolor
@@ -2852,7 +2888,7 @@ def draw_phewas(options)
   rvg = RVG.new(xside.in, yside.in).viewbox(0,0,xmax,ymax) do |canvas|
     canvas.background_fill = 'rgb(255,255,255)'
 
-    dotter.x_offset = sidebuffer
+#    dotter.x_offset = sidebuffer
     pval_threshold = 0
     if options.p_thresh > 0
       pval_threshold = resultholder.get_log10(options.p_thresh)
@@ -2863,7 +2899,7 @@ def draw_phewas(options)
     if options.rotate
       dotter.draw_title(canvas, 0, 0, ymax, y_pval_start+dotter.diameter/4-legend_y_space, options.title, options.rotate)
     else
-      dotter.draw_title(canvas, 0, 0, xmax, y_pval_start+dotter.diameter/4, options.title)
+      dotter.draw_title(canvas, 0, 0, xmax, y_title_start+dotter.diameter/4, options.title)
     end
 
     if options.maxp_to_plot.to_f < 1.0
@@ -2875,14 +2911,34 @@ def draw_phewas(options)
     if !resultholder.single_snp.nil? or options.group_colors
       # only draw legend including ethnicities and colors selected
       ethcolorhash = Hash.new
+			ethorder = Array.new
       resultholder.ethmap.ethindata.each do |ethname, tf|
         if tf
           ethcolorhash[ethname] = resultholder.ethmap.eths[ethname].colorstr
+					ethorder.push(ethname)
         end
       end
       rotate_grid_offset = 0
-      dotter.draw_legend(canvas, ethcolorhash, 0, y_pval_start, :rotate=>options.rotate,
-				:coordinates_per_pixel=>xmax/xside.in)
+			#labels_per_row legend_y_row
+			if options.rotate
+				dotter.draw_legend(canvas, ethcolorhash, 0, y_pval_start, :rotate=>options.rotate,
+					:coordinates_per_pixel=>xmax/xside.in, :max_label=>max_label)
+			else
+				current_row=nlabel_rows - 1
+				current_eth=0
+				while current_row >= 0
+					tempEths = Hash.new
+					ethIndx=0
+					while(ethIndx < labels_per_row)
+						tempEths[ethorder[current_eth]]=ethcolorhash[ethorder[current_eth]]
+						ethIndx+=1
+						current_eth+=1
+					end
+					dotter.draw_legend(canvas, tempEths, 0, y_pval_start-(legend_y_row*current_row), :rotate=>options.rotate,
+						:coordinates_per_pixel=>xmax/xside.in, :max_label=>max_label)
+					current_row -=1
+				end
+			end
     end
 
     options.redline = resultholder.get_log10(options.redline.to_f) if options.redline
