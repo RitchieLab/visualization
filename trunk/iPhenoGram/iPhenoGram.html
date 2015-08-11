@@ -8,7 +8,7 @@
 <style>
 .inlined{
 	display: inline-block;
-	vertical-align: top; 
+	vertical-align: top;
 	border: 2px solid;
 }
 </style>
@@ -34,8 +34,8 @@
 			<li class="increase-margin"><input type="checkbox" id="cytoCheck" name="vehicle" value="1" checked="1">Draw cytobands</li>
 			<li class="increase-margin"><input type="checkbox" id="includePhenos" name="vehicle" value="1" checked="1">Draw phenotypes</li>
 			<li class="increase-margin"><button type="button" id="save">Save image</button></li>
-			<li class="increase-margin"><button type="button" id="saveOptions">Save options</button></li>	
-			<li>Load options:<input type="file" id="iPhenoGramOptions" name="optionFile" class="control" /></li>		
+			<li class="increase-margin"><button type="button" id="saveOptions">Save options</button></li>
+			<li>Load options:<input type="file" id="iPhenoGramOptions" name="optionFile" class="control" /></li>
 		</ul>
 	</div>
 	<div id="controlpanel-2" class="tab-panel">
@@ -60,10 +60,10 @@
 <script type="text/javascript" src="scripts/jquery-ui.min.js"></script>
 <script type="text/javascript" src="scripts/d3.v3.min.js"></script>
 <script type="text/javascript" src="scripts/csg.iphenogram.js"></script>
-<script type="text/javascript" src="scripts/csg.colorkey.js"></script> 
-<script type="text/javascript" src="https://canvg.googlecode.com/svn/trunk/rgbcolor.js"></script> 
-<script type="text/javascript" src="https://canvg.googlecode.com/svn/trunk/canvg.js"></script> 
-<script type="text/javascript" src="scripts/default-data.js"></script> 
+<script type="text/javascript" src="scripts/csg.colorkey.js"></script>
+<script type="text/javascript" src="https://canvg.googlecode.com/svn/trunk/rgbcolor.js"></script>
+<script type="text/javascript" src="https://canvg.googlecode.com/svn/trunk/canvg.js"></script>
+<script type="text/javascript" src="scripts/default-data.js"></script>
 
 <!-- <script type="text/javascript" src="scripts/canvg.js"></script>  -->
 <script>
@@ -77,12 +77,12 @@ var phenosIn = [];
 $(document).ready(function() {
 	var inputInfo = {};
 
-	var chromplot	=	$("#drawing").iphenogram({chroms: chromsIn, phenos: phenosIn, 
-	 cytoBands: cytoBandsIn, zoom_map: true, plotname: "mainplot", chromsOnly: false,
+	var chromplot	=	$("#drawing").iphenogram({chroms: chromsIn, phenos: phenosIn,
+	 cytoBands: cytoBandsIn, zoom_map: true, chromsOnly: false,
 	 chromwidth: 64, circlesize: 28});
 	var chrommap=$("#chrommap").iphenogram(
 		{height: 170, width: 183, chroms: chromsIn, phenos: phenosIn, cytoBands: cytoBandsIn,
-			zoom_enabled: false, tip_enabled: false, include_map: true, plotname: "map",
+			zoom_enabled: false, tip_enabled: false, include_map: true,
 			includedChroms:[], chromwidth: 64});
 	chromplot.iphenogram("setZoomRectangle", chrommap.iphenogram("getMapRectangle"));
 	var pheno_array = chromplot.iphenogram("getPhenoTypes");
@@ -96,25 +96,25 @@ $(document).ready(function() {
   	// a must be equal to b
 	  return 0;
 	});
-	
+
 	$("#phenolist").colorkey({height: 400, width: 150, keyInfo: pheno_array});
 	$("#phenolist").on("colorkeyselected", function(event, data){
 		$("#drawing").iphenogram("highlightPhenos", data.keyNames);
 	});
 	addChromsToList($("#chrommap").iphenogram('getChromNames'), $("#chrommap").iphenogram('option', 'includedChroms'));
-	
-	$("#drawing").on("iphenogramsimple", function(event, data){
-			var searchStr = "https://www.ncbi.nlm.nih.gov/SNP/snp_ref.cgi?searchType=adhoc_search&type=rs&rs=" 
+
+	$("#drawing").on("iphenogramposSelected", function(event, data){
+			var searchStr = "https://www.ncbi.nlm.nih.gov/SNP/snp_ref.cgi?searchType=adhoc_search&type=rs&rs="
 				+ data.posInfo.id;
 			$("#displayFrame").attr('src', searchStr);
 	});
-	
-	$("#drawing").on("iphenogramselect", function(event, data){
+
+	$("#drawing").on("iphenogramselectPheno", function(event, data){
   	var keysSet = {};
   	keysSet[data.phenoName]=1;
-  	$("#phenolist").colorkey('setSelection', keysSet);		
+  	$("#phenolist").colorkey('setSelection', keysSet);
 	});
-  
+
   function handleFileSelect(evt) {
   	var files = evt.target.files; // FileList object
 
@@ -128,10 +128,10 @@ $(document).ready(function() {
       reader.readAsText(f);
     }
   }
-  
-  
+
+
   function loadInputFiles(evt){
-  
+
   	$("#drawing").iphenogram('readPhenoInputString', inputInfo['iPhenogramFiles']);
 //   	$("#chrommap").iphenogram('readPhenoInputString', inputInfo['iPhenogramFiles']);
 		$("#drawing").iphenogram('readGenomeString', inputInfo['genomeFile']);
@@ -144,7 +144,7 @@ $(document).ready(function() {
 		$("#phenolist").colorkey('option', 'keyInfo',chromplot.iphenogram("getPhenoTypes"));
 		addChromsToList($("#chrommap").iphenogram('getChromNames'), $("#chrommap").iphenogram('option', 'includedChroms'));
   }
-  
+
   function loadOptionFile(evt){
   	var files = evt.target.files; // FileList object
 
@@ -165,9 +165,9 @@ $(document).ready(function() {
 				$("#includePhenos").prop('checked', !drawOpts.options.chromsOnly);
       }
       reader.readAsText(f);
-    }  	
+    }
   }
-  
+
   function handleCytoChange(evt){
   	if(evt.target.checked){
   		$("#drawing").iphenogram('showCytoBands');
@@ -178,7 +178,7 @@ $(document).ready(function() {
   		$("#chrommap").iphenogram('hideCytoBands');
   	}
   }
-  
+
   function handlePhenoChange(evt){
   	if(evt.target.checked){
   		$("#drawing").iphenogram('option','chromsOnly', false);
@@ -187,20 +187,20 @@ $(document).ready(function() {
   	else{
   		$("#drawing").iphenogram('option','chromsOnly', true);
   		$("#chrommap").iphenogram('option','chromsOnly', true);
-  	}  	
+  	}
   }
-  
+
   function resetPhenoPlot(evt){
   	$("#drawing").iphenogram('resetView');
   }
 
-  
+
   function resetPhenoColors(evt){
   	$("#drawing").iphenogram('resetPhenoColors');
   	$("#chrommap").iphenogram('resetPhenoColors');
   	$("#phenolist").colorkey('clearSelections');
   }
-  
+
   function addChromsToList(chrNames, includedChroms){
   	// remove all but first li
 //   	$('#chromList li:not(:first)').remove();
@@ -211,7 +211,7 @@ $(document).ready(function() {
   	for(var i=0; i<chrNames.length; i+=interval){
 			appendString = '<tr>';
 			for(var j=0; j<interval; j++){
-			
+
 				if(includedChroms.length > 0 && includedChroms.length != chrNames.length){
 					checkedValue=' ';
 					for(chrIndx=0; chrIndx < includedChroms.length; chrIndx++){
@@ -220,7 +220,7 @@ $(document).ready(function() {
 							break;
 						}
 					}
-				}		
+				}
 // 				appendString += '<td><input type="checkbox" name="' + chrNames[i+j] + '" value="' +
 // 					chrNames[i+j] + '" checked="'+ checkedValue.toString() + '" class="chromNameBoxes">' + chrNames[i+j] + '</td>';
 				appendString += '<td><input type="checkbox" name="' + chrNames[i+j] + '" value="' +
@@ -230,7 +230,7 @@ $(document).ready(function() {
 			$("#chromNames > tbody:last").append(appendString);
   	}
   }
-  
+
   function submitChromSelections(evt){
   	var checkedChroms = $('#chromNames input:checkbox:checked').map(function(){
   		return $(this).val();
@@ -238,14 +238,14 @@ $(document).ready(function() {
   	$("#drawing").iphenogram('option','includedChroms', checkedChroms);
   	$("#chrommap").iphenogram('option','includedChroms', checkedChroms);
   }
-  
+
   function toggleChromSelections(evt){
   	var chromBoxes = $("#chromNames input:checkbox");
   	jQuery.each(chromBoxes, function(i,v){
   		v.checked = !v.checked;
   	});
   }
-	
+
 	d3.select("#save").on("click", function(){
 		var html = $("#drawing").iphenogram('getSVG', 3);
 		var canvas = document.getElementById('intermediateImage');
@@ -257,7 +257,7 @@ $(document).ready(function() {
 		if (canvas.msToBlob) { //for IE
 			var blob = canvas.msToBlob();
 			window.navigator.msSaveBlob(blob, 'sample.png');
-		} else {		
+		} else {
 			var a = document.createElement("a");
 			a.download = "sample.png";
 			a.href = canvasdata;
@@ -266,13 +266,13 @@ $(document).ready(function() {
 			a.remove();
 		}
 	});
-	
+
 	d3.select("#saveOptions").on("click", function(){
 		var drawOptions = $("#drawing").iphenogram('getOptions');
 		var mapOptions = $("#chrommap").iphenogram('getOptions');
 		var allOptions = {drawing: drawOptions, mapping: mapOptions};
 		var str = JSON.stringify(allOptions);
-				
+
 		var fileName = "iphenogram-options.json";
 		if(window.navigator.msSaveOrOpenBlob) {
 			var fileData = ['\ufeff'+str];
@@ -289,10 +289,10 @@ $(document).ready(function() {
 			a.remove();
 		}
 	});
-	
-  
+
+
   $("#controlpanel").tabs();
-  
+
   $("#iPhenogramFiles").on('change', handleFileSelect);
   $("#genomeFile").on('change', handleFileSelect);
   $("#cytoFile").on('change', handleFileSelect);
@@ -305,8 +305,8 @@ $(document).ready(function() {
   $("#toggleChroms").click(toggleChromSelections);
   $("#loadFiles").click(loadInputFiles);
   $("#iPhenoGramOptions").change(loadOptionFile);
-  
-  
+
+
 });
 
 </script>
