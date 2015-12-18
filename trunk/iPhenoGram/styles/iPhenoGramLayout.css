@@ -53,7 +53,7 @@
 	width: 150px;
 	height: 275px;
 	overflow: auto;
-	display: none; 
+	display: none;
 }
 
 #intermediateImage{
@@ -76,6 +76,14 @@
 	display: none;
 }
 
+div.containerBlock{
+	border: 2px solid;
+	position: absolute;
+	border-radius: 10px;
+	margin: 0px;
+	overflow: hidden;
+/* 	border-style: ridge; */
+}
 
 div.scroll{
 	overflow: auto;
@@ -99,12 +107,12 @@ ul.decrease-height{
 .gray-background{
 	background-color: #E8E8E8;
 }
-/* 
+/*
 ul.nav li {
  background-color:blue;
 }
  */
-/* 
+/*
 ul.nav li.selected {
  background-color:red;
 }
@@ -127,12 +135,5 @@ li.increase-margin{
 	font-size: 0.9em;
 }
 
-div.containerBlock{
-	border: 2px solid;
-	position: absolute;
-	border-radius: 10px;
-	margin: 0px;
-	overflow: hidden;
-/* 	border-style: ridge; */
-}
+
 

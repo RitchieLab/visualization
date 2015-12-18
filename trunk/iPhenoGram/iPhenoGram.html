@@ -3,7 +3,7 @@
 <meta charset="utf-8">
 <title>d3 iPhenoGram widget test</title>
 <link rel="stylesheet" type="text/css" href="styles/iPhenoGramLayout.css">
-<link rel="stylesheet" type="text/css" href="styles/iPhenoGram.css">
+<!-- <link rel="stylesheet" type="text/css" href="styles/iPhenoGram.css"> -->
 <link rel="stylesheet" href="https://code.jquery.com/ui/1.11.2/themes/smoothness/jquery-ui.css">
 <style>
 .inlined{
@@ -20,7 +20,7 @@
 	<iframe id="displayFrame" src="about:blank"></iframe>
 </div>
 <div id="drawing" class="containerBlock" ></div>
-<div id="phenolist" class="containerBlock scroll"></div>
+<div id="phenolist" class="scroll containerBlock"></div>
 <div id="controlpanel" class="containerBlock scroll">
 	<ul>
     <li class="smallfont"><a href="#controlpanel-1">Opts</a></li>
@@ -103,13 +103,13 @@ $(document).ready(function() {
 	});
 	addChromsToList($("#chrommap").iphenogram('getChromNames'), $("#chrommap").iphenogram('option', 'includedChroms'));
 
-	$("#drawing").on("iphenogramposSelected", function(event, data){
+	$("#drawing").on("iphenogramposselected", function(event, data){
 			var searchStr = "https://www.ncbi.nlm.nih.gov/SNP/snp_ref.cgi?searchType=adhoc_search&type=rs&rs="
 				+ data.posInfo.id;
 			$("#displayFrame").attr('src', searchStr);
 	});
 
-	$("#drawing").on("iphenogramselectPheno", function(event, data){
+	$("#drawing").on("iphenogramselectpheno", function(event, data){
   	var keysSet = {};
   	keysSet[data.phenoName]=1;
   	$("#phenolist").colorkey('setSelection', keysSet);

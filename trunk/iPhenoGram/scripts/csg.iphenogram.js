@@ -119,7 +119,6 @@ $.widget('csg.iphenogram',{
     * @private
   */
 	_create: function() {
-
 		// change the ymax based on the height/width ratio
 		this.options.ymax = this.options.xmax * this.options.height/this.options.width;
 
@@ -141,14 +140,24 @@ $.widget('csg.iphenogram',{
     	.attr("class", "overlay")
     	.attr("width", this.options.xmax+2000)
 	    .attr("height", this.options.ymax+2000)
+	    .attr("pointer-events", "all")
 	    .attr("x", -1000)
 	    .attr("y", -1000)
 	    .style("fill", this.options.backgroundColor)
-
 		this._fillChroms();
 		this._setIncludedChroms();
 		this._placeChroms();
 		var widget=this;
+
+/*
+  position: absolute;
+  text-align: center;
+  padding: 10px;
+  font: 0.8em sans-serif;
+  background: lightsteelblue;
+  border: 0px;
+  border-radius: 8px;
+*/
 
 		if(this.options.tip_enabled){
 			// Define 'div' for tooltips
@@ -156,6 +165,13 @@ $.widget('csg.iphenogram',{
 				.append("div")  // declare the tooltip div
 				.attr("class", "tooltip")              // apply the 'tooltip' class
 				.attr("id", "iPhenoTip")
+				.style("position", "absolute")
+  			.style("text-align", "center")
+  			.style("padding", "10px")
+  			.style("font", "0.8em sans-serif")
+  			.style("background", "lightsteelblue")
+				.style("border-radius", "8px")
+				.style("border", "0px")
 				.style("opacity", 0);                  // set the opacity to nil
 		}
 
@@ -182,6 +198,7 @@ $.widget('csg.iphenogram',{
 		    .attr("stroke", "black")
 		    .attr("stroke-width", 8)
 		    .attr("fill", "lightgray")
+		    .attr("pointer-events", "all")
 		    .attr("fill-opacity", 0.2);
 
 	},
@@ -983,6 +1000,7 @@ $.widget('csg.iphenogram',{
 					+ (widget.chromWidth-1).toString() + "," + Math.round(widget.yconversion(d.finishBand+chr.offset)) + " "
 					+ "1," + Math.round(widget.yconversion(d.finishBand+chr.offset));})
 				.attr("stroke", "none")
+				.attr("pointer-events", "all")
 				.attr("stroke-width", 1)
 				.attr("fill", function(d){ return widget.options.cytoColor[d.type];})
 				.attr("fill-opacity", 0.7)
@@ -1078,23 +1096,23 @@ $.widget('csg.iphenogram',{
   /**
     * Position selection event.
     *
-    * @event csg.iphenogram#posSelected
+    * @event csg.iphenogram#posselected
     * @type {object}
     * @property {object} posInfo - Position selected
     */
 	_triggerPosition: function(position, eventType){
- 		this._trigger('posSelected', {type: eventType}, {posInfo: position});
+ 		this._trigger('posselected', {type: eventType}, {posInfo: position});
 	},
 
   /**
     * Position selection event.
     *
-    * @event csg.iphenogram#selectPheno
+    * @event csg.iphenogram#selectpheno
     * @type {object}
     * @property {string} phenoName - Phenotype name selected
     */
 	_triggerPhenoSelection: function(phenoname){
-		this._trigger('selectPheno',{type: 'select'}, {phenoName: phenoname});
+		this._trigger('selectpheno',{type: 'select'}, {phenoName: phenoname});
 	},
 
 
