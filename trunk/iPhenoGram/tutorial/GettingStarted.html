@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<head>
+<meta charset="utf-8">
+<title>d3 iPhenoGram example</title>
+<style>
+div.containerBlock{
+	border: 2px solid;
+/* 	position: absolute; */
+	border-radius: 10px;
+	margin: 0px;
+	overflow: hidden;
+	width: 340px;
+/* 	border-style: ridge; */
+}
+/*
+pre {
+    font-size: 90%;
+    line-height: 1.2em;
+    font-family: "Courier 10 Pitch", Courier, monospace;
+    white-space: pre;
+    white-space: pre-wrap;
+    white-space: -moz-pre-wrap;
+    white-space: -o-pre-wrap;
+    height:1%;
+    width: auto;
+    display: block;
+    clear: both;
+    color: #555555;
+    padding: 1em 1em;
+    margin: auto 40px auto 40px;
+    background: #f4f4f4;
+    border: solid 1px #e1e1e1
+}
+code {
+    font-size: 90%;
+    line-height: 1.2em;
+    font-family: Monaco, Consolas, "Andale Mono", "DejaVu Sans Mono", monospace;
+    display: inline;
+    color: #555555;
+    padding: 1em 1em;
+    background: #f4f4f4;
+}
+*/
+</style>
+<script src="https://google-code-prettify.googlecode.com/svn/loader/run_prettify.js"></script>
+</head>
+<body>
+<h1>iPhenoGram - Getting Started</h1>
+<p>iPhenoGram is a jQuery widget that utilizes D3.js to&nbsp;create chomosomal ideograms annotated with lines in color at specific base-pair locations&nbsp;or colored base-pair to base-pair regions. &nbsp;</p>
+<p>The code below loads a JSON file and creates a new widget using the data and specifying various options.</p>
+
+<pre class="prettyprint lang-js linenums" >$(document).ready(function() {
+var data;
+d3.json("example_data.json", function(error, json) {
+  if (error) return console.warn(error);
+  data = json;
+  visualizeit();
+});
+
+function visualizeit(){
+	var chromplot	=	$("#basic").iphenogram({chroms: data.chromsDefault, phenos: data.phenos,
+	 	cytoBands: data.cytoDefault, zoom_map: false, chromsOnly: false,
+		 chromwidth: 64, circlesize: 28, height: 368, width: 340});
+}
+});</pre>
+<div id="basic" class="containerBlock" ></div>
+<h2>Displaying only some chromosomes</h2>
+<p>iPhenoGram has an option to display only some of the chromosomes in the set as below.  The chromosomes
+are drawn to take advantage of the additional space available.</p>
+<pre class="prettyprint lang-js linenums" >
+var showChroms = ["7", "10", "11", "12", "18", "21", "X", "Y"];
+var fileredPlot	=	$("#filtered").iphenogram({chroms: data.chromsDefault, phenos: data.phenos,
+	cytoBands: data.cytoDefault, includedChroms: showChroms,
+	chromwidth: 64, circlesize: 28, height: 368, width: 340});</pre>
+<div id="filtered" class="containerBlock" ></div>
+<h2>Altering circle size</h2>
+<p>iPhenoGram has an option to change the size of the phenotypic circles and an option to
+control the display of the cytogenetic bands (turned off in the example below).</p>
+<pre class="prettyprint lang-js linenums" >
+var showChroms = ["7", "10", "11", "12", "18", "21", "X", "Y"];
+var fileredPlot	=	$("#filtered").iphenogram({chroms: data.chromsDefault, phenos: data.phenos,
+	cytoBands: data.cytoDefault, includedChroms: showChroms, drawCyto: false,
+	chromwidth: 64, circlesize: 56, height: 368, width: 340});</pre>
+<div id="largecircle" class="containerBlock" ></div>
+<h2>Change plot dimensions</h2>
+<p>iPhenoGram will draw the plot to fill the dimensions given it.  Below is the same plot as
+above but with twice the width given to iPhenoGram.</p>
+<pre class="prettyprint lang-js linenums" >
+var showChroms = ["7", "10", "11", "12", "18", "21", "X", "Y"];
+var fileredPlot	=	$("#filtered").iphenogram({chroms: data.chromsDefault, phenos: data.phenos,
+	cytoBands: data.cytoDefault, includedChroms: showChroms, drawCyto: false,
+	chromwidth: 64, circlesize: 56, height: 368, width: 680});</pre>
+<div id="wideplot" class="containerBlock" style="width:680px;"></div>
+
+
+<script type="text/javascript" src="scripts/jquery-1.11.2.min.js"></script>
+<script type="text/javascript" src="scripts/jquery-ui.min.js"></script>
+<script type="text/javascript" src="scripts/d3.v3.min.js"></script>
+<script type="text/javascript" src="scripts/csg.iphenogram.js"></script>
+<script type="text/javascript" src="https://canvg.googlecode.com/svn/trunk/rgbcolor.js"></script>
+<script type="text/javascript" src="https://canvg.googlecode.com/svn/trunk/canvg.js"></script>
+	<script type="text/javascript" src="scripts/example_data.json"></script>
+
+<script>
+// var exampleData = {chromsDefault: chromsHuman,cytoDefault: cytoBandsIn, phenos:[]};
+//
+// console.log(JSON.stringify(exampleData));
+
+$(document).ready(function() {
+
+  visualizeit();
+
+
+function visualizeit(){
+	var chromplot	=	$("#basic").iphenogram({chroms: data.chromsDefault, phenos: data.phenos,
+	 	cytoBands: data.cytoDefault, chromwidth: 64, circlesize: 28, height: 368, width: 340});
+	var showChroms = ["7", "10", "11", "12", "18", "21", "X", "Y"];
+	var fileredPlot	=	$("#filtered").iphenogram({chroms: data.chromsDefault, phenos: data.phenos,
+	 	cytoBands: data.cytoDefault, includedChroms: showChroms,
+		 chromwidth: 64, circlesize: 28, height: 368, width: 340});
+	var largeCirclePlot	=	$("#largecircle").iphenogram({chroms: data.chromsDefault, phenos: data.phenos,
+	 	cytoBands: data.cytoDefault, includedChroms: showChroms, drawCyto: false,
+		 chromwidth: 64, circlesize: 56, height: 368, width: 340});
+	var widePlot =	$("#wideplot").iphenogram({chroms: data.chromsDefault, phenos: data.phenos,
+	 	cytoBands: data.cytoDefault, includedChroms: showChroms, drawCyto: false,
+		 chromwidth: 64, circlesize: 42, height: 368, width: 680});
+}
+});
+
+
+</script>
+
+</body>
+</html>
+
+
+
+
