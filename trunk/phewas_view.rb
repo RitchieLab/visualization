@@ -104,6 +104,7 @@ class Arg
     options.showbest = false
 		options.display_pval = false
     options.include_all_eths = true
+		options.group_symbols = false
     options.label_cols = Array['phenotype', 'phenotype_long', 'substudy']
     help_selected = false
     version_selected = false
@@ -152,6 +153,9 @@ class Arg
       opts.on("-l [group_map]", "Optional group map file") do |ancestry_map|
         options.ethmapfile = ancestry_map
       end
+			opts.on("-y", "--group-symbols") do |sym|
+				options.group_symbols=true
+			end
 			opts.on("-D", "--group-color", "Use colors from group file for point colors"){|gcolor| options.group_colors=true}
       opts.on("-c [class_name]", "Only results matching this phenotype class name are plotted") do |class_name|
         options.classname = class_name
@@ -356,6 +360,7 @@ class EthMap
     @ethindata["NA"] = false
     
     @include_all = true
+		@shapes = ['circle', 'square', 'diamond']
   end
 
   def clear
@@ -374,6 +379,14 @@ class EthMap
     @names[key] = @eths[group]
   end
 
+	def set_shapes
+		i=0
+		@eths.each do |key,value|
+			@eths[key].shape = @shapes[i]
+			i+=1
+		end
+	end
+	
   # returns group based on the keyword passed
   def get_group(key)
     @names.each do |keyword, ethnicity|
@@ -388,6 +401,10 @@ class EthMap
   def get_group_color(gname)
     return @eths[gname].colorstr
   end
+	
+	def get_group_shape(gname)
+		return @eths[gname].shape
+	end
 
   # sets list of restricted ethnicities for this plot
   def set_restricted_eths(etharray)
@@ -414,11 +431,12 @@ end #EthMap
 #
 ############################################################################
 class Ethnicity
-  attr_accessor :colorstr, :label
+  attr_accessor :colorstr, :label, :shape
 
   def initialize(col, lab)
     @colorstr = col
     @label = lab
+		@shape = 'circle'
   end
 
 end #Ethnicity
@@ -575,7 +593,7 @@ class ResultHolder
   # creates array of arrays of ResultValues to plot
   # each sub array contains the values for one phenotype
   def generate_result_values(pval_thresh, params)
-
+puts "group_colors=#{params[:group_colors] }"
 		params[:group_colors] ? group_colors = true : group_colors = false
     @pval_threshold = pval_thresh
 
@@ -587,7 +605,6 @@ class ResultHolder
         if !@results_by_snp_pheno[snpname].has_key?(phenoname)
           next
         end
-
         result = @results[@results_by_snp_pheno[snpname][phenoname]]
 
         # result exists so create ResultValues
@@ -602,6 +619,7 @@ class ResultHolder
           resval.snpname = resultScore.snpname
 					if @single_snp or group_colors
             resval.colorstr = get_single_pval_color(resultScore.pval, result, ethnicity)
+						resval.shape = get_single_pval_shape(ethnicity)
           else
             resval.colorstr = get_pval_color(resultScore.pval, result)
           end
@@ -637,6 +655,9 @@ class ResultHolder
     return @ethmap.get_group_color(ethnicity)
   end
 
+	def get_single_pval_shape(ethnicity)
+		return @ethmap.get_group_shape(ethnicity)
+	end
 
   # adds the pvalue result for a SNP-phenotype combination
   def add_result(snpname, phenoname, pval, ethnicity, phenogroup, betaval, sampsize)
@@ -1346,12 +1367,13 @@ end
 #
 ############################################################################
 class Point
-  attr_accessor :x, :y, :uptriangle
+  attr_accessor :x, :y, :uptriangle, :shape
 
-  def initialize(xpt, ypt, uptriang=nil)
+  def initialize(xpt, ypt, sh='circle', uptriang=nil)
     @x = xpt
     @y = ypt
     @uptriangle = uptriang
+		@shape = sh
   end
 
 end
@@ -1364,7 +1386,8 @@ end
 #
 ############################################################################
 class ResultValue
-  attr_accessor :pval, :colorstr, :betaval, :belowthresh, :sampsize, :snpname
+  attr_accessor :pval, :colorstr, :betaval, :belowthresh, :sampsize, :snpname,
+		:shape
 
   def initialize
     @pval = 0
@@ -1373,6 +1396,7 @@ class ResultValue
     @betaval = nil
     @belowthresh = false
     @snpname = ""
+		@shape = 'circle'
   end
 
 end
@@ -2018,7 +2042,7 @@ class DotPlotter
 	end
 	
   # draws legend identifying groups and colors associated with those groups
-  def draw_legend(canvas, ethcolors, xstart, ystart, params)
+  def draw_legend(canvas, ethcolors, ethshapes,xstart, ystart, params)
 		rotate = params[:rotate]
 		coordinates_per_pixel = params[:coordinates_per_pixel]
 		max_label = params[:max_label]
@@ -2064,9 +2088,23 @@ class DotPlotter
       canvas.g.translate(xstart, ystart) do |box|
         box.styles(:fill=>colorstr, :stroke=>'none', :stroke_width=>1, :fill_opacity=>0.8)
         if rotate
-          box.rect(@diameter, @diameter, text_x-@diameter, @y_offset-@diameter)
+					if ethshapes[eth]=='square'
+						box.rect(@diameter, @diameter, text_x-@diameter, @y_offset-@diameter)
+					elsif ethshapes[eth]=='diamond'
+#						offset = @diameter/2.to_f 
+						offset = @diameter*0.6
+						centerx=text_x-@diameter/2.to_f
+						centery=@y_offset-@diameter/2.to_f
+						xpts =[centerx,centerx+offset,centerx,centerx-offset]
+						ypts =[centery-offset,centery,centery+offset,centery]
+						box.polygon(xpts,ypts)
+					else
+						box.circle(@diameter/2.to_f,text_x-@diameter/2.to_f,@y_offset-@diameter/2.to_f)
+					end
         else
-          box.rect(@diameter, @diameter, text_x+length_x, @y_offset-@diameter)
+					if ethshapes[eth]=='square'
+						box.rect(@diameter, @diameter, text_x+length_x, @y_offset-@diameter)
+					end
 					length_x += @diameter + space_for_text(coordinates_per_pixel, " ")
         end
 
@@ -2281,10 +2319,11 @@ class DotPlotter
           end
         end
 
-        color_hash[colorstr] << Point.new(x_circle, y_point, uptriangle)
+        color_hash[colorstr] << Point.new(x_circle, y_point, resval.shape, uptriangle)
       end 
       x_circle = increment_x_phenotype(x_circle)
     end
+puts "draw_triangle #{draw_triangle}"
     color_hash.each do |colorstr, points|
       canvas.g.translate(xstart, y_plots_start) do |pen|
         if !draw_triangle
@@ -2343,9 +2382,16 @@ class DotPlotter
     if redlinep
       y_point = (1-((redlinep.to_f) / pval_interval)) * y_interval
       canvas.g.translate(xstart, y_plots_start) do |draw|
-        draw.styles(:stroke=>'red')
+        draw.styles(:stroke=>'blue')
         draw.line(@offset_mult*@x_offset,y_point,x_end_box,y_point)
       end
+#options.redline = resultholder.get_log10(options.redline.to_f) if options.redline
+			bluelinep = -Math.log10(0.0008)
+			y_point = (1-((bluelinep.to_f) / pval_interval)) * y_interval
+      canvas.g.translate(xstart, y_plots_start) do |draw|
+        draw.styles(:stroke=>'red')
+        draw.line(@offset_mult*@x_offset,y_point,x_end_box,y_point)
+      end			
     end
 
     canvas.g.translate(xstart, y_plots_start) do |draw|
@@ -2436,7 +2482,7 @@ class DotPlotter
         if !color_hash.has_key?(colorstr)
           color_hash[colorstr] = Array.new
         end
-        color_hash[colorstr] << Point.new(x_circle, y_point, uptriangle)
+        color_hash[colorstr] << Point.new(x_circle, y_point, resval.shape, uptriangle)
       end
       x_circle = increment_x_phenotype(x_circle)
     end
@@ -2520,7 +2566,7 @@ class DotPlotter
         if !color_hash.has_key?(colorstr)
           color_hash[colorstr] = Array.new
         end
-        color_hash[colorstr] << Point.new(x_circle, y_point, uptriangle)
+        color_hash[colorstr] << Point.new(x_circle, y_point, resval.shape, uptriangle)
       end
       x_circle = increment_x_phenotype(x_circle)
     end
@@ -2559,9 +2605,21 @@ class DotPlotter
 
   # pass array of points, color and canvas
   def insert_points(points, colorstr, pen)
-    pen.styles(:fill=>colorstr, :stroke=>'none', :stroke_width=>1, :fill_opacity=>0.8)
+    pen.styles(:fill=>colorstr, :stroke=>'none', :stroke_width=>1, :fill_opacity=>0.7)
+		half_diameter=draw_diameter/2.to_f
     points.each do |point|
-      pen.circle(draw_diameter/2, point.x, point.y)
+			if point.shape == 'square'
+				pen.rect(draw_diameter, draw_diameter, point.x-half_diameter, point.y-half_diameter)
+			elsif point.shape == 'diamond'
+				offset = half_diameter * 1.2
+				xpts = [point.x,point.x+offset,point.x,point.x-offset]
+				ypts = [point.y-offset,point.y,point.y+offset,point.y]
+				pen.polygon(xpts,ypts)
+#				pen.polygon(point.x,point.y-half_diameter,point.x+half_diameter,point.y,
+#					point.x,point.y-half_diameter,point.x-half_diameter,point.y)
+			else  #point.shape == 'circle
+				pen.circle(draw_diameter/2, point.x, point.y)
+			end
     end
   end
 
@@ -2702,6 +2760,9 @@ def draw_phewas(options)
   if options.ethmapfile
     ethreader = EthMapReader.new
     ethreader.read_file(ethmap, options.ethmapfile)
+		if options. group_symbols
+			ethmap.set_shapes
+		end
   end
 
   resultholder.ethmap = ethmap
@@ -2811,11 +2872,19 @@ def draw_phewas(options)
 			legend_x_space = legend_x_space + dotter.space_for_text(xmax/xside.in, " ") + dotter.diameter;
 			
 			# per labels per row 
-			labels_per_row = (legend_x_end / legend_x_space).to_i;
-			nlabel_rows = edata.length / labels_per_row
+			labels_per_row = (legend_x_end / legend_x_space).to_i
+			# if labels_per_row < 1 extend the right side of plot
+			if labels_per_row < 1
+				labels_per_row = 1
+				additional_x = legend_x_space - legend_x_end 
+				xside += additional_x/(xmax/xside.in) / RVG::dpi
+				xmax += additional_x
+			end
+			nlabel_rows = edata.length / labels_per_row.to_f
 			if((nlabel_rows - nlabel_rows.to_i) > 0.000000000001)
 				nlabel_rows +=1
 			end
+			nlabel_rows = nlabel_rows.to_i
 			legend_y_row =  dotter.diameter * 1.25
 			legend_y_space = (nlabel_rows-1) * legend_y_row
 #			y_pval_start += legend_y_space
@@ -2879,8 +2948,6 @@ def draw_phewas(options)
     yside = dotter.add_grid_size(yside, xside, max_correlations-1, resultholder.pheno_list.pheno_order.length)
     ymax = dotter.calculate_coordinate(yside)
   end
-
- 
 	
   # set first color to be plotted
   dotter.first_color = resultholder.nonsigcolor
@@ -2911,30 +2978,34 @@ def draw_phewas(options)
     if !resultholder.single_snp.nil? or options.group_colors
       # only draw legend including ethnicities and colors selected
       ethcolorhash = Hash.new
+			ethshapehash = Hash.new
 			ethorder = Array.new
       resultholder.ethmap.ethindata.each do |ethname, tf|
         if tf
           ethcolorhash[ethname] = resultholder.ethmap.eths[ethname].colorstr
+					ethshapehash[ethname] = resultholder.ethmap.eths[ethname].shape
 					ethorder.push(ethname)
         end
       end
       rotate_grid_offset = 0
 			#labels_per_row legend_y_row
 			if options.rotate
-				dotter.draw_legend(canvas, ethcolorhash, 0, y_pval_start, :rotate=>options.rotate,
+				dotter.draw_legend(canvas, ethcolorhash, ethshapehash,0, y_pval_start, :rotate=>options.rotate,
 					:coordinates_per_pixel=>xmax/xside.in, :max_label=>max_label)
 			else
 				current_row=nlabel_rows - 1
 				current_eth=0
 				while current_row >= 0
 					tempEths = Hash.new
+					tempShapes = Hash.new
 					ethIndx=0
-					while(ethIndx < labels_per_row)
+					while(ethIndx < labels_per_row and ethIndx < ethorder.length)
 						tempEths[ethorder[current_eth]]=ethcolorhash[ethorder[current_eth]]
+						tempShapes[ethorder[current_eth]]=ethshapehash[ethorder[current_eth]]
 						ethIndx+=1
 						current_eth+=1
 					end
-					dotter.draw_legend(canvas, tempEths, 0, y_pval_start-(legend_y_row*current_row), :rotate=>options.rotate,
+					dotter.draw_legend(canvas, tempEths, ethshapehash,0, y_pval_start-(legend_y_row*current_row), :rotate=>options.rotate,
 						:coordinates_per_pixel=>xmax/xside.in, :max_label=>max_label)
 					current_row -=1
 				end
