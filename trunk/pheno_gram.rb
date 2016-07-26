@@ -84,6 +84,7 @@ class Arg
 		options.zoomstart = nil
 		options.zoomend = nil
 		options.restrict_chroms = false
+		options.transverse_lines = true
     help_selected = false
     version_selected = false
     
@@ -127,6 +128,7 @@ class Arg
       opts.on("-z", "--high-res", "Set resolution to 1200 dpi") {|hres| options.highres=true}
       opts.on("-T", "--trans-lines", "Make lines on chromosome more transparent") {|trans| options.transparent_lines=true}
       opts.on("-n", "--thin-lines", "Make lines across chromosomes thinner") {|thin| options.thin_lines=true}
+			opts.on("-N", "--no-lines", "Remove position lines across chromosomes"){|nolines|options.transverse_lines=false}
       opts.on("-B", "--thick-boundary", "Increase thickness of chromosome boundary") {|thick| options.thickness_mult=2}
       opts.on("-F", "--big-font", "Increase font size of labels") {|big_font| options.big_font=true}
       opts.on("-x", "--shade-chromatin", "Add cross-hatch shading to inaccessible regions of chromosomes") {|cross_hatch|options.shade_inaccessible=true}
@@ -254,7 +256,9 @@ class PhenotypeHolder
 
   def set_colors
 		@colormaker.set_color_num(@phenonames.length)
-    @phenonames.each_value {|pheno| pheno.color = @colormaker.gen_html(pheno.group)}
+    @phenonames.each_value {|pheno| pheno.color = @colormaker.gen_html(pheno.group)
+			puts "#{pheno.color}=>#{pheno.name}"
+		}
 	end
   
   def set_color(groupname)
@@ -640,15 +644,15 @@ class ExhaustiveSearchColorMaker < ColorMaker
 	end
 	
 	def set_color_num(nColors)
-		if nColors <= 15 or nColors > 25
+#		if nColors <= 15 or nColors > 25
 			@colors = @exhaustiveColors
-		elsif nColors <= 20
-			@colors = @colors20
-		elsif nColors == 21
-			@colors = @colors21
-		else
-			@colors = @colors25
-		end
+#		elsif nColors <= 20
+#			@colors = @colors20
+#		elsif nColors == 21
+#			@colors = @colors21
+#		else
+#			@colors = @colors25
+#		end
 		@final_color_index = @colors.length-1
 	end
 	
@@ -714,6 +718,12 @@ end
 
 class ChromosomeFileReader < FileHandler
 	
+	def initialize
+		@idcol = 0
+		@sizecol  = 1
+		@centcol = nil
+	end
+	
 	def open(filename)
 		@file = File.new(filename, "r")
 	end
@@ -722,13 +732,24 @@ class ChromosomeFileReader < FileHandler
 		chroms = Array.new
 		chroms << Chromosome.new(:number=>0, :size=>0)
 		number=1
+		firstline = true
 		open(filename)
-			headers = read_headers(@file.gets) # skip header line
+			headers = nil
 	    while oline=@file.gets
       oline.each_line("\r") do |line|
+				if firstline
+					headers = read_headers(line)
+					firstline = false
+					next
+				end
 				next unless line =~ /\d/
 				cols = strip_and_split_delim(line, "\t")
-				!cols[@centcol].nil? ? cent_array = cols[@centcol].split(",") : cent_array = Array.new
+				cent_array = Array.new
+				if !@centcol.nil?
+					if !cols[@centcol].nil?
+						cent_array = cols[@centcol].split(",")
+					end
+				end
 				centromere_info = cent_array.collect{|s| s.to_i}
 				chroms << Chromosome.new(:id=>cols[@idcol], :centromere=>centromere_info,
 					:size=>cols[@sizecol].to_i, :number=>number)
@@ -763,19 +784,52 @@ class CytoBandFileReader < FileHandler
 		@file = File.new(filename, "r")
 	end
 	
-	def parse_file(filename, genome)	
+	def parse_file(filename, genome)
 		open(filename)
 			headerline = @file.gets
+			set_columns(headerline)
 	    while oline=@file.gets
       oline.each_line("\r") do |line|
+				next unless line =~ /\w/
 				cols = strip_and_split_delim(line, "\t")
-				cols[0] =~ /chr(\w+)/
-				chromstr = $1;
-				cyto = CytoBand.new(:start=>cols[1].to_i, :finish=>cols[2].to_i, :type=>cols[4])
+				cols[@chromcol] =~ /^chr(\w+)/
+				if $1
+					chromstr = $1;
+				else
+					chromstr = cols[@chromcol]
+				end
+				if cols[@endcol].to_i <= cols[@startcol].to_i
+					next
+				elsif cols[@startcol].to_i == 0
+						cols[@startcol] = 1
+				end
+				cyto = CytoBand.new(:start=>cols[@startcol].to_i, :finish=>cols[@endcol].to_i, :type=>cols[@giecol])
 				genome.get_chrom(chromstr).add_cytoband(cyto)
 			end
     end	
 	end
+	
+  def set_columns(headerline)
+		@chromcol = @startcol = @endcol = @giecol = nil
+		headers = strip_and_split_delim(headerline, "\t")
+		headers.each_with_index do |header,i|
+			if header =~ /#chrom/i
+				@chromcol = i
+			elsif header =~ /chromStart/i
+				@startcol = i
+			elsif header =~ /chromEnd/i
+				@endcol = i
+			elsif header =~ /gieStain/i
+				@giecol = i
+			end
+		end
+		
+		unless @chromcol and @startcol and @endcol and @giecol
+			error_string = 'Cytoband input file must include #chrom, chromStart, chromEnd, gieStain columns'
+      raise error_string
+    end
+  end	
+	
 end
 
 
@@ -846,7 +900,7 @@ class PhenoGramFileReader < FileHandler
       next if data[@chromcol] =~ /chrM/
 			
 			chromosome = genome.get_chrom(data[@chromcol])
-      raise "Problem in #{filename} with line:\n#{line}\n#{data[@chromcol]} is not a valid chromsome number" unless chromosome
+      raise "Problem in #{filename} with line:\n#{line}\n#{data[@chromcol]} is not a valid chromosome number" unless chromosome
 #      raise "Problem in #{filename} with line:\n#{line}\nPosition outside chromosome boundaries" unless chromosome.pos_good?(data[@bpcol])
 			unless(chromosome.pos_good?(data[@bpcol]))
 				print "#{filename}: line ##{lineno} pos: #{data[@bpcol]} is outside chr #{data[@chromcol]} boundaries\n";
@@ -1627,6 +1681,7 @@ class ChromosomePlotter < Plotter
 		@@cytocolors['stalk'] = '#63B8FF'
 		@@cytocolors['gvar'] = '#4F94CD'
 		@@cytocolors['acen'] = '#0000A0'
+		@@cytocolors['gpos'] = '#C7C7C7'
 		
 	end
 	
@@ -1805,8 +1860,8 @@ class ChromosomePlotter < Plotter
       :thickness_mult=>params[:thickness_mult], :chr_only=>params[:chr_only], 
       :bigtext=>params[:bigtext], :cent_start=>centromere_start, :cent_end=>centromere_end,
       :shade=>params[:shade], :startbp=>startbp, :endbp=>endbp, 
-			:chrom_start=>chrom_start, :chrom_bp=>chrom_size, :chrom=>chrom)
-		
+			:chrom_start=>chrom_start, :chrom_bp=>chrom_size, :chrom=>chrom,
+			:increase_cyto_opacity=>!params[:draw_transverse])
 		
 		
     if params[:chr_only] or !(params[:alt_spacing]==:alternative or params[:alt_spacing]==:equal)
@@ -1815,7 +1870,8 @@ class ChromosomePlotter < Plotter
       phenoboxes.each do |box|
         draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y, line_container,
           :chr_only=>params[:chr_only], :transparent=>params[:transparent], 
-					:include_notes=>params[:include_notes], :bigtext=>params[:bigtext])
+					:include_notes=>params[:include_notes], :bigtext=>params[:bigtext],
+					:draw_transverse=>params[:draw_transverse])
       end
       line_container.draw_lines(:canvas=>canvas, :xstart=>xbase, :ystart=>ybase + start_chrom_y, 
         :chrom_width=>@@chrom_width)
@@ -1826,7 +1882,7 @@ class ChromosomePlotter < Plotter
       phenoboxes.each do |box|
         draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y, line_container,
           :chr_only=>false, :include_notes=>params[:include_notes], 
-					:bigtext=>params[:bigtext])
+					:bigtext=>params[:bigtext],:draw_transverse=>params[:draw_transverse])
       end
       line_container.draw_lines(:canvas=>canvas, :xstart=>xbase, :ystart=>ybase + start_chrom_y, 
         :chrom_width=>@@chrom_width)
@@ -1839,7 +1895,7 @@ class ChromosomePlotter < Plotter
       phenoboxes.each do |box|
         draw_phenos_equal(canvas, box, circle_start_x, xbase, ybase + padding.to_f/2, 
           :chr_only=>params[:chr_only], :include_notes=>params[:include_notes],
-					:bigtext=>params[:bigtext])
+					:bigtext=>params[:bigtext],:draw_transverse=>params[:draw_transverse])
       end
       @@circle_size=orig_circle
     end
@@ -1851,9 +1907,11 @@ class ChromosomePlotter < Plotter
 			mini_interval_y = mini_end_y - mini_start_y
 			mini_startbp = 0
 			mini_chromsize = chrom.size
-			centromere_y = mini_interval_y * (((centromere_pos[0]+centromere_pos[1])/2)/chrom.size.to_f) + mini_start_y
-			centromere_start = mini_interval_y * (centromere_pos[0]/chrom.size.to_f) + mini_start_y
-			centromere_end = mini_interval_y * (centromere_pos[1]/chrom.size.to_f) + mini_start_y
+			if centromere_pos[0]
+				centromere_y = mini_interval_y * (((centromere_pos[0]+centromere_pos[1])/2)/chrom.size.to_f) + mini_start_y
+				centromere_start = mini_interval_y * (centromere_pos[0]/chrom.size.to_f) + mini_start_y
+				centromere_end = mini_interval_y * (centromere_pos[1]/chrom.size.to_f) + mini_start_y
+			end
 			params[:chr_only] ? chrom_width_mult=4 : chrom_width_mult=6
 			mini_xbase = xbase-@@chrom_width*chrom_width_mult
 			width_adjust=0.5
@@ -1900,11 +1958,13 @@ class ChromosomePlotter < Plotter
 		font_size = get_font_size(params) / 1.35
     phenobox.line_colors.each do |linecolor|
       canvas.g.translate(xbase,ybase) do |draw|
-        if phenobox.chrom_end_y - phenobox.chrom_y <= 1.0
-          line_container.add_line(phenobox.chrom_y, :stroke=>linecolor)
-        else
-          (phenobox.chrom_end_y-phenobox.chrom_y).round.times {|i| line_container.add_line(phenobox.chrom_y+i, :stroke=>linecolor)}
-        end
+				if params[:draw_transverse]
+					if phenobox.chrom_end_y - phenobox.chrom_y <= 1.0
+						line_container.add_line(phenobox.chrom_y, :stroke=>linecolor)
+					else
+						(phenobox.chrom_end_y-phenobox.chrom_y).round.times {|i| line_container.add_line(phenobox.chrom_y+i, :stroke=>linecolor)}
+					end
+				end
 				if params[:chr_only]
 					if params[:include_notes] and phenobox.note
 						annotation_x = start_x-@@circle_size
@@ -2074,6 +2134,7 @@ class ChromosomePlotter < Plotter
 		chrom_start = params[:chrom_start]
 		chrom_bp = params[:chrom_bp]
 		width_adjust = params[:width_adjust] || 1.0
+		increase_cyto_opacity = params[:increase_cyto_opacity] || false
 		total_chrom_y = end_chrom_y-start_chrom_y
 		
 		chrom_width = @@chrom_width * width_adjust
@@ -2082,6 +2143,7 @@ class ChromosomePlotter < Plotter
     tpath = "M0,#{start_chrom_y} C0,#{start_chrom_y-@@circle_size/2} #{chrom_width},#{start_chrom_y-@@circle_size/2} #{chrom_width},#{start_chrom_y}"
     bpath = "M0,#{end_chrom_y} C0,#{end_chrom_y+@@circle_size/2} #{chrom_width},#{end_chrom_y+@@circle_size/2} #{chrom_width},#{end_chrom_y}"
     if params[:shade] #and centromere_y
+			increase_cyto_opacity ? fill_opacity = 0.95 : fill_opacity = 0.7
 			chrom.cytobands.each do |band|
 				canvas.g.translate(xbase,ybase) do |draw|
 					band_start = (total_chrom_y * ((band.start-chrom_start)/chrom_bp.to_f) + start_chrom_y).round
@@ -2089,8 +2151,9 @@ class ChromosomePlotter < Plotter
 					band_end = (total_chrom_y * ((band.finish-chrom_start)/chrom_bp.to_f) + start_chrom_y).round
 					# ensure no overlap on banding
 					band_end = end_chrom_y if band_end > end_chrom_y
-					fill_color = @@cytocolors[band.type]
-					draw.rect(chrom_width, band_end-band_start, 0, band_start).styles(:stroke=>'none', :fill=>fill_color, :fill_opacity=>0.70)
+#					fill_color = @@cytocolors[band.type]
+					@@cytocolors[band.type] ? fill_color = @@cytocolors[band.type] : fill_color = band.type
+					draw.rect(chrom_width, band_end-band_start, 0, band_start).styles(:stroke=>'none', :fill=>fill_color, :fill_opacity=>fill_opacity)
 				end
 			end
     end
@@ -2498,7 +2561,6 @@ def draw_plot(genome, phenoholder, options)
 		title_x = total_x/2 - x_per_chrom/4 if options.zoomchr
     Title.draw_center(:canvas=>canvas, :title=>options.title, :ypos=>title_margin-circle_size*3,
       :xtotal=>xmax, :xpos=>title_x)
-  
 		unless(options.zoomchr)
 			
 			# draw each row of chroms
@@ -2512,7 +2574,7 @@ def draw_plot(genome, phenoholder, options)
 						:alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only,
 						:transparent=>options.transparent_lines, :thickness_mult=>options.thickness_mult,
 						:bigtext=>options.big_font, :shade=>options.shade_inaccessible,
-						:include_notes=>options.include_notes)					
+						:include_notes=>options.include_notes, :draw_transverse=>options.transverse_lines)					
 				end
 			end
 		else
@@ -2525,7 +2587,7 @@ def draw_plot(genome, phenoholder, options)
 					:transparent=>options.transparent_lines, :thickness_mult=>options.thickness_mult,
 					:bigtext=>options.big_font, :shade=>options.shade_inaccessible,
 					:include_notes=>options.include_notes, :zoomstart=>options.zoomstart,
-					:zoomend=>options.zoomend, :zoomchr=>options.zoomchr)
+					:zoomend=>options.zoomend, :zoomchr=>options.zoomchr, :draw_transverse=>options.transverse_lines)
 		end
   
     # insert a row listing the shapes for the ethnicity shapes when more than one
@@ -2545,8 +2607,18 @@ def draw_plot(genome, phenoholder, options)
   outfile = options.out_name + '.' + options.imageformat
   print "\n\tDrawing #{outfile}..."
   STDOUT.flush
-  img = rvg.draw
-  img.write(outfile)
+	begin
+		img = rvg.draw
+		img.write(outfile)
+	rescue
+		exit!
+	end
+	
+	#child_pid = fork do
+	#	img = rvg.draw
+	#	
+	#end
+ 
 
   print " Created #{outfile}\n\n" 
 end
@@ -2562,7 +2634,7 @@ options.genome_file ? genome.set_chroms(chrom_reader.parse_file(options.genome_f
 phenoholder = PhenotypeHolder.new(:color=>options.color)
 filereader = PhenoGramFileReader.new
 
-begin
+#begin
   filereader.parse_file(options.input, genome, phenoholder, :chr_only=>options.chr_only,
 		:zoomchr=>options.zoomchr, :zoomstart=>options.zoomstart, :zoomend=>options.zoomend)
 	if options.shade_inaccessible and File.exists?(options.cytobandfile)
@@ -2578,11 +2650,11 @@ begin
 			options.zoomchr = options.zoomchr[0]
 		end
 	end
-rescue => e
-  puts "ERROR:"
-  puts e.message
-  exit(1)
-end
+#rescue => e
+#  puts "ERROR:"
+#  puts e.message
+#  exit(1)
+#end
 
 draw_plot(genome, phenoholder, options)
 

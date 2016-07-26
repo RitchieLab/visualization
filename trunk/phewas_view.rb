@@ -40,7 +40,7 @@ include Magick
 
 RVG::dpi=600
 
-Version = '0.3.1'
+Version = '0.3.2'
 
 # check for windows and select alternate font based on OS
 Font_family_style = RUBY_PLATFORM =~ /mswin/ ? "Verdana" : "Times"
@@ -106,6 +106,9 @@ class Arg
     options.include_all_eths = true
 		options.group_symbols = false
     options.label_cols = Array['phenotype', 'phenotype_long', 'substudy']
+		options.include_genename = false
+		options.show_direction = false
+		options.narrow = false
     help_selected = false
     version_selected = false
 
@@ -135,6 +138,9 @@ class Arg
       opts.on("-a","--rotate", "Rotates final image 90 degrees") do |rot|
         options.rotate=true
       end
+			opts.on("-n","--incl-gene-name","Include italicized gene name in label"){|gname|options.include_genename=true}
+			opts.on("-W","--show-direction","Plot p-values as triangles displaying direction of effect"){|triangle|options.show_direction=true}
+			opts.on("-j","--narrow","Decrease distance between points on track"){|narrow|options.narrow=true}
       opts.on("-p [pthresh]", "p value threshold, values less significant will be plotted in gray") do |pthresh|
         options.p_thresh = pthresh.to_f
       end
@@ -153,7 +159,7 @@ class Arg
       opts.on("-l [group_map]", "Optional group map file") do |ancestry_map|
         options.ethmapfile = ancestry_map
       end
-			opts.on("-y", "--group-symbols") do |sym|
+			opts.on("-y", "--group-symbols", "Groups displayed with different shapes") do |sym|
 				options.group_symbols=true
 			end
 			opts.on("-D", "--group-color", "Use colors from group file for point colors"){|gcolor| options.group_colors=true}
@@ -281,6 +287,10 @@ Usage: phewas_view.rb [options]
                                      are plotted
     -B, --showbest                   Display detailed information for best score at each 
                                      phenotype
+    -n, --incl-gene-name             Include italicized gene name in label
+    -W, --show-direction             Plot p-values as triangles displaying direction of effect
+    -j, --narrow                     Decrease distance between points on track
+		-y, --group-symbols              Groups displayed with different shapes
     -D, --group-color                Use colors from group file for point colors
     -x [pheno_file]                  PheWAS expected phenotypes file
     -r [groups]                      List of groups to include (AA, EA, MA)
@@ -593,7 +603,6 @@ class ResultHolder
   # creates array of arrays of ResultValues to plot
   # each sub array contains the values for one phenotype
   def generate_result_values(pval_thresh, params)
-puts "group_colors=#{params[:group_colors] }"
 		params[:group_colors] ? group_colors = true : group_colors = false
     @pval_threshold = pval_thresh
 
@@ -660,15 +669,16 @@ puts "group_colors=#{params[:group_colors] }"
 	end
 
   # adds the pvalue result for a SNP-phenotype combination
-  def add_result(snpname, phenoname, pval, ethnicity, phenogroup, betaval, sampsize)
+  def add_result(snpname, phenoname, pval, ethnicity, phenogroup, betaval, 
+			sampsize,genename)
     # don't insert blanks
     if pval !~ /\d/
       return
     end
-    
+
     if pval.to_f == 0.0
       print "P value of 0.0 for #{phenoname} #{snpname}\n"
-      @pheno_list.add_pheno(phenoname)
+      @pheno_list.add_pheno(phenoname, genename)
       return
     end
 
@@ -722,7 +732,7 @@ puts "group_colors=#{params[:group_colors] }"
     @results[@results_by_snp_pheno[snpname][phenoname]].pvalues[ethnicity] =  ResultScore.new(pval, betaval, sampsize, snpname)
 
     @snp_list.add_snp(snpname)
-    @pheno_list.add_pheno(phenoname)
+    @pheno_list.add_pheno(phenoname, genename)
   end
 
   # return result based on snp name and phenotype
@@ -826,19 +836,21 @@ end
 #
 ############################################################################
 class PhenoList
-  attr_accessor :pheno_order, :pheno_hash
+  attr_accessor :pheno_order, :pheno_hash, :gene_name_order
 
   def initialize
     @pheno_hash = Hash.new
     @pheno_order = Array.new
     @pheno_group = Hash.new
     @expected = Hash.new
+		@gene_name_order = Array.new
   end
 
-  def add_pheno(phenoname)
+  def add_pheno(phenoname,genename)
     if !@pheno_hash.has_key?(phenoname)
       @pheno_hash[phenoname] = @pheno_order.length
       @pheno_order << phenoname
+			@gene_name_order << genename
     end
   end
 
@@ -954,6 +966,7 @@ class ResultFileReader < FileReader
     filename= params[:filename]
     grouprequired =params[:grouprequired]
     samprequired = params[:samprequired]
+		include_genename = params[:include_genename] || nil
     classname = params[:classname] || nil
 
     firstline = true
@@ -1038,12 +1051,16 @@ class ResultFileReader < FileReader
         else
           phenotypename = data[@phenocol]
         end
+				if include_genename and @genecol
+					phenotypename = data[@genecol] + ' ' + phenotypename
+				end
         phenotypename.gsub!('"','')
-
+				
+				(@genecol.nil? or !include_genename) ? genename = nil : genename = data[@genecol]
         if (resultholder.include_all_phenos or resultholder.included_phenos.has_key?(phenotypename))
           begin
             resultholder.add_result(data[@snpcol], phenotypename, data[@pvalcol], ethnicity,
-              assoc_pheno, betaval, sampsize)
+              assoc_pheno, betaval, sampsize, genename)
           rescue StandardError => problem
             print "Problem adding result for line# #{lineno}:\n#{line}\n\n"
             exit
@@ -1085,7 +1102,7 @@ class ResultFileReader < FileReader
         @sampsizecol = i
       elsif header =~ /phenotype_class/i
         @phenoclasscol = i
-      elsif header =~ /gene/i
+      elsif header =~ /^gene/i
         @genecol = i
       end
     end #data
@@ -1132,7 +1149,6 @@ class ExpectedPhenoReader < FileReader
       @column_headers << header
     end #data
   end
-
 
 end #ResultFileReader
 
@@ -1786,8 +1802,6 @@ class RadialPlotter
     sigcolor = 'red'
 
     y_correction = 2.0 + (0.02 * (num_results-50))
-#puts "line_size=#{line_size}"  
-#puts "number results = #{num_results}"
     num_results.times do |i|
       stroke_color = 'black'
       if p_thresh > 0
@@ -1812,33 +1826,20 @@ class RadialPlotter
       end
 
       y_shift = -length-line_size/5
-#y_shift_orig = y_shift
-#print "rotation=#{rotation} y_shift(start)=#{y_shift} "    
+   
       if rotation >= 140 and rotation < 180
-#print "140-> <180 #{(rotation-140)/20 * (@font_size_multiple*y_correction*@title_text_adj-1.0)}"
-#maxtmp=y_shift - line_size * (180-140)/20 * (@font_size_multiple*y_correction*@title_text_adj-1.0)	
         y_shift -= line_size * (rotation-140)/20 * (@font_size_multiple*y_correction*@title_text_adj-1.0)
-#puts "rotation 180 MAX=#{maxtmp/y_shift_orig} increase=#{maxtmp-y_shift_orig}"
       elsif rotation >= 180 and rotation < 220
-#maxtmp=y_shift - line_size * (220-180)/20 * (@font_size_multiple*y_correction*@title_text_adj-1.0)
         y_shift -= line_size * (220-rotation)/20 * (@font_size_multiple*y_correction*@title_text_adj-1.0)
-#puts "rotation 180 MAX=#{maxtmp/y_shift_orig}"
       elsif rotation == 0
-#        largetext ? y_shift -= line_size * (120-rotation)/120 * (@font_size_multiple*2-1.0) : y_shift -= line_size * 0.18 * @font_size_multiple
 				largetext ? y_shift -= line_size * (120-rotation)/120 * (@font_size_multiple*2.0*@title_text_adj-1.0) : y_shift -= line_size * 0.18 * @font_size_multiple 
       elsif rotation <= 40
-#print "UNDER 40 #{(40-rotation)/120} #{(40-rotation)/120 * (@font_size_multiple*@title_text_adj-1.0)}"
-#         y_shift -= line_size * (40-rotation)/120 * (@font_size_multiple*2-1.0)
 				y_shift -= line_size * (40-rotation)/120 * (@font_size_multiple*@title_text_adj-1.0)
         # adjust it based on length of line size at that position
         # make farther from original if line is shorter
       elsif rotation >= 320
-#        y_shift -= line_size * (rotation-320)/20 * (@font_size_multiple*2-1.0)
-#maxtmp=y_shift - line_size * (360-320)/20 * (@font_size_multiple*2*@title_text_adj-1.0)
-#puts "rotation 360 MAX=#{maxtmp/y_shift_orig} increase=#{maxtmp-y_shift_orig}"
 				y_shift -= line_size * (rotation-320)/20 * (@font_size_multiple*2*@title_text_adj-1.0)
       end
-#puts "y_shift(end)=#{y_shift} percent change=#{y_shift/y_shift_orig}"
 				label = reslist.ordered[i]
         if use_beta
           if reslist.scores[reslist.ordered[i]].beta < 0
@@ -1865,16 +1866,15 @@ class RadialPlotter
 				
 				midlabel = label.length/2
 				newlabel = label.dup
-#				newlabel.insert(midlabel,"\n")
 				
 					rotated.text(0,y_shift,newlabel).rotate(-rotation).styles(:font_weight=>font_weight,:font_size=>standard_font_size*0.65,
 						:text_anchor=>txt_anchor) #:font_family=>Font_plot_family
       end
       rotation += rotate_increment
     end
-#exit
+
     fill_color = '#FF7F24'
-#fill_color = 'none'
+
     circle_size = @radius * @line_size
     # draw circle of appropriate size in center of the plot
     canvas.circle(circle_size, midx, midy).styles(:fill=>fill_color,
@@ -1937,7 +1937,8 @@ end
 ############################################################################
 class DotPlotter
   attr_accessor :x_offset, :y_pval_zero, :y_offset, :diameter, :pval_threshold, :x_interior_offset,
-    :y_plot_height, :offset_mult, :first_color, :font_adjuster, :font_size_multiple
+    :y_plot_height, :offset_mult, :first_color, :font_adjuster, :font_size_multiple,
+		:pheno_dist_mult
 
   def initialize
     @diameter = 8
@@ -1949,7 +1950,8 @@ class DotPlotter
     @offset_mult = 4
     @first_color = 'gray'
     @font_adjuster = 1
-    @font_size_multiple =1
+    @font_size_multiple =1.0
+		@pheno_dist_mult = 2.0
   end
 
   # returns plot width in inches
@@ -1970,6 +1972,7 @@ class DotPlotter
     else
       divisor = 149
     end
+		divisor *= 2.0/@pheno_dist_mult
     return num_phenos * @diameter.to_f/divisor + padding
   end
 
@@ -2068,7 +2071,6 @@ class DotPlotter
       rotation = 0
       anchor = 'end'
 			text_x = @offset_mult * @x_offset
-# 			text_x /= 1.25
     end
 
     ethcolors.each do |eth, colorstr|
@@ -2082,13 +2084,11 @@ class DotPlotter
 					text.tspan(eth).styles(:font_size => font_size, :text_anchor=>anchor)
 				end
 			end
-
-#			length_x = space_for_text(coordinates_per_pixel,eth) unless rotate
 			
       canvas.g.translate(xstart, ystart) do |box|
         box.styles(:fill=>colorstr, :stroke=>'none', :stroke_width=>1, :fill_opacity=>0.8)
         if rotate
-					if ethshapes[eth]=='square'
+					if ethshapes[eth]=='square' or ethshapes[eth]=='circle'
 						box.rect(@diameter, @diameter, text_x-@diameter, @y_offset-@diameter)
 					elsif ethshapes[eth]=='diamond'
 #						offset = @diameter/2.to_f 
@@ -2102,7 +2102,7 @@ class DotPlotter
 						box.circle(@diameter/2.to_f,text_x-@diameter/2.to_f,@y_offset-@diameter/2.to_f)
 					end
         else
-					if ethshapes[eth]=='square'
+					if ethshapes[eth]=='square' or ethshapes[eth]=='circle'
 						box.rect(@diameter, @diameter, text_x+length_x, @y_offset-@diameter)
 					end
 					length_x += @diameter + space_for_text(coordinates_per_pixel, " ")
@@ -2242,12 +2242,85 @@ class DotPlotter
 
 
   # draws standard dot with phenotypes along horizontal axis
-  def draw_standard_dot(canvas, pheno_order, plot_values, xstart, ystart, xmax, ymax, minpval, maxpval, rotate=false,
-    draw_triangle=false, plot_beta=false, minbeta=0, maxbeta=1, labels_on_top=false, plot_sampsizes=false,
-    minsize=0, maxsize=1000, draw_lines=true, redlinep=nil, y_best_offset=0, best_results=nil)
+	def draw_standard_dot(params)
+		
+		canvas = params[:canvas]
+		pheno_list = params[:pheno_list]
+		plot_values = params[:plot_values]
+		xstart = params[:xstart]
+		ystart = params[:ystart]
+		xmax = params[:xmax]
+		ymax = params[:ymax]
+		minpval = params[:minpval]
+		maxpval = params[:maxpval]
+		rotate = params[:rotate] || false
+		draw_triangle = params[:draw_triangle] || false
+		plot_beta = params[:plot_beta] || false
+		minbeta = params[:minbeta] || 0
+		maxbeta = params[:maxbeta] || 1
+		labels_on_top = params[:labels_on_top] || false
+		plot_sampsizes = params[:plot_sampsizes] || false
+		minsize = params[:minsize] || 0
+		maxsize = params[:maxsize] || 1000
+		draw_lines = params[:draw_lines] || true
+		redlinep = params[:redlinep] || nil
+		y_best_offset = params[:y_best_offset] || 0
+		best_results = params[:best_results] || nil
+		coordinates_per_pixel = params[:coordinates_per_pixel]
+		narrow_plot = params[:narrow] || false
 
+		pheno_order = pheno_list.pheno_order
+		gene_name_order = pheno_list.gene_name_order
+		
+		# find p values that are farthest apart
+		all_pvals = Array.new
+    pheno_order.each_with_index do |phenoname, i|
+      plot_values[i].each do |resval|
+        if resval.pval < minpval
+          next
+        end
+				all_pvals << resval.pval
+			end
+		end
+		all_pvals.sort!
+		pval1=0
+		pval2=0
+		maxdist = 0
+		(1..all_pvals.length-1).each do |i|
+			if maxdist < (all_pvals[i]-all_pvals[i-1]).abs
+				maxdist = (all_pvals[i]-all_pvals[i-1]).abs
+				pval1 = all_pvals[i-1]
+				pval2 = all_pvals[i]
+			end
+		end
+		minpscales = Array.new
+		maxpscales = Array.new
+		pvalintervals = Array.new
+		if(maxdist > (maxpval-minpval).to_f/3)
+			if pval1 < pval2
+				splitmin = pval1
+				splitmax = pval2
+			else
+				splitmin = pval2
+				splitmax = pval1
+			end
+			# split in middle
+			minpscales << minpval
+			maxpscales << splitmin.ceil
+			pvalintervals << maxpscales[0] - minpscales[0]
+			minpscales << splitmax.floor
+			maxpscales << maxpval
+			pvalintervals << maxpscales[1] - minpscales[1]
+		else
+puts "NO SPLIT"
+			minpscales << minpval
+			maxpscales << maxpval
+			pvalintervals << maxpval - minpval
+		end
+		
     # determine vertical placement based on distance from top to bottom of plot
     y_interval = @y_plot_height
+		y_half_interval = y_interval/2
 
     pval_interval = maxpval - minpval
     x_circle_start = x_circle = xstart + @offset_mult * @x_offset + @x_interior_offset
@@ -2303,7 +2376,15 @@ class DotPlotter
           next
         end
 
-        y_point = (1-((resval.pval- minpval) / pval_interval)) * y_interval
+				if(minpscales.length > 1)
+					if(resval.pval < maxpscales[0])
+						y_point = (1-((resval.pval- minpscales[0]) / pvalintervals[0])) * y_half_interval + y_half_interval
+					else
+						y_point = (1-((resval.pval- minpscales[1]) / pvalintervals[1])) * y_half_interval * 0.8
+					end
+				else
+					y_point = (1-((resval.pval- minpscales[0]) / pvalintervals[0])) * y_interval
+				end
         colorstr = resval.colorstr
         if !color_hash.has_key?(colorstr)
           color_hash[colorstr] = Array.new
@@ -2323,7 +2404,7 @@ class DotPlotter
       end 
       x_circle = increment_x_phenotype(x_circle)
     end
-puts "draw_triangle #{draw_triangle}"
+
     color_hash.each do |colorstr, points|
       canvas.g.translate(xstart, y_plots_start) do |pen|
         if !draw_triangle
@@ -2355,16 +2436,39 @@ puts "draw_triangle #{draw_triangle}"
     if rotate
       y_txt_best = 0
       best_anchor = 'start'
+			txt_rotate=-90
     else
       y_txt_best = ymax-ystart-y_best_offset
       best_anchor = 'end'
+			narrow_plot ? txt_rotate=-75 : txt_rotate=-90
     end
     
     # write phenotype labels across bottom of plot
-    pheno_order.each do |phenoname|
-      canvas.g.translate(xstart, ystart).text(x_text, y_text).rotate(-90) do |text|
-      text.tspan(phenoname).styles(:font_size=>font_size, :font=>Font_phenotype_names,
-        :text_anchor =>txt_anchor)
+    pheno_order.each_with_index do |phenoname,i|
+			if gene_name_order[i].nil?
+				canvas.g.translate(xstart, ystart).text(x_text, y_text).rotate(txt_rotate) do |text|
+					text.tspan(phenoname).styles(:font_size=>font_size, :font=>Font_phenotype_names,
+						:text_anchor =>txt_anchor)
+				end
+			else
+				regexresult = (phenoname =~ /gene_name_order[i]/)
+				substrIndex = phenoname.index(gene_name_order[i])
+				phenoname_plot = phenoname[gene_name_order[i].length+1..(phenoname.length-1)]
+				canvas.g.translate(xstart, ystart).text(x_text, y_text).rotate(txt_rotate) do |text|
+					text.tspan(phenoname_plot).styles(:font_size=>font_size, :font=>Font_phenotype_names,
+						:text_anchor =>txt_anchor)
+				end
+
+				pheno_space = space_for_text(coordinates_per_pixel,phenoname_plot) * 0.98
+puts "pheno_name_plot=#{phenoname_plot} pheno_space=#{pheno_space}"
+				# calculate final x,y for line (x2,y2)=(x1+l⋅cos(a),y1+l⋅sin(a))
+				 x2 = x_text - pheno_space * Math.cos((360 + txt_rotate) * Math::PI/180)
+				 y2 = y_text + pheno_space * Math.sin(-(txt_rotate) * Math::PI/180)
+				 
+				canvas.g.translate(xstart,ystart).text(x2, y2).rotate(txt_rotate) do |text|
+					text.tspan(gene_name_order[i]).styles(:font_size=>font_size, :font=>Font_phenotype_names,
+						:text_anchor =>txt_anchor, :font_style=>'italic', :font_weight=>'bold')
+				end
       end
       if best_results
         canvas.g.translate(xstart, ystart).text(x_text, y_txt_best).rotate(-90) do |text|
@@ -2379,19 +2483,21 @@ puts "draw_triangle #{draw_triangle}"
     x_finish = decrement_x_phenotype(x_text)
     x_end_box = x_finish + @x_interior_offset - xstart
      # if selected draw red line at indicated p value
-    if redlinep
-      y_point = (1-((redlinep.to_f) / pval_interval)) * y_interval
-      canvas.g.translate(xstart, y_plots_start) do |draw|
-        draw.styles(:stroke=>'blue')
-        draw.line(@offset_mult*@x_offset,y_point,x_end_box,y_point)
-      end
-#options.redline = resultholder.get_log10(options.redline.to_f) if options.redline
-			bluelinep = -Math.log10(0.0008)
-			y_point = (1-((bluelinep.to_f) / pval_interval)) * y_interval
-      canvas.g.translate(xstart, y_plots_start) do |draw|
-        draw.styles(:stroke=>'red')
-        draw.line(@offset_mult*@x_offset,y_point,x_end_box,y_point)
-      end			
+		if redlinep and (1-((redlinep.to_f) / pval_interval) >= 0.0)
+#    if redlinep and (1-((redlinep.to_f) / pval_interval) >= 0.0)
+				if(minpscales.length > 1 and (redlinep < maxpscales[0] or redlinep > minpscales[1] ))
+					if(redlinep < maxpscales[0])
+						y_point = (1-((redlinep- minpscales[0]) / pvalintervals[0])) * y_half_interval + y_half_interval
+					else
+						y_point = (1-((redlinep- minpscales[1]) / pvalintervals[1])) * y_half_interval * 0.8
+					end
+				else
+					y_point = (1-((redlinep- minpscales[0]) / pvalintervals[0])) * y_interval
+				end
+		 canvas.g.translate(xstart, y_plots_start) do |draw|
+				draw.styles(:stroke=>'red')
+				draw.line(@offset_mult*@x_offset,y_point,x_end_box,y_point)
+			end
     end
 
     canvas.g.translate(xstart, y_plots_start) do |draw|
@@ -2403,8 +2509,21 @@ puts "draw_triangle #{draw_triangle}"
       draw.line(x_end_box, 0, x_end_box, y_interval)
     end
 
-    pval_labels(canvas, minpval, maxpval, 10, xstart,  y_plots_start, offset_mult*@x_offset, y_plots_start+y_interval,
-      font_size, "-log10(p value)", rotate)
+		if maxpscales.length == 1
+			pval_labels(canvas, minpval, maxpval, 10, xstart,  y_plots_start, offset_mult*@x_offset, y_plots_start+y_interval,
+				font_size, "-log10(p value)", rotate)
+		else
+			pval_labels(canvas, minpscales[0], maxpscales[0], 5, xstart,  y_plots_start+y_half_interval, offset_mult*@x_offset, y_plots_start+y_interval,
+				font_size, "-log10(p value)", rotate)
+			# draw break lines
+      canvas.g.translate(xstart, y_plots_start) do |draw|
+        draw.styles(:stroke=>'black', :stroke_width=>2, :opacity=>1.0)
+        draw.line(xstart+@offset_mult * @x_offset-@diameter, y_half_interval - y_half_interval*0.125, xstart+@offset_mult * @x_offset+@diameter, y_half_interval - y_half_interval*0.1)
+				draw.line(xstart+@offset_mult * @x_offset-@diameter, y_half_interval- y_half_interval*0.1, xstart+@offset_mult * @x_offset+@diameter, y_half_interval - y_half_interval*0.075)
+      end
+			pval_labels(canvas, minpscales[1], maxpscales[1], 4, xstart,  y_plots_start, offset_mult*@x_offset, y_plots_start+y_half_interval*0.8,
+				font_size, " ", rotate)	
+		end
 
     beta_ystart = ystart
     if plot_beta
@@ -2730,11 +2849,13 @@ puts "draw_triangle #{draw_triangle}"
 
   # moves x to next location along plot
   def increment_x_phenotype(x)
-    return x + @diameter * 2
+#    return x + @diameter * 2
+		return x + @diameter * @pheno_dist_mult
   end
 
   def decrement_x_phenotype(x)
-    return x - @diameter * 2
+#    return x - @diameter * 2
+		return x - @diameter * @pheno_dist_mult
   end
 
 end
@@ -2760,7 +2881,7 @@ def draw_phewas(options)
   if options.ethmapfile
     ethreader = EthMapReader.new
     ethreader.read_file(ethmap, options.ethmapfile)
-		if options. group_symbols
+		if options.group_symbols
 			ethmap.set_shapes
 		end
   end
@@ -2785,7 +2906,7 @@ def draw_phewas(options)
   end
   resreader.read_file(:resultholder=>resultholder, :filename=>options.phewasfile, 
     :grouprequired=>grouprequired, :samprequired=>options.plot_sampsizes, 
-    :classname=>options.classname)
+    :classname=>options.classname, :include_genename=>options.include_genename)
 
   # set up titles for best results
   resultholder.set_best_values if options.showbest
@@ -2811,6 +2932,10 @@ def draw_phewas(options)
   dotter = DotPlotter.new
   dotter.diameter = diameter_size
   dotter.font_size_multiple = 1.25 if options.largetext
+	if options.narrow
+		dotter.font_size_multiple = 0.85
+		dotter.pheno_dist_mult = 1.2
+	end
 
   xside_end_addition = 0.005 * dotter.diameter * 2
   xside_end_addition *= 2.5 if dotter.diameter > 20
@@ -3019,13 +3144,18 @@ def draw_phewas(options)
       ygrid_start = y_pval_start + rotate_grid_offset
       y_pval_start = ymax- ygrid_orig + y_pval_start
     end
-    dotter.draw_standard_dot(canvas, resultholder.pheno_list.pheno_order, plot_values,
-      0, y_pval_start, xmax, ygrid_start, resultholder.minpval, resultholder.maxpval.ceil, options.rotate,
-        !resultholder.single_snp.nil? ,options.beta, resultholder.minbeta, resultholder.maxbeta,
-        options.phenotype_correlations_file, options.plot_sampsizes, resultholder.minsampsize,
-        resultholder.maxsampsize, !options.nolines, options.redline, ybest_offset,
-        resultholder.best_results)
 
+	
+		dotter.draw_standard_dot(:canvas=>canvas, :pheno_list=>resultholder.pheno_list,
+			:plot_values=>plot_values, :xstart=>0, :ystart=>y_pval_start, :xmax=>xmax,
+			:ymax=>ygrid_start, :minpval=>resultholder.minpval, :maxpval=>resultholder.maxpval.ceil,
+			:rotate=>options.rotate, :draw_triangle=>(!resultholder.single_snp.nil? or options.show_direction), 
+			:plot_beta=>options.beta, :minbeta=>resultholder.minbeta, :maxbeta=>resultholder.maxbeta, 
+			:labels_ton_top=>options.phenotype_correlations_file, :plot_sampsizes=>options.plot_sampsizes,
+			:minsize=>resultholder.minsampsize, :maxsize=>resultholder.maxsampsize, 
+			:draw_lines=>!options.nolines, :redlinep=>options.redline, :y_best_offset=>ybest_offset,
+			:best_results=>resultholder.best_results, :coordinates_per_pixel=>ymax/yside.in,
+			:narrow=>options.narrow)
     
     if options.phenotype_correlations_file #and !options.rotate
       dotter.draw_grid(canvas, resultholder, 0, ygrid_start, options.rotate)
