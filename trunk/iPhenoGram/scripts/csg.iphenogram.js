@@ -60,6 +60,7 @@ $.widget('csg.iphenogram',{
 	* @property {string} options.phenos.pheno Phenotype name
 	* @property {number} options.phenos.endPosition Optional end position of phenotype region on chromosome in bp
 	* @property {string} options.phenos.posColor Optional color for line (or region) across chromosome
+	* @property {string} options.phenos.group Optional group for defining shape on the plot
 	* @property {array} options.cytoBands Cytogenetic bands on chromosomes
 	* @property {string} options.cytoBands.type Type of band
 	* @property {number} options.cytoBands.startBand Start position in bp
@@ -467,28 +468,62 @@ $.widget('csg.iphenogram',{
 			circleVis = 'visible';
 		}
 
-			var circles = widget.chromd3.selectAll("circle")
+// 		var circles = widget.chromd3.selectAll("circle")
+// 				.data(function(d){return d.phenos;})
+// 				.enter()
+// 				.append("circle");
+// 
+// 		circles.attr("class", "phenocircle")
+// 			.attr("cx", function(d){return d.x;})
+// 			.attr("cy", function(d){return d.y;})
+// 			.attr("r", widget.options.circleradius)
+// 			.attr("fill", function(d){return widget.phenoColors(d.pheno);})
+// 			.attr("stroke", function(d){return widget.phenoColors(d.pheno);})
+// 			.attr("visibility", circleVis)
+// 			.on("click", function(d){
+// 				var ph={};
+// 				ph[d.pheno]=1;
+// 				widget.highlightPhenos(ph, false);
+// 				widget._triggerPhenoSelection(d.pheno);
+// 			});
+
+		var circles = widget.chromd3.selectAll("circle")
 				.data(function(d){return d.phenos;})
 				.enter()
-				.append("circle");
-
-		circles.attr("class", "phenocircle")
-			.attr("cx", function(d){return d.x;})
-			.attr("cy", function(d){return d.y;})
-			.attr("r", widget.options.circleradius)
-			.attr("fill", function(d){return widget.phenoColors(d.pheno);})
-			.attr("stroke", function(d){return widget.phenoColors(d.pheno);})
+				.append("path");
+// console.log("circleradius="+widget.options.circleradius);
+// elementsize = widget.options.circleradius *  widget.options.xmax / widget.options.width;
+// console.log("elementsize="+elementsize);
+// elementsize= elementsize*elementsize;
+elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
+// console.log("elementsize="+elementsize);too
+		circles.attr("class","phenocircle")
+			.attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
+			.attr("d", d3.svg.symbol()
+// 				.size(function(d){return widget.options.circleradius*10;})
+				.size(function(d){return elementsize;})
+				.type(function(d){return widget.groupMap[d.group];}))
+// 				.type(function(d){return 'circle';}))
+			.style("fill", function(d){return widget.phenoColors(d.pheno);})
+			.style("stroke",  function(d){return widget.phenoColors(d.pheno);})
 			.attr("visibility", circleVis)
 			.on("click", function(d){
 				var ph={};
 				ph[d.pheno]=1;
 				widget.highlightPhenos(ph, false);
 				widget._triggerPhenoSelection(d.pheno);
-			});
-
+			});				
+			
+		var regex = /^[a-z0-9]+$/i;
 		if(widget.options.tip_enabled){
 			circles.on("mouseover", function(d){
-				widget.tooltip.html("<ul class='no-bullet'><li>" + d.pheno + "</li></ul>")
+				var message;
+				if(regex.test(d.group))
+					message = "<ul class='no-bullet'><li>" + d.pheno + "</li><li>" + d.group + "</li></ul>"
+				else
+					message = "<ul class='no-bullet'><li>" + d.pheno + "</li></ul>"
+// 				widget.tooltip.html("<ul class='no-bullet'><li>" + d.pheno + "</li></ul>")
+				widget.tooltip.html(message)
 					.style("left", (d3.event.pageX) + "px")
 					.style("top", (d3.event.pageY + Math.round(widget.options.circlesize/widget.options.pixelscale)) + "px");
 				widget.tooltip.transition()
@@ -762,6 +797,9 @@ $.widget('csg.iphenogram',{
 	_addPhenotypes:function(){
 		// clear map
 		this.phenoMap={};
+		this.groupMap={};
+		symbols = d3.svg.symbolTypes;
+		groupIndex=0;
 
 		// need to clear chrom positions
 		var chromKeys = Object.keys(this.chromMap);
@@ -790,8 +828,16 @@ $.widget('csg.iphenogram',{
 				this.phenoMap[pheno.pheno]=1;
 				chr.posMap[pheno.position.toString()].hasPhenos=true;
 			}
+			
+			if(this.groupMap[pheno.group] == undefined){
+				this.groupMap[pheno.group] = symbols[groupIndex];
+				console.log("adding " + pheno.group + " for " + symbols[groupIndex]);
+				groupIndex++;
+			}
+			
+			
 		}
-		this.phenoColors=this._getPhenoColors()
+		this.phenoColors=this._getPhenoColors()		
 	},
 
 	/**
@@ -820,28 +866,35 @@ $.widget('csg.iphenogram',{
 		var widget = this;
 		if(Object.keys(phenopos).length==0)
 			reset = true;
+		elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 		if(reset){
-
 			d3.selectAll(".phenocircle")
 				.transition()
 				.duration(250)
-				.attr("fill", function(d){return widget.phenoColors(d.pheno);})
-				.attr("stroke",function(d){return widget.phenoColors(d.pheno);})
-				.attr("r",widget.options.circleradius);
+				.style("fill", function(d){return widget.phenoColors(d.pheno);})
+				.style("stroke",function(d){return widget.phenoColors(d.pheno);})
+			 	.attr("d", d3.svg.symbol()
+			 		.type(function(d){return widget.groupMap[d.group];})
+			 		.size(elementsize))				
+// 				.attr("r",widget.options.circleradius);
 			this.highlighted_pheno="";
 		}
 		else{
 
+			expandedsize = elementsize*4;
 			d3.selectAll(".phenocircle")
 				.transition()
 				.duration(500)
 				.each("start", function(d){
 					if(phenopos[d.pheno]){
 						d3.select(this)
-							.attr("r", widget.options.circleradius*2);
+							.attr("d", d3.svg.symbol()
+								.type(function(d){return widget.groupMap[d.group];})
+								.size(expandedsize))
+// 							.attr("r", widget.options.circleradius*2);
 					}
 				})
-				.attr("fill", function(d){
+				.style("fill", function(d){
 					if(phenopos[d.pheno]){
 						return widget.phenoColors(d.pheno);
 					}
@@ -849,7 +902,7 @@ $.widget('csg.iphenogram',{
 						return "#f1f1f1";
 					}
 				})
-				.attr("stroke", function(d){
+				.style("stroke", function(d){
 					if(phenopos[d.pheno]){
 						return widget.phenoColors(d.pheno);
 					}
@@ -861,7 +914,10 @@ $.widget('csg.iphenogram',{
 			 		d3.select(this)
 			 		 .transition()
 			 		 .duration(1000)
-				 	 .attr("r", widget.options.circleradius);
+			 		 .attr("d", d3.svg.symbol()
+			 		 	.type(function(d){return widget.groupMap[d.group];})
+			 		 	.size(elementsize))
+// 				 	 .attr("r", widget.options.circleradius);
 
 				});
 				widget.highlighted_pheno=phenopos.pheno;
@@ -913,16 +969,18 @@ $.widget('csg.iphenogram',{
 		if(inputStr){
 			var inputData=d3.tsv.parse(inputStr, function(d){
 				var ePos, pCol, ph;
-				d.endPosition ? ePos = +d.endPosition : ePos = undefined
-				d.posColor ? pCol = d.posColor.toString() : pCol = undefined
-				d.pheno ? ph = d.pheno.toString() : ph = undefined
+				d.endPosition ? ePos = +d.endPosition : ePos = undefined;
+				d.posColor ? pCol = d.posColor.toString() : pCol = undefined;
+				d.pheno ? ph = d.pheno.toString() : ph = undefined;
+				d.group ? gr = d.group.toString() : gr = ' ';
 				return {
 					chrom: d.chrom.toString(),
 					position: +d.position,
 					pheno: ph,
 					id: d.id.toString(),
 					endPosition: ePos,
-					posColor: pCol
+					posColor: pCol,
+					group: gr
 				}});
 			this._setOption('phenos', inputData);
 		}
@@ -1129,12 +1187,20 @@ $.widget('csg.iphenogram',{
 		var origHeight = s.attr("height");
 
 		var phenos = Object.keys(this.phenoMap);
+		var groups = Object.keys(this.groupMap);
 		var adjustment = 1.0;
 		if(phenos.length > 0){
 			// place block around area to "white" out the non-visible portion and
 			// leave room for the phenotype color key
 			var phRowInfo = this._phenosPerRow();
-			adjustment = 1.0 + (phRowInfo.phenoRows * this.options.ymax / 40) / this.options.ymax;
+			if(groups.length > 1){
+				var grRowInfo = this._groupsPerRow();
+				adjustment = 1.0 + ((phRowInfo.phenoRows + grRowInfo.groupRows) * this.options.ymax / 40) / this.options.ymax;
+			}
+			else{
+				adjustment = 1.0 + (phRowInfo.phenoRows * this.options.ymax / 40) / this.options.ymax;
+			}
+// 			adjustment = 1.0 + (phRowInfo.phenoRows * this.options.ymax / 40) / this.options.ymax;
 		}
 
 		s.attr("width", origWidth*resize)
@@ -1152,9 +1218,13 @@ $.widget('csg.iphenogram',{
 			.attr("width", this.options.xmax)
 			.attr("height", this.options.ymax*adjustment - this.options.ymax)
 			.attr("fill",this.options.backgroundColor);
+// 		if(groups.length > 1){
+// 			this._addGroupKey(this.zm.translate()[0],this.zm.translate()[1],
+// 				this.zm.scale(),grRowInfo);
+// 		}
 		if(phenos.length > 0){
 			this._addPhenoKey(this.zm.translate()[0],this.zm.translate()[1],
-				this.zm.scale(),phRowInfo);
+				this.zm.scale(),phRowInfo,grRowInfo);
 		}
 
 		// add the phenotype color key here (adjusted to place in the bottom of the final plot
@@ -1183,6 +1253,25 @@ $.widget('csg.iphenogram',{
 		var rows = Math.ceil(nameLengths.length/phPerRow);
 		return {'phenoRows':rows, 'phenosPerRow':phPerRow};
 	},
+	
+	/**
+    * Calculate the number of groups per row for SVG shape key
+    * @private
+    * @return {object}  Total number of rows and groups per row.
+  */
+	_groupsPerRow:function(){
+		var nameLengths = jQuery.map(Object.keys(this.groupMap), function(name,i){
+			return +name.length;
+		});
+		var maxName = Math.max.apply(null,nameLengths);
+		var constantSpacer = this.options.circleradius * 2;
+
+		var phPerRow = Math.ceil(this.options.xmax / ((constantSpacer + maxName) * 14));
+
+		var rows = Math.ceil(nameLengths.length/phPerRow);
+		return {'groupRows':rows, 'groupsPerRow':phPerRow};
+	},	
+	
 
 	/**
     * Add phenotype color key
@@ -1192,22 +1281,88 @@ $.widget('csg.iphenogram',{
     * @param {float} zoom Zoom level
     * @param {object} phenoRowInfo
   */
-	_addPhenoKey:function(xoffset, yoffset, zoom, phenoRowInfo){
+	_addPhenoKey:function(xoffset, yoffset, zoom, phenoRowInfo, groupRowInfo){
 		var yStart = (this.options.ymax - yoffset)/zoom;
 		var xStart = (0 - xoffset)/zoom;
 		var phenoKeyG = this.canvas.append("g")
 			.attr("class", "phenoKeyInfo")
 			.attr("transform", "translate(" + xStart + "," + yStart + ")scale(" + 1/zoom + ")");
 
-		var phenoNames = Object.keys(this.phenoMap);
-		var widget = this;
 		var currPos = 0;
-		var yInterval = Math.round(this.options.ymax / 40);
-		var xInterval = Math.round(this.options.xmax / (phenoRowInfo.phenosPerRow+1));
 		var side = this.options.circleradius*2;
+		var groupNames = Object.keys(this.groupMap);
+		var widget = this;
+
+		var yInterval = Math.round(this.options.ymax / 40);
+		var xInterval = Math.round(this.options.xmax / (groupRowInfo.groupsPerRow+1));
+		
 		var yPos = yInterval-side;
 		var xPos = side;
 		var fontSize = 56;
+
+		
+		if(groupNames.length > 1){
+			var elementsize = side * side;
+			for(var i=0; i<groupNames.length; i++){
+			
+// var circles = widget.chromd3.selectAll("circle")
+// 				.data(function(d){return d.phenos;})
+// 				.enter()
+// 				.append("path");
+// 
+// 		circles.attr("class","phenocircle")
+// 			.attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
+// 			.attr("d", d3.svg.symbol()
+// // 				.size(function(d){return widget.options.circleradius*10;})
+// 				.size(function(d){return elementsize;})
+// 				.type(function(d){return widget.groupMap[d.group];}))
+// // 				.type(function(d){return 'circle';}))
+// 			.style("fill", function(d){return widget.phenoColors(d.pheno);})
+// 			.style("stroke",  function(d){return widget.phenoColors(d.pheno);})
+// 			.attr("visibility", circleVis)
+// 			.on("click", function(d){
+// 				var ph={};
+// 				ph[d.pheno]=1;
+// 				widget.highlightPhenos(ph, false);
+// 				widget._triggerPhenoSelection(d.pheno);
+// 			});		
+				shapeYPos = yPos - side/1.5
+				shapeXPos = xPos + side/1.5
+				
+				phenoKeyG.append("path")
+					.attr("class", "groupKeyInfo")
+					.attr("transform", "translate(" + shapeXPos + "," + shapeYPos +")")
+					.attr("d", d3.svg.symbol()
+						.size(elementsize)
+						.type(widget.groupMap[groupNames[i]]))
+					.style("fill", "white")
+					.style("stroke", "black")
+					.style("stroke-width", 4);
+				phenoKeyG.append("text")
+					.attr("class", "phenoKeyInfo")
+					.attr("x", xPos+2*side)
+					.attr("y", yPos)
+					.text(groupNames[i])
+					.attr("font-family", "sans-serif")
+					.attr("font-size", fontSize)
+					.attr("fill", "black")
+					.attr("text-anchor", "start");	
+				xPos += xInterval;
+				currPos++;
+				if(currPos > groupRowInfo.groupsPerRow){
+					yPos += yInterval;
+					xPos = side;
+					currPos=0;
+				}				
+			}
+			yPos += yInterval;
+		}
+
+		var phenoNames = Object.keys(this.phenoMap);
+		xInterval = Math.round(this.options.xmax / (phenoRowInfo.phenosPerRow+1));
+		currPos=0;
+		xPos = side;
+		
 		for(var i=0; i<phenoNames.length; i++){
 			phenoKeyG.append("rect")
 				.attr("class", "phenoKeyInfo")
