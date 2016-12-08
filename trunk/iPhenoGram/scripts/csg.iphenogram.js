@@ -128,7 +128,9 @@ $.widget('csg.iphenogram',{
 		// set up drawing canvas
 		this.widgetID = this.element.attr('id');
 		this.canvasID = 'csg-iphenogram-'+this.widgetID;
-		this.highlighted_pheno = "";
+// 		this.highlighted_pheno = "";
+		this.highlightedPhenos = {};
+		this.highlightedShapes = {};
 
 		this.canvasjquery = $('<svg id="'+this.canvasID+'"></svg>').appendTo(this.element);
 		this.canvas = d3.select('#'+this.canvasID)
@@ -150,15 +152,6 @@ $.widget('csg.iphenogram',{
 		this._placeChroms();
 		var widget=this;
 
-/*
-  position: absolute;
-  text-align: center;
-  padding: 10px;
-  font: 0.8em sans-serif;
-  background: lightsteelblue;
-  border: 0px;
-  border-radius: 8px;
-*/
 
 		if(this.options.tip_enabled){
 			// Define 'div' for tooltips
@@ -468,42 +461,16 @@ $.widget('csg.iphenogram',{
 			circleVis = 'visible';
 		}
 
-// 		var circles = widget.chromd3.selectAll("circle")
-// 				.data(function(d){return d.phenos;})
-// 				.enter()
-// 				.append("circle");
-// 
-// 		circles.attr("class", "phenocircle")
-// 			.attr("cx", function(d){return d.x;})
-// 			.attr("cy", function(d){return d.y;})
-// 			.attr("r", widget.options.circleradius)
-// 			.attr("fill", function(d){return widget.phenoColors(d.pheno);})
-// 			.attr("stroke", function(d){return widget.phenoColors(d.pheno);})
-// 			.attr("visibility", circleVis)
-// 			.on("click", function(d){
-// 				var ph={};
-// 				ph[d.pheno]=1;
-// 				widget.highlightPhenos(ph, false);
-// 				widget._triggerPhenoSelection(d.pheno);
-// 			});
-
 		var circles = widget.chromd3.selectAll("circle")
 				.data(function(d){return d.phenos;})
 				.enter()
 				.append("path");
-// console.log("circleradius="+widget.options.circleradius);
-// elementsize = widget.options.circleradius *  widget.options.xmax / widget.options.width;
-// console.log("elementsize="+elementsize);
-// elementsize= elementsize*elementsize;
-elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
-// console.log("elementsize="+elementsize);too
+		elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 		circles.attr("class","phenocircle")
 			.attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
 			.attr("d", d3.svg.symbol()
-// 				.size(function(d){return widget.options.circleradius*10;})
 				.size(function(d){return elementsize;})
 				.type(function(d){return widget.groupMap[d.group];}))
-// 				.type(function(d){return 'circle';}))
 			.style("fill", function(d){return widget.phenoColors(d.pheno);})
 			.style("stroke",  function(d){return widget.phenoColors(d.pheno);})
 			.attr("visibility", circleVis)
@@ -522,7 +489,6 @@ elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 					message = "<ul class='no-bullet'><li>" + d.pheno + "</li><li>" + d.group + "</li></ul>"
 				else
 					message = "<ul class='no-bullet'><li>" + d.pheno + "</li></ul>"
-// 				widget.tooltip.html("<ul class='no-bullet'><li>" + d.pheno + "</li></ul>")
 				widget.tooltip.html(message)
 					.style("left", (d3.event.pageX) + "px")
 					.style("top", (d3.event.pageY + Math.round(widget.options.circlesize/widget.options.pixelscale)) + "px");
@@ -831,7 +797,6 @@ elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 			
 			if(this.groupMap[pheno.group] == undefined){
 				this.groupMap[pheno.group] = symbols[groupIndex];
-				console.log("adding " + pheno.group + " for " + symbols[groupIndex]);
 				groupIndex++;
 			}
 			
@@ -864,24 +829,43 @@ elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
     */
 	highlightPhenos: function(phenopos, reset){
 		var widget = this;
+		if(reset){
+			widget.highlightedShapes={};
+		}
 		if(Object.keys(phenopos).length==0)
 			reset = true;
+		widget.allPhenoHighlight=false;
+		if(Object.keys(widget.highlightedShapes).length==0)
+			widget.allPhenoHighlight=true;	
 		elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 		if(reset){
 			d3.selectAll(".phenocircle")
 				.transition()
 				.duration(250)
-				.style("fill", function(d){return widget.phenoColors(d.pheno);})
-				.style("stroke",function(d){return widget.phenoColors(d.pheno);})
+				.style("fill", function(d){
+					if(widget.highlightedShapes[d.group] || widget.allPhenoHighlight){
+						return widget.phenoColors(d.pheno);
+					}
+					else{
+						return "#f1f1f1";
+					}
+				})
+				.style("stroke",function(d){
+					if(widget.highlightedShapes[d.group] || widget.allPhenoHighlight){
+						return widget.phenoColors(d.pheno);
+					}
+					else{
+						return "#f1f1f1";
+					}
+				})
 			 	.attr("d", d3.svg.symbol()
 			 		.type(function(d){return widget.groupMap[d.group];})
-			 		.size(elementsize))				
-// 				.attr("r",widget.options.circleradius);
-			this.highlighted_pheno="";
+			 		.size(elementsize));		
+			widget.highlightedPhenos = {};
+			widget.highlightedShapes = {};
 		}
 		else{
-
-			expandedsize = elementsize*4;
+			expandedsize = elementsize*4;		
 			d3.selectAll(".phenocircle")
 				.transition()
 				.duration(500)
@@ -891,11 +875,10 @@ elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 							.attr("d", d3.svg.symbol()
 								.type(function(d){return widget.groupMap[d.group];})
 								.size(expandedsize))
-// 							.attr("r", widget.options.circleradius*2);
 					}
 				})
 				.style("fill", function(d){
-					if(phenopos[d.pheno]){
+					if(phenopos[d.pheno] && (widget.highlightedShapes[d.group] || widget.allPhenoHighlight)){
 						return widget.phenoColors(d.pheno);
 					}
 					else{
@@ -903,7 +886,7 @@ elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 					}
 				})
 				.style("stroke", function(d){
-					if(phenopos[d.pheno]){
+					if(phenopos[d.pheno] && (widget.highlightedShapes[d.group] || widget.allPhenoHighlight)){
 						return widget.phenoColors(d.pheno);
 					}
 					else{
@@ -917,10 +900,70 @@ elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 			 		 .attr("d", d3.svg.symbol()
 			 		 	.type(function(d){return widget.groupMap[d.group];})
 			 		 	.size(elementsize))
-// 				 	 .attr("r", widget.options.circleradius);
 
 				});
-				widget.highlighted_pheno=phenopos.pheno;
+				widget.highlightedPhenos = phenopos;
+			}
+		},
+		
+		
+	 /**
+    * Specifies which shapes (groups) should be filled in with color.  All others
+    * will be gray.
+    * @param {object} groupsSelected The names of the groups to display in color.
+    * @param {boolean} reset When true, all shapes are colored that are included in the highlighted phenotypes
+    */
+	highlightShapes: function(groupsSelected, reset){
+		var widget = this;
+		if(Object.keys(groupsSelected).length==0)
+			reset = true;
+		elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
+		// when resetting shapes return the highlighted phenotypes to color
+		if(reset){
+			widget.highlightPhenos(widget.highlightedPhenos, false);
+		}
+		else{
+			expandedsize = elementsize*4;
+			widget.allPhenoHighlight=false;
+			if(Object.keys(widget.highlightedPhenos).length==0)
+				widget.allPhenoHighlight=true;
+			d3.selectAll(".phenocircle")
+				.transition()
+				.duration(500)
+				.each("start", function(d){
+					if(groupsSelected[d.group]){
+						d3.select(this)
+							.attr("d", d3.svg.symbol()
+								.type(function(d){return widget.groupMap[d.group];})
+								.size(expandedsize))
+					}
+				})
+				.style("fill", function(d){
+					if(groupsSelected[d.group] && (widget.highlightedPhenos[d.pheno] || widget.allPhenoHighlight)){
+						return widget.phenoColors(d.pheno);
+					}
+					else{
+						return "#f1f1f1";
+					}
+				})
+				.style("stroke", function(d){
+					if(groupsSelected[d.group] && (widget.highlightedPhenos[d.pheno] || widget.allPhenoHighlight)){
+						return widget.phenoColors(d.pheno);
+					}
+					else{
+						return 'lightgray';
+					}
+				})
+			 	.each("end", function(){
+			 		d3.select(this)
+			 		 .transition()
+			 		 .duration(1000)
+			 		 .attr("d", d3.svg.symbol()
+			 		 	.type(function(d){return widget.groupMap[d.group];})
+			 		 	.size(elementsize))
+
+				});
+ 				widget.highlightedShapes = groupsSelected;
 			}
 		},
 
@@ -958,7 +1001,8 @@ elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
     * Resets all colored circles (phenotypes) to original color.
     */
 	resetPhenoColors: function(){
-		this.highlightPhenos({}, true);
+		this.highlightedPhenos={};
+		this.highlightPhenos(this.highlightedPhenos, true);
 	},
 
 	/**
@@ -969,15 +1013,15 @@ elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 		if(inputStr){
 			var inputData=d3.tsv.parse(inputStr, function(d){
 				var ePos, pCol, ph;
-				d.endPosition ? ePos = +d.endPosition : ePos = undefined;
+				d.end ? ePos = +d.end : ePos = undefined;
 				d.posColor ? pCol = d.posColor.toString() : pCol = undefined;
-				d.pheno ? ph = d.pheno.toString() : ph = undefined;
+				d.phenotype ? ph = d.phenotype.toString() : ph = undefined;
 				d.group ? gr = d.group.toString() : gr = ' ';
 				return {
-					chrom: d.chrom.toString(),
-					position: +d.position,
+					chrom: d.chr.toString(),
+					position: +d.pos,
 					pheno: ph,
-					id: d.id.toString(),
+					id: d.snp.toString(),
 					endPosition: ePos,
 					posColor: pCol,
 					group: gr
@@ -1104,6 +1148,19 @@ elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 		}
 		return phenoReturn;
 	},
+	
+	/**
+    * Returns information on phenotypes within plot.
+    * @return {array} Array with phenotype name and phenotype color objects.
+  */
+	getGroups: function(){
+		var groupNames = Object.keys(this.groupMap);
+		var groupReturn = [];
+		for(var i=0; i<groupNames.length;  i++){
+			groupReturn.push({name: groupNames[i], symbolType: this.groupMap[groupNames[i]]});
+		}
+		return groupReturn;
+	},
 
 	/**
     * Returns chromosome names within plot.
@@ -1200,7 +1257,6 @@ elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 			else{
 				adjustment = 1.0 + (phRowInfo.phenoRows * this.options.ymax / 40) / this.options.ymax;
 			}
-// 			adjustment = 1.0 + (phRowInfo.phenoRows * this.options.ymax / 40) / this.options.ymax;
 		}
 
 		s.attr("width", origWidth*resize)
@@ -1218,10 +1274,6 @@ elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 			.attr("width", this.options.xmax)
 			.attr("height", this.options.ymax*adjustment - this.options.ymax)
 			.attr("fill",this.options.backgroundColor);
-// 		if(groups.length > 1){
-// 			this._addGroupKey(this.zm.translate()[0],this.zm.translate()[1],
-// 				this.zm.scale(),grRowInfo);
-// 		}
 		if(phenos.length > 0){
 			this._addPhenoKey(this.zm.translate()[0],this.zm.translate()[1],
 				this.zm.scale(),phRowInfo,grRowInfo);
@@ -1304,28 +1356,7 @@ elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 		if(groupNames.length > 1){
 			var elementsize = side * side;
 			for(var i=0; i<groupNames.length; i++){
-			
-// var circles = widget.chromd3.selectAll("circle")
-// 				.data(function(d){return d.phenos;})
-// 				.enter()
-// 				.append("path");
-// 
-// 		circles.attr("class","phenocircle")
-// 			.attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
-// 			.attr("d", d3.svg.symbol()
-// // 				.size(function(d){return widget.options.circleradius*10;})
-// 				.size(function(d){return elementsize;})
-// 				.type(function(d){return widget.groupMap[d.group];}))
-// // 				.type(function(d){return 'circle';}))
-// 			.style("fill", function(d){return widget.phenoColors(d.pheno);})
-// 			.style("stroke",  function(d){return widget.phenoColors(d.pheno);})
-// 			.attr("visibility", circleVis)
-// 			.on("click", function(d){
-// 				var ph={};
-// 				ph[d.pheno]=1;
-// 				widget.highlightPhenos(ph, false);
-// 				widget._triggerPhenoSelection(d.pheno);
-// 			});		
+					
 				shapeYPos = yPos - side/1.5
 				shapeXPos = xPos + side/1.5
 				
@@ -1427,3 +1458,5 @@ elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 	}
 
 });
+
+

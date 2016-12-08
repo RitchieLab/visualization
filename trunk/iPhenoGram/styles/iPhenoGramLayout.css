@@ -1,5 +1,6 @@
 /* iPhenoGramLayout.css */
 
+/* 
 #phenolist {
 	position: absolute;
 	left: 935px;
@@ -7,7 +8,35 @@
 	height: 404px;
 	width: 150px;
 }
+ */
 
+/* 
+#selectionpanel {
+	position: absolute;
+	left: 935px;
+	top: 20px;
+	height: 404px;
+	width: 150px;
+}
+ */
+
+
+#selectionpanel{
+	position: absolute;
+	left: 935px;
+	top: 20px;
+	width: 150px;
+	height: 404px;
+	padding: 0px;
+	margin: 0px;
+	font-size: 0.7em;
+}
+
+div.select-panel{
+	overflow: auto;
+	width: 134px;
+	height: 404px;
+}
 
 #chrommap {
 	position: absolute;

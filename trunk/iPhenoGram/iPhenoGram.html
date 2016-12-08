@@ -20,7 +20,14 @@
 	<iframe id="displayFrame" src="about:blank"></iframe>
 </div>
 <div id="drawing" class="containerBlock" ></div>
-<div id="phenolist" class="scroll containerBlock"></div>
+<div id="selectionpanel" class="containerBlock scroll">
+	<ul>
+	<li class="smallfont"><a href="#phenolist">Colors</a></li>
+	<li class="smallfont"><a href="#grouplist">Shapes</a></li>
+	</ul>
+	<div id="phenolist" class="select-panel"></div>
+	<div id="grouplist" class="select-panel"></div>
+</div>
 <div id="controlpanel" class="containerBlock scroll">
 	<ul>
     <li class="smallfont"><a href="#controlpanel-1">Opts</a></li>
@@ -61,6 +68,7 @@
 <script type="text/javascript" src="scripts/d3.v3.min.js"></script>
 <script type="text/javascript" src="scripts/csg.iphenogram.js"></script>
 <script type="text/javascript" src="scripts/csg.colorkey.js"></script>
+<script type="text/javascript" src="scripts/csg.shapekey.js"></script>
 <!-- 
 <script type="text/javascript" src="http://gabelerner.github.io/canvg/rgbcolor.js"></script>
 <script type="text/javascript" src="http://gabelerner.github.io/canvg/StackBlur.js"></script>
@@ -102,11 +110,17 @@ $(document).ready(function() {
   	// a must be equal to b
 	  return 0;
 	});
+	var group_array = chromplot.iphenogram("getGroups");
 
 	$("#phenolist").colorkey({height: 400, width: 150, keyInfo: pheno_array});
 	$("#phenolist").on("colorkeyselected", function(event, data){
 		$("#drawing").iphenogram("highlightPhenos", data.keyNames);
 	});
+	$("#grouplist").shapekey({height: 400, width: 150, keyInfo: group_array});
+	$("#grouplist").on("shapekeyselected", function(event, data){
+		$("#drawing").iphenogram("highlightShapes", data.keyNames);
+	});
+
 	addChromsToList($("#chrommap").iphenogram('getChromNames'), $("#chrommap").iphenogram('option', 'includedChroms'));
 
 	$("#drawing").on("iphenogramposselected", function(event, data){
@@ -148,6 +162,7 @@ $(document).ready(function() {
 		$("#drawing").iphenogram('drawPlot');
 		$("#chrommap").iphenogram('drawPlot');
 		$("#phenolist").colorkey('option', 'keyInfo',chromplot.iphenogram("getPhenoTypes"));
+		$("#grouplist").shapekey('option', 'keyInfo',chromplot.iphenogram("getGroups"));
 		addChromsToList($("#chrommap").iphenogram('getChromNames'), $("#chrommap").iphenogram('option', 'includedChroms'));
   }
 
@@ -166,6 +181,7 @@ $(document).ready(function() {
 				var mapOpts = opts.mapping;
 				$("#chrommap").iphenogram('resetOptions', mapOpts);
 				$("#phenolist").colorkey('option', 'keyInfo',chromplot.iphenogram("getPhenoTypes"));
+				$("#grouplist").shapekey('option', 'keyInfo',chromplot.iphenogram("getGroups"));
 				addChromsToList($("#chrommap").iphenogram('getChromNames'),$("#chrommap").iphenogram('option', 'includedChroms'));
 				$("#cytoCheck").prop('checked', drawOpts.options.drawCyto);
 				$("#includePhenos").prop('checked', !drawOpts.options.chromsOnly);
@@ -203,8 +219,9 @@ $(document).ready(function() {
 
   function resetPhenoColors(evt){
   	$("#drawing").iphenogram('resetPhenoColors');
-  	$("#chrommap").iphenogram('resetPhenoColors');
+//   	$("#chrommap").iphenogram('resetPhenoColors');
   	$("#phenolist").colorkey('clearSelections');
+  	$("#grouplist").shapekey('clearSelections');
   }
 
   function addChromsToList(chrNames, includedChroms){
@@ -298,6 +315,7 @@ $(document).ready(function() {
 
 
   $("#controlpanel").tabs();
+  $("#selectionpanel").tabs();
 
   $("#iPhenogramFiles").on('change', handleFileSelect);
   $("#genomeFile").on('change', handleFileSelect);
