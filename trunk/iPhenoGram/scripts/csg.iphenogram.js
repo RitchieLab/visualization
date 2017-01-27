@@ -219,6 +219,9 @@ $.widget('csg.iphenogram',{
       },
       'chromsOnly': function(){
       	self._changePhenoVisibility();
+      },
+      'phenos': function(){
+      	self._sortPhenos();
       }
     };
     this.options[ key ] = value;
@@ -1420,6 +1423,21 @@ $.widget('csg.iphenogram',{
 				currPos=0;
 			}
 		}
+	},
+	
+	/**
+	 * Sort phenotypes by chromosome and base pair position
+	*/
+	_sortPhenos:function(){
+		this.options.phenos.sort(function(a,b){
+			if(a.chrom < b.chrom){
+				return -1;
+			}
+			if(a.chrom > b.chrom){
+				return 1;
+			}
+			return a.position - b.position;
+		});
 	},
 
 	/**

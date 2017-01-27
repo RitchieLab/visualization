@@ -169,7 +169,7 @@ $(document).ready(function() {
   function loadOptionFile(evt){
   	var files = evt.target.files; // FileList object
 
-    // Loop through the FileList and render image files as thumbnails.
+    // Loop through the FileList and render image files 
     for (var i = 0, f; f = files[i]; i++) {
       var reader = new FileReader();
       reader.onload = function(e){
