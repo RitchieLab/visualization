@@ -670,7 +670,7 @@ class ResultHolder
 
   # adds the pvalue result for a SNP-phenotype combination
   def add_result(snpname, phenoname, pval, ethnicity, phenogroup, betaval, 
-			sampsize,genename)
+			sampsize,genename,notes)
     # don't insert blanks
     if pval !~ /\d/
       return
@@ -678,7 +678,7 @@ class ResultHolder
 
     if pval.to_f == 0.0
       print "P value of 0.0 for #{phenoname} #{snpname}\n"
-      @pheno_list.add_pheno(phenoname, genename)
+      @pheno_list.add_pheno(phenoname, genename,notes)
       return
     end
 
@@ -732,7 +732,7 @@ class ResultHolder
     @results[@results_by_snp_pheno[snpname][phenoname]].pvalues[ethnicity] =  ResultScore.new(pval, betaval, sampsize, snpname)
 
     @snp_list.add_snp(snpname)
-    @pheno_list.add_pheno(phenoname, genename)
+    @pheno_list.add_pheno(phenoname, genename, notes)
   end
 
   # return result based on snp name and phenotype
@@ -836,7 +836,7 @@ end
 #
 ############################################################################
 class PhenoList
-  attr_accessor :pheno_order, :pheno_hash, :gene_name_order
+  attr_accessor :pheno_order, :pheno_hash, :gene_name_order, :note_hash
 
   def initialize
     @pheno_hash = Hash.new
@@ -844,14 +844,22 @@ class PhenoList
     @pheno_group = Hash.new
     @expected = Hash.new
 		@gene_name_order = Array.new
+		@note_hash = Hash.new
   end
 
-  def add_pheno(phenoname,genename)
+  def add_pheno(phenoname,genename,notes)
     if !@pheno_hash.has_key?(phenoname)
       @pheno_hash[phenoname] = @pheno_order.length
       @pheno_order << phenoname
 			@gene_name_order << genename
+			@note_hash[phenoname]=Hash.new
     end
+		if !notes.nil?
+			notes.each do |note|
+				@note_hash[phenoname][note]=1
+			end
+		end
+		
   end
 
   def valid_pheno?(phenoname)
@@ -1056,11 +1064,15 @@ class ResultFileReader < FileReader
 				end
         phenotypename.gsub!('"','')
 				
+				if @notecol 
+					notes = data[@notecol].split(/,/)
+				end	
+					
 				(@genecol.nil? or !include_genename) ? genename = nil : genename = data[@genecol]
         if (resultholder.include_all_phenos or resultholder.included_phenos.has_key?(phenotypename))
           begin
             resultholder.add_result(data[@snpcol], phenotypename, data[@pvalcol], ethnicity,
-              assoc_pheno, betaval, sampsize, genename)
+              assoc_pheno, betaval, sampsize, genename,notes)
           rescue StandardError => problem
             print "Problem adding result for line# #{lineno}:\n#{line}\n\n"
             exit
@@ -1088,7 +1100,7 @@ class ResultFileReader < FileReader
         @snpcol = i
       elsif header =~ /^\s*phenotype\s*$/i
         @phenocol = i
-      elsif header =~ /^p_value|^pval/i
+      elsif header =~ /^p_value|^pval|^p-value/i
         @pvalcol = i
       elsif header =~ /Race_ethnicity|ancestry|group/i
         @ethcol = i
@@ -1104,6 +1116,8 @@ class ResultFileReader < FileReader
         @phenoclasscol = i
       elsif header =~ /^gene/i
         @genecol = i
+			elsif header =~/^notes_beta_feature/i
+				@notecol = i
       end
     end #data
   end
@@ -2268,6 +2282,7 @@ class DotPlotter
 		best_results = params[:best_results] || nil
 		coordinates_per_pixel = params[:coordinates_per_pixel]
 		narrow_plot = params[:narrow] || false
+		add_notes = params[:add_notes] || false
 
 		pheno_order = pheno_list.pheno_order
 		gene_name_order = pheno_list.gene_name_order
@@ -2312,7 +2327,6 @@ class DotPlotter
 			maxpscales << maxpval
 			pvalintervals << maxpscales[1] - minpscales[1]
 		else
-puts "NO SPLIT"
 			minpscales << minpval
 			maxpscales << maxpval
 			pvalintervals << maxpval - minpval
@@ -2460,7 +2474,6 @@ puts "NO SPLIT"
 				end
 
 				pheno_space = space_for_text(coordinates_per_pixel,phenoname_plot) * 0.98
-puts "pheno_name_plot=#{phenoname_plot} pheno_space=#{pheno_space}"
 				# calculate final x,y for line (x2,y2)=(x1+l⋅cos(a),y1+l⋅sin(a))
 				 x2 = x_text - pheno_space * Math.cos((360 + txt_rotate) * Math::PI/180)
 				 y2 = y_text + pheno_space * Math.sin(-(txt_rotate) * Math::PI/180)
@@ -2476,9 +2489,32 @@ puts "pheno_name_plot=#{phenoname_plot} pheno_space=#{pheno_space}"
           :text_anchor =>best_anchor)
         end
       end
+			
+			# add notes if selected
+			if add_notes
+				# add blocks of notes from bottom up
+				# y distance is 1/20 of total height
+				y_block_interval = y_interval/20
+				y_block_draw = y_interval
+				x_block = x_text-@diameter/2.5
+				x_block_adj = (x_block - decrement_x_phenotype(x_block)).to_f/2
+				pheno_list.note_hash[phenoname].each_key do |note|
+					x_block_start = x_block - x_block_adj
+					canvas.g.translate(xstart,y_plots_start).line(x_block_start,y_block_draw,
+						x_block_start+x_block_adj*2, y_block_draw).
+						styles(:stroke=>'darkgray', :opacity=>0.2)
+					canvas.g.translate(xstart, y_plots_start).text(x_text, y_block_draw) do |text|
+						text.tspan(note).styles(:font_size=>font_size/2.5, :font=>Font_phenotype_names,
+							:text_anchor=>'middle', :font_weight=>'lighter')
+					end
+					y_block_draw -= y_block_interval
+					break if y_block_draw <= 0
+				end
+			end
+			
       x_text = increment_x_phenotype(x_text)
     end
-
+#exit
     # calculate end positon of box around plot
     x_finish = decrement_x_phenotype(x_text)
     x_end_box = x_finish + @x_interior_offset - xstart
@@ -2935,6 +2971,9 @@ def draw_phewas(options)
 	if options.narrow
 		dotter.font_size_multiple = 0.85
 		dotter.pheno_dist_mult = 1.2
+	elsif !resultholder.pheno_list.note_hash.empty?
+		dotter.pheno_dist_mult = 5.0
+		dotter.font_size_multiple = 1.2
 	end
 
   xside_end_addition = 0.005 * dotter.diameter * 2
@@ -3155,7 +3194,7 @@ def draw_phewas(options)
 			:minsize=>resultholder.minsampsize, :maxsize=>resultholder.maxsampsize, 
 			:draw_lines=>!options.nolines, :redlinep=>options.redline, :y_best_offset=>ybest_offset,
 			:best_results=>resultholder.best_results, :coordinates_per_pixel=>ymax/yside.in,
-			:narrow=>options.narrow)
+			:narrow=>options.narrow, :add_notes=>!resultholder.pheno_list.note_hash.empty?)
     
     if options.phenotype_correlations_file #and !options.rotate
       dotter.draw_grid(canvas, resultholder, 0, ygrid_start, options.rotate)

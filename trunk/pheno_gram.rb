@@ -35,7 +35,7 @@ require 'optparse'
 require 'ostruct'
 include Magick
 
-Version = '1.2.0'
+Version = '1.2.1'
 Name = 'pheno_gram.rb'
 
 # check for windows and select alternate font based on OS
@@ -257,7 +257,6 @@ class PhenotypeHolder
   def set_colors
 		@colormaker.set_color_num(@phenonames.length)
     @phenonames.each_value {|pheno| pheno.color = @colormaker.gen_html(pheno.group)
-			puts "#{pheno.color}=>#{pheno.name}"
 		}
 	end
   
@@ -644,15 +643,7 @@ class ExhaustiveSearchColorMaker < ColorMaker
 	end
 	
 	def set_color_num(nColors)
-#		if nColors <= 15 or nColors > 25
 			@colors = @exhaustiveColors
-#		elsif nColors <= 20
-#			@colors = @colors20
-#		elsif nColors == 21
-#			@colors = @colors21
-#		else
-#			@colors = @colors25
-#		end
 		@final_color_index = @colors.length-1
 	end
 	
@@ -901,7 +892,6 @@ class PhenoGramFileReader < FileHandler
 			
 			chromosome = genome.get_chrom(data[@chromcol])
       raise "Problem in #{filename} with line:\n#{line}\n#{data[@chromcol]} is not a valid chromosome number" unless chromosome
-#      raise "Problem in #{filename} with line:\n#{line}\nPosition outside chromosome boundaries" unless chromosome.pos_good?(data[@bpcol])
 			unless(chromosome.pos_good?(data[@bpcol]))
 				print "#{filename}: line ##{lineno} pos: #{data[@bpcol]} is outside chr #{data[@chromcol]} boundaries\n";
 				next
@@ -918,8 +908,6 @@ class PhenoGramFileReader < FileHandler
 				notecol = data[@notecol] if @notecol
 				raise "Problem in #{filename} with line:\n#{line}\nAnnotation may be no longer than 10 characters in length" if notecol and notecol.length > 10
 			end
-#			if(!params[:zoomchr] or (chromosome.display_num == params[:zoomchr] and 
-#							(!params[:zoomstart] or (data[@bpcol].to_i >= params[:zoomstart] and endbp <= params[:zoomend]))))
 			if(!params[:zoomchr] or (included_chroms.has_key?(chromosome.display_num)  and 
 							(!params[:zoomstart] or (data[@bpcol].to_i >= params[:zoomstart] and endbp <= params[:zoomend]))))
 				pheno = phenoholder.add_phenotype(phenotype, group)
@@ -1994,7 +1982,7 @@ class ChromosomePlotter < Plotter
     end
 		if params[:include_notes] and phenobox.note
 			canvas.g.translate(xbase, ybase).text(annotation_x,annotation_y) do |write|
-				write.tspan(phenobox.note).styles(:font_size=>font_size, :text_anchor=>'start')
+				write.tspan(phenobox.note).styles(:font_size=>font_size*2, :text_anchor=>'start')
 			end
 		end
   end
@@ -2151,7 +2139,6 @@ class ChromosomePlotter < Plotter
 					band_end = (total_chrom_y * ((band.finish-chrom_start)/chrom_bp.to_f) + start_chrom_y).round
 					# ensure no overlap on banding
 					band_end = end_chrom_y if band_end > end_chrom_y
-#					fill_color = @@cytocolors[band.type]
 					@@cytocolors[band.type] ? fill_color = @@cytocolors[band.type] : fill_color = band.type
 					draw.rect(chrom_width, band_end-band_start, 0, band_start).styles(:stroke=>'none', :fill=>fill_color, :fill_opacity=>fill_opacity)
 				end
@@ -2383,22 +2370,6 @@ def draw_plot(genome, phenoholder, options)
     alternative_pheno_spacing = :alternative  
   end
   
-  # 6 phenotypes in a row (when more wrap around with some overlap to show they are
-  # linked) -- main problem will be the verical spacing of the dots
-  # will be done in matched pairs (1 & 13, 2 & 14 etc.)
-  # 
-  # 1.0 inches at top
-  # 4.5 inches for top row of chromosomes
-  # 2.5 inches for bottom row of chromosomes
-  # 0.5 inches between two rows
-  # 1.0 inches to list below
-  # 8.0 inches to display phenotypes (probably make this dynamic)
-
-  # so 19.5 inches vertical X 10 inches horizontal
-
-  # a circle will be 5Y in height
-  # max chrom size (1) will be 40 circles (or 200Y) in height
-  # chromosome will be 2 circles wide
   options.thin_lines ? circle_size = 20 : circle_size = 20
 
 	total_num_chromosomes = genome.chromosomes.length-1
@@ -2502,7 +2473,6 @@ def draw_plot(genome, phenoholder, options)
 	# first chromosomes start at standard left position
 	x_chr_start = Array.new(chroms_in_row+1){ |i| 0 }
 	additional_notation_x=0
-#	for i in 2..13
 	for i in 2..chroms_in_row+1
 		if options.include_notes
 			# adjust for maxphenos of previous chromosome
@@ -2613,12 +2583,6 @@ def draw_plot(genome, phenoholder, options)
 	rescue
 		exit!
 	end
-	
-	#child_pid = fork do
-	#	img = rvg.draw
-	#	
-	#end
- 
 
   print " Created #{outfile}\n\n" 
 end
