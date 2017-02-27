@@ -109,6 +109,7 @@ class Arg
 		options.include_genename = false
 		options.show_direction = false
 		options.narrow = false
+    options.tilted_text = false
     help_selected = false
     version_selected = false
 
@@ -141,6 +142,7 @@ class Arg
 			opts.on("-n","--incl-gene-name","Include italicized gene name in label"){|gname|options.include_genename=true}
 			opts.on("-W","--show-direction","Plot p-values as triangles displaying direction of effect"){|triangle|options.show_direction=true}
 			opts.on("-j","--narrow","Decrease distance between points on track"){|narrow|options.narrow=true}
+      opts.on("-Q","--tilted","Tilt labels"){|narrow|options.tilted_text=true}
       opts.on("-p [pthresh]", "p value threshold, values less significant will be plotted in gray") do |pthresh|
         options.p_thresh = pthresh.to_f
       end
@@ -2282,6 +2284,7 @@ class DotPlotter
 		best_results = params[:best_results] || nil
 		coordinates_per_pixel = params[:coordinates_per_pixel]
 		narrow_plot = params[:narrow] || false
+    tilted_labels = params[:slanted_names] || false
 		add_notes = params[:add_notes] || false
 
 		pheno_order = pheno_list.pheno_order
@@ -2454,7 +2457,7 @@ class DotPlotter
     else
       y_txt_best = ymax-ystart-y_best_offset
       best_anchor = 'end'
-			narrow_plot ? txt_rotate=-75 : txt_rotate=-90
+			tilted_labels ? txt_rotate=-75 : txt_rotate=-90
     end
     
     # write phenotype labels across bottom of plot
@@ -2495,9 +2498,13 @@ class DotPlotter
 				# add blocks of notes from bottom up
 				# y distance is 1/20 of total height
 				y_block_interval = y_interval/20
-				y_block_draw = y_interval
+				y_block_draw = y_interval - y_block_interval*10
+        y_block_start = y_block_draw
 				x_block = x_text-@diameter/2.5
 				x_block_adj = (x_block - decrement_x_phenotype(x_block)).to_f/2
+        alternating = -1
+        block_counter = 0
+        
 				pheno_list.note_hash[phenoname].each_key do |note|
 					x_block_start = x_block - x_block_adj
 					canvas.g.translate(xstart,y_plots_start).line(x_block_start,y_block_draw,
@@ -2507,7 +2514,11 @@ class DotPlotter
 						text.tspan(note).styles(:font_size=>font_size/2.5, :font=>Font_phenotype_names,
 							:text_anchor=>'middle', :font_weight=>'lighter')
 					end
-					y_block_draw -= y_block_interval
+          alternating *= -1
+          block_counter += 1
+          y_block_draw = y_block_start - (block_counter.to_f/2).ceil * y_block_interval * alternating
+            
+#					y_block_draw -= y_block_interval
 					break if y_block_draw <= 0
 				end
 			end
@@ -3194,7 +3205,8 @@ def draw_phewas(options)
 			:minsize=>resultholder.minsampsize, :maxsize=>resultholder.maxsampsize, 
 			:draw_lines=>!options.nolines, :redlinep=>options.redline, :y_best_offset=>ybest_offset,
 			:best_results=>resultholder.best_results, :coordinates_per_pixel=>ymax/yside.in,
-			:narrow=>options.narrow, :add_notes=>!resultholder.pheno_list.note_hash.empty?)
+			:narrow=>options.narrow, :add_notes=>!resultholder.pheno_list.note_hash.empty?, 
+      :slanted_names=>(options.narrow || options.tilted_text))
     
     if options.phenotype_correlations_file #and !options.rotate
       dotter.draw_grid(canvas, resultholder, 0, ygrid_start, options.rotate)
