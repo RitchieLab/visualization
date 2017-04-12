@@ -2580,7 +2580,8 @@ def draw_plot(genome, phenoholder, options)
 	begin
 		img = rvg.draw
 		img.write(outfile)
-	rescue
+	rescue => e
+    puts "ERROR: #{e.to_s}"
 		exit!
 	end
 

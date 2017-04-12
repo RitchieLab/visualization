@@ -1065,7 +1065,7 @@ class ResultFileReader < FileReader
 					phenotypename = data[@genecol] + ' ' + phenotypename
 				end
         phenotypename.gsub!('"','')
-				
+        
 				if @notecol 
 					notes = data[@notecol].split(/,/)
 				end	
@@ -1954,7 +1954,7 @@ end
 class DotPlotter
   attr_accessor :x_offset, :y_pval_zero, :y_offset, :diameter, :pval_threshold, :x_interior_offset,
     :y_plot_height, :offset_mult, :first_color, :font_adjuster, :font_size_multiple,
-		:pheno_dist_mult
+		:pheno_dist_mult, :note_font_multiple
 
   def initialize
     @diameter = 8
@@ -1968,6 +1968,7 @@ class DotPlotter
     @font_adjuster = 1
     @font_size_multiple =1.0
 		@pheno_dist_mult = 2.0
+    @note_font_multiple = 2.5
   end
 
   # returns plot width in inches
@@ -2460,6 +2461,9 @@ class DotPlotter
 			tilted_labels ? txt_rotate=-75 : txt_rotate=-90
     end
     
+    x_note = x_circle_start
+    note_start=0
+    
     # write phenotype labels across bottom of plot
     pheno_order.each_with_index do |phenoname,i|
 			if gene_name_order[i].nil?
@@ -2498,20 +2502,29 @@ class DotPlotter
 				# add blocks of notes from bottom up
 				# y distance is 1/20 of total height
 				y_block_interval = y_interval/20
-				y_block_draw = y_interval - y_block_interval*10
+				y_block_draw = y_interval - y_block_interval*10 
+        #y_block_draw = y_block_draw + (note_start*y_block_interval*0.5)
         y_block_start = y_block_draw
 				x_block = x_text-@diameter/2.5
 				x_block_adj = (x_block - decrement_x_phenotype(x_block)).to_f/2
         alternating = -1
         block_counter = 0
-        
+#f_m = 3.9
+f_size = font_size/@note_font_multiple
+#puts "font size is #{f_size} mult is #{f_m}"
 				pheno_list.note_hash[phenoname].each_key do |note|
 					x_block_start = x_block - x_block_adj
-					canvas.g.translate(xstart,y_plots_start).line(x_block_start,y_block_draw,
-						x_block_start+x_block_adj*2, y_block_draw).
-						styles(:stroke=>'darkgray', :opacity=>0.2)
-					canvas.g.translate(xstart, y_plots_start).text(x_text, y_block_draw) do |text|
-						text.tspan(note).styles(:font_size=>font_size/2.5, :font=>Font_phenotype_names,
+#					canvas.g.translate(xstart,y_plots_start).rotate(-30).line(x_block_start,y_block_draw,
+#						x_block_start+x_block_adj*2, y_block_draw).
+#						styles(:stroke=>'darkgray', :opacity=>0.2)
+#					canvas.g.translate(xstart, y_plots_start).text(x_text, y_block_draw) do |text|
+#						text.tspan(note).styles(:font_size=>f_size, :font=>Font_phenotype_names,
+#							:text_anchor=>'start', :font_weight=>'lighter')
+#          canvas.g.translate(xstart, y_plots_start).text(x_note, y_block_draw) do |text|
+#						text.tspan(note).styles(:font_size=>f_size, :font=>Font_phenotype_names,
+#							:text_anchor=>'middle', :font_weight=>'lighter')
+          canvas.g.translate(xstart, y_plots_start).text(x_note, y_block_draw).rotate(-30) do |text|
+						text.tspan(note).styles(:font_size=>f_size, :font=>Font_phenotype_names,
 							:text_anchor=>'middle', :font_weight=>'lighter')
 					end
           alternating *= -1
@@ -2522,8 +2535,9 @@ class DotPlotter
 					break if y_block_draw <= 0
 				end
 			end
-			
+      x_note = increment_x_phenotype(x_note)
       x_text = increment_x_phenotype(x_text)
+      note_start = 1 - note_start
     end
 #exit
     # calculate end positon of box around plot
@@ -2979,12 +2993,26 @@ def draw_phewas(options)
   dotter = DotPlotter.new
   dotter.diameter = diameter_size
   dotter.font_size_multiple = 1.25 if options.largetext
+  pheno_narrow_multiplier = 1.0
 	if options.narrow
-		dotter.font_size_multiple = 0.85
-		dotter.pheno_dist_mult = 1.2
+    # no notes to include
+    if resultholder.pheno_list.note_hash.empty?
+      dotter.font_size_multiple = 0.85
+      dotter.pheno_dist_mult = 1.2
+    else
+      # notes to include
+      dotter.pheno_dist_mult = 2.0
+      dotter.font_size_multiple = 1.0
+      dotter.note_font_multiple = 3.9
+      pheno_narrow_multiplier = 0.97
+      options.largetext=false
+#      exit
+    end
 	elsif !resultholder.pheno_list.note_hash.empty?
 		dotter.pheno_dist_mult = 5.0
 		dotter.font_size_multiple = 1.2
+    pheno_narrow_multiplier = 1.2
+    options.largetext=false
 	end
 
   xside_end_addition = 0.005 * dotter.diameter * 2
@@ -3090,7 +3118,6 @@ def draw_phewas(options)
 
   # add room for the labels across bottom of plot
   max_pheno_length = resultholder.get_longest_label
-
   options.largetext ? text_multiplier = 0.0020 * dotter.font_size_multiple : text_multiplier = 0.0020
   if total_phenotypes < 10
     text_multiplier = 0.0025
@@ -3102,7 +3129,7 @@ def draw_phewas(options)
     text_multiplier = 0.0022
   end
   
-  yside += (text_multiplier* dotter.diameter * max_pheno_length) + 0.012 * dotter.diameter
+  yside += (text_multiplier* dotter.diameter * max_pheno_length* pheno_narrow_multiplier) + 0.012 * dotter.diameter
   ymax = dotter.calculate_coordinate(yside)
 
   ybest_offset=0
@@ -3218,7 +3245,12 @@ def draw_phewas(options)
   print "\n\tDrawing #{outfile}..."
 
   STDOUT.flush
-  img = rvg.draw
+  begin 
+    img = rvg.draw
+  rescue => e
+    puts "ERROR: #{e.to_s}"
+    exit!
+  end
   if options.rotate
     img.rotate!(90)
   end
@@ -3458,7 +3490,12 @@ title_adjustment = 0.028 * plotter.font_size_multiple
   outfile = options.out_name + '.' + options.imageformat
   print "\n\tDrawing #{outfile}..."
   STDOUT.flush
-  img = rvg.draw
+  begin 
+    img = rvg.draw
+  rescue => e
+    puts "ERROR: #{e.to_s}"
+    exit!
+  end
   img.write(outfile)
   print " Created #{outfile}\n\n"
 #  

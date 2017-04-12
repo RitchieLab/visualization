@@ -5940,11 +5940,11 @@ outfile = options.out_name + '.' + options.imageformat
 print "\n\tDrawing #{outfile}..."
 STDOUT.flush
 begin
-img = rvg.draw
-rescue Exception => ex
-	puts "An error of type #{ex.class} happened, message is #{ex.message}"
-	exit 1
-end
+  img = rvg.draw
+rescue => e
+    puts "ERROR: #{e.to_s}"
+		exit!
+	end
 img.rotate!(-90) if options.rotate
 img.write(outfile)
 
