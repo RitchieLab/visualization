@@ -1258,6 +1258,7 @@ $.widget('csg.iphenogram',{
 				adjustment = 1.0 + ((phRowInfo.phenoRows + grRowInfo.groupRows) * this.options.ymax / 40) / this.options.ymax;
 			}
 			else{
+				var grRowInfo = {'groupRows':0, 'groupsPerRow':0};
 				adjustment = 1.0 + (phRowInfo.phenoRows * this.options.ymax / 40) / this.options.ymax;
 			}
 		}

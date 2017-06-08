@@ -36,12 +36,12 @@
   </ul>
 	<div id="controlpanel-1" class="tab-panel">
 		<ul class="no-bullet increase-height" id="controlList">
-			<li class="increase-margin"><button type="button" id="resetPhenotypes">Reset colors</button></li>
-			<li class="increase-margin"><button type="button" id="resetPlot">Reset zoom</button></li>
-			<li class="increase-margin"><input type="checkbox" id="cytoCheck" name="vehicle" value="1" checked="1">Draw cytobands</li>
-			<li class="increase-margin"><input type="checkbox" id="includePhenos" name="vehicle" value="1" checked="1">Draw phenotypes</li>
-			<li class="increase-margin"><button type="button" id="save">Save image</button></li>
-			<li class="increase-margin"><button type="button" id="saveOptions">Save options</button></li>
+			<li class="increase-margin smallfont"><button type="button" id="resetPhenotypes">Reset colors</button></li>
+			<li class="increase-margin smallfont"><button type="button" id="resetPlot">Reset zoom</button></li>
+			<li class="increase-margin smallfont"><input type="checkbox" id="cytoCheck" name="vehicle" value="1" checked="1">Draw cytobands</li>
+			<li class="increase-margin smallfont"><input type="checkbox" id="includePhenos" name="vehicle" value="1" checked="1">Draw phenotypes</li>
+			<li class="increase-margin smallfont"><button type="button" id="save">Save image</button></li>
+			<li class="increase-margin smallfont"><button type="button" id="saveOptions">Save options</button></li>
 			<li>Load options:<input type="file" id="iPhenoGramOptions" name="optionFile" class="control" /></li>
 		</ul>
 	</div>
@@ -112,11 +112,11 @@ $(document).ready(function() {
 	});
 	var group_array = chromplot.iphenogram("getGroups");
 
-	$("#phenolist").colorkey({height: 400, width: 150, keyInfo: pheno_array});
+	$("#phenolist").colorkey({height: 400, width: 140, keyInfo: pheno_array});
 	$("#phenolist").on("colorkeyselected", function(event, data){
 		$("#drawing").iphenogram("highlightPhenos", data.keyNames);
 	});
-	$("#grouplist").shapekey({height: 400, width: 150, keyInfo: group_array});
+	$("#grouplist").shapekey({height: 400, width: 140, keyInfo: group_array});
 	$("#grouplist").on("shapekeyselected", function(event, data){
 		$("#drawing").iphenogram("highlightShapes", data.keyNames);
 	});
@@ -246,7 +246,7 @@ $(document).ready(function() {
 				}
 // 				appendString += '<td><input type="checkbox" name="' + chrNames[i+j] + '" value="' +
 // 					chrNames[i+j] + '" checked="'+ checkedValue.toString() + '" class="chromNameBoxes">' + chrNames[i+j] + '</td>';
-				appendString += '<td><input type="checkbox" name="' + chrNames[i+j] + '" value="' +
+				appendString += '<td class="chromsSelection"><input type="checkbox" name="' + chrNames[i+j] + '" value="' +
 					chrNames[i+j] + '"' + checkedValue + ' class="chromNameBoxes">' + chrNames[i+j] + '</td>';
 			}
 			appendString += '</tr>';
