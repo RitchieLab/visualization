@@ -1014,7 +1014,7 @@ $.widget('csg.iphenogram',{
   */
 	readPhenoInputString: function(inputStr){
 		if(inputStr){
-			this._checkHeaders(inputStr,['chr','pos','snp']);
+			inputStr=this._checkHeaders(inputStr,['chr','pos','snp']);
 		
 			var inputData=d3.tsv.parse(inputStr, function(d){
 				var ePos, pCol, ph;
@@ -1042,13 +1042,13 @@ $.widget('csg.iphenogram',{
   */
 	readCytoBandString: function(inputStr){
 		if(inputStr){
-			this._checkHeaders(inputStr,['chrom','type','startBand','finishBand']);
+			inputStr=this._checkHeaders(inputStr,['chrom','type','startband','finishband']);
 			var inputData=d3.tsv.parse(inputStr, function(d){
 				return {
 					chrom: d.chrom.toString(),
 					type: d.type.toString(),
-					startBand: +d.startBand,
-					finishBand: +d.finishBand
+					startBand: +d.startband,
+					finishBand: +d.finishband
 			}});
 			this._setOption('cytoBands', inputData);
 		}
@@ -1060,13 +1060,13 @@ $.widget('csg.iphenogram',{
   */
 	readGenomeString: function(inputStr){
 		if(inputStr){
-			this._checkHeaders(inputStr,['name','size','centromereStart','centromereEnd']);
+			inputStr=this._checkHeaders(inputStr,['name','size','centromerestart','centromereend']);
 			var inputData=d3.tsv.parse(inputStr, function(d){
 				return {
 					name: d.name.toString(),
 					size: +d.size,
-					centromere_start: +d.centromereStart,
-					centromere_end: +d.centromereEnd
+					centromere_start: +d.centromerestart,
+					centromere_end: +d.centromereend
 			}});
 			this._setOption('chroms', inputData);
 		}
@@ -1074,7 +1074,7 @@ $.widget('csg.iphenogram',{
 
 
 	/**
-    * Check for valid headers in input string
+    * Check for valid headers in input string.  Convert all to lower case.
     * @private
     * @param {string} inString Input string
     * @param {object} requiredHeaders Required headers for this input
@@ -1088,9 +1088,11 @@ $.widget('csg.iphenogram',{
 		var errorString="";
 		if(nline > -1){
 			var headers=inputStr.substr(0,nline).split("\t");
-			headers.forEach(function(d){
-				inHeaders[d]=true;
-			});
+// 			headers.forEach(function(d){
+			for(var i=0; i<headers.length; i++){
+				headers[i]=headers[i].toLocaleLowerCase();
+				inHeaders[headers[i]]=true;
+			};
 		 }
 		 requiredHeaders.forEach(function(d){
 		 	if(!inHeaders.hasOwnProperty(d)){
@@ -1102,7 +1104,9 @@ $.widget('csg.iphenogram',{
 		 if(error){
 		 	throw "Missing headers: " + errorString;
 		 }
-		 		
+		 
+		 var nHeaderLine = headers.join("\t");
+		 return inputStr.replace(inputStr.substr(0,nline),nHeaderLine);
 	},
 
 
