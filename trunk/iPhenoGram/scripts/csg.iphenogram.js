@@ -1014,6 +1014,8 @@ $.widget('csg.iphenogram',{
   */
 	readPhenoInputString: function(inputStr){
 		if(inputStr){
+			this._checkHeaders(inputStr,['chr','pos','snp']);
+		
 			var inputData=d3.tsv.parse(inputStr, function(d){
 				var ePos, pCol, ph;
 				d.end ? ePos = +d.end : ePos = undefined;
@@ -1031,6 +1033,7 @@ $.widget('csg.iphenogram',{
 				}});
 			this._setOption('phenos', inputData);
 		}
+
 	},
 
 	/**
@@ -1039,6 +1042,7 @@ $.widget('csg.iphenogram',{
   */
 	readCytoBandString: function(inputStr){
 		if(inputStr){
+			this._checkHeaders(inputStr,['chrom','type','startBand','finishBand']);
 			var inputData=d3.tsv.parse(inputStr, function(d){
 				return {
 					chrom: d.chrom.toString(),
@@ -1056,6 +1060,7 @@ $.widget('csg.iphenogram',{
   */
 	readGenomeString: function(inputStr){
 		if(inputStr){
+			this._checkHeaders(inputStr,['name','size','centromereStart','centromereEnd']);
 			var inputData=d3.tsv.parse(inputStr, function(d){
 				return {
 					name: d.name.toString(),
@@ -1065,6 +1070,39 @@ $.widget('csg.iphenogram',{
 			}});
 			this._setOption('chroms', inputData);
 		}
+	},
+
+
+	/**
+    * Check for valid headers in input string
+    * @private
+    * @param {string} inString Input string
+    * @param {object} requiredHeaders Required headers for this input
+    * @throws Will throw an error if not all required headers are present
+  */
+	_checkHeaders: function(inputStr,requiredHeaders){
+		// get header values
+		var nline=inputStr.indexOf("\n");
+		var inHeaders={};
+		var error=false;
+		var errorString="";
+		if(nline > -1){
+			var headers=inputStr.substr(0,nline).split("\t");
+			headers.forEach(function(d){
+				inHeaders[d]=true;
+			});
+		 }
+		 requiredHeaders.forEach(function(d){
+		 	if(!inHeaders.hasOwnProperty(d)){
+		 		error = true;
+		 		errorString += " " + d;
+		 	}
+		 });
+		 
+		 if(error){
+		 	throw "Missing headers: " + errorString;
+		 }
+		 		
 	},
 
 

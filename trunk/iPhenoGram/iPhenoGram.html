@@ -152,11 +152,27 @@ $(document).ready(function() {
 
   function loadInputFiles(evt){
 
-  	$("#drawing").iphenogram('readPhenoInputString', inputInfo['iPhenogramFiles']);
+	try{
+  		$("#drawing").iphenogram('readPhenoInputString', inputInfo['iPhenogramFiles']);
+  	}catch(err){
+  		var n = document.getElementById('iPhenogramFiles').files[0].name;
+  		alert("Error in file " + n + ' -> ' + err);
+  	}
 //   	$("#chrommap").iphenogram('readPhenoInputString', inputInfo['iPhenogramFiles']);
+	try{
 		$("#drawing").iphenogram('readGenomeString', inputInfo['genomeFile']);
+  	}catch(err){
+  		var n = document.getElementById('genomeFile').files[0].name;
+  		alert("Error in file " + n + ' -> ' + err);
+  	}
   	$("#chrommap").iphenogram('readGenomeString', inputInfo['genomeFile']);
+  	
+  	try{
 		$("#drawing").iphenogram('readCytoBandString', inputInfo['cytoFile']);
+	}catch(err){
+  		var n = document.getElementById('cytoFile').files[0].name;
+  		alert("Error in file " + n + ' -> ' + err);
+  	}
   	$("#chrommap").iphenogram('readCytoBandString', inputInfo['cytoFile']);
 
 		$("#drawing").iphenogram('drawPlot');
