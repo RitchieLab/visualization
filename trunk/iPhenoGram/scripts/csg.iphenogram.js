@@ -98,6 +98,8 @@ $.widget('csg.iphenogram',{
 		cytoColor: {gneg: 'white', gpos25: '#ECECEC', gpos50: '#C7C7C7',
 			gpos75: '9F9F9F', gpos100: '#787878', stalk: '#63B8FF',
 			gvar: '#4F94CD', acen: '#0000A0'},
+		posColorMap: {0: 'black', 1: 'blue', 2: 'red', 3: 'green', 4: 'orange', 5: 'purple',
+			6: 'pink', 7: 'gold'},
 		zoom_enabled: true,
 		tip_enabled: true,
 		include_map: false,
@@ -556,8 +558,11 @@ $.widget('csg.iphenogram',{
 			var dpath = "M0," + position.orig_y + " H" + widget.chromWidth;
 			// add lower portion when needed
 			if(position.endPos != undefined){
-				dpath += " V" + Math.round(widget.yconversion(chromOffset + position.endPos)) +
-					" H0 V" + position.orig_y + " Z";
+				var ending_y = widget.yconversion(chromOffset + position.endPos);
+				if( ending_y - position.orig_y >= 1.0){
+					dpath += " V" + Math.round(widget.yconversion(chromOffset + position.endPos)) +
+						" H0 V" + position.orig_y + " Z";
+				}
 			}
 			return dpath;
 		}
@@ -569,7 +574,13 @@ $.widget('csg.iphenogram',{
 			.append("path")
 			.attr("d", function(d){return transversePath(d, widget);})
 			.attr("class", "chromLinker")
-			.attr("stroke", function(d){return d.endPos != undefined ? "none":"gray";})
+			.attr("stroke", function(d){
+				var strokecolor = 'gray';
+				if(d.endPos != undefined){
+					d.posColor != undefined ? strokecolor=d.posColor: strokecolor='gray';
+				}
+				return strokecolor;})
+// 				return d.endPos != undefined ? "none":"gray";})
 			.attr("stroke-width", 4)
 			.attr("fill", function(d){return d.posColor != undefined? d.posColor:"red";})
 			.attr("opacity", widget.options.lineOpacity);
@@ -1014,12 +1025,27 @@ $.widget('csg.iphenogram',{
   */
 	readPhenoInputString: function(inputStr){
 		if(inputStr){
-			inputStr=this._checkHeaders(inputStr,['chr','pos','snp']);
+			var widget = this;
+			/* create map for converting alternate names in input string */
+			var colHeaderMap={};
+			colHeaderMap['id']='snp';
+			colHeaderMap['pheno']='phenotype';
+			colHeaderMap['chrom']='chr';
+			colHeaderMap['position']='pos';
+			colHeaderMap['endpos']='end';
+			
+			inputStr=this._checkHeaders(inputStr,['chr','pos','snp'],colHeaderMap);
 		
 			var inputData=d3.tsv.parse(inputStr, function(d){
 				var ePos, pCol, ph;
 				d.end ? ePos = +d.end : ePos = undefined;
-				d.posColor ? pCol = d.posColor.toString() : pCol = undefined;
+// 				d.poscolor ? pCol = d.poscolor.toString() : pCol = undefined;
+				if(d.poscolor){
+					pCol = widget._mapPosColors(d.poscolor.toString());
+				}
+				else{
+					pCol = undefined;
+				}
 				d.phenotype ? ph = d.phenotype.toString() : ph = undefined;
 				d.group ? gr = d.group.toString() : gr = ' ';
 				return {
@@ -1042,7 +1068,7 @@ $.widget('csg.iphenogram',{
   */
 	readCytoBandString: function(inputStr){
 		if(inputStr){
-			inputStr=this._checkHeaders(inputStr,['chrom','type','startband','finishband']);
+			inputStr=this._checkHeaders(inputStr,['chrom','type','startband','finishband'],{});
 			var inputData=d3.tsv.parse(inputStr, function(d){
 				return {
 					chrom: d.chrom.toString(),
@@ -1060,7 +1086,7 @@ $.widget('csg.iphenogram',{
   */
 	readGenomeString: function(inputStr){
 		if(inputStr){
-			inputStr=this._checkHeaders(inputStr,['name','size','centromerestart','centromereend']);
+			inputStr=this._checkHeaders(inputStr,['name','size','centromerestart','centromereend']),{};
 			var inputData=d3.tsv.parse(inputStr, function(d){
 				return {
 					name: d.name.toString(),
@@ -1078,9 +1104,10 @@ $.widget('csg.iphenogram',{
     * @private
     * @param {string} inString Input string
     * @param {object} requiredHeaders Required headers for this input
+    * @param {object} colHeaderMap Optional alternate names for column header
     * @throws Will throw an error if not all required headers are present
   */
-	_checkHeaders: function(inputStr,requiredHeaders){
+	_checkHeaders: function(inputStr,requiredHeaders, colHeaderMap){
 		// get header values
 		var nline=inputStr.indexOf("\n");
 		var inHeaders={};
@@ -1091,6 +1118,9 @@ $.widget('csg.iphenogram',{
 // 			headers.forEach(function(d){
 			for(var i=0; i<headers.length; i++){
 				headers[i]=headers[i].toLocaleLowerCase();
+				if(colHeaderMap[headers[i]]){
+					headers[i]=colHeaderMap[headers[i]];
+				}
 				inHeaders[headers[i]]=true;
 			};
 		 }
@@ -1107,6 +1137,18 @@ $.widget('csg.iphenogram',{
 		 
 		 var nHeaderLine = headers.join("\t");
 		 return inputStr.replace(inputStr.substr(0,nline),nHeaderLine);
+	},
+	
+	/**
+	 * Converts numbers used as positions into colors
+	 */
+	_mapPosColors: function(posString){
+			/* snp colors from original phenogram */
+			/* ['black','blue','red','green','orange','purple','pink', 'gold'] */
+/*			colHeaderMap['poscolor']=['black','blue','red','green','orange','purple','pink', 'gold']; */		
+		var pcolor;
+		this.options.posColorMap.hasOwnProperty(posString) ? pcolor = this.options.posColorMap[posString] : pcolor=posString;
+		return pcolor;
 	},
 
 
