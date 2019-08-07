@@ -24,9 +24,11 @@
 	<ul>
 	<li class="smallfont"><a href="#phenolist">Colors</a></li>
 	<li class="smallfont"><a href="#grouplist">Shapes</a></li>
+	<li class="smallfont"><a href="#filllist">Fill</a></li>
 	</ul>
 	<div id="phenolist" class="select-panel"></div>
 	<div id="grouplist" class="select-panel"></div>
+	<div id="filllist" class="select-panel"></div>
 </div>
 <div id="controlpanel" class="containerBlock scroll">
 	<ul>
@@ -38,6 +40,7 @@
 		<ul class="no-bullet increase-height" id="controlList">
 			<li class="increase-margin smallfont"><button type="button" id="resetPhenotypes">Reset colors</button></li>
 			<li class="increase-margin smallfont"><button type="button" id="resetPlot">Reset zoom</button></li>
+			<li class="increase-margin smallfont"><button type="button" id="doeChange">All dir of effect</button></li>
 			<li class="increase-margin smallfont"><input type="checkbox" id="cytoCheck" name="vehicle" value="1" checked="1">Draw cytobands</li>
 			<li class="increase-margin smallfont"><input type="checkbox" id="includePhenos" name="vehicle" value="1" checked="1">Draw phenotypes</li>
 			<li class="increase-margin smallfont"><button type="button" id="save">Save image</button></li>
@@ -69,6 +72,7 @@
 <script type="text/javascript" src="scripts/csg.iphenogram.js"></script>
 <script type="text/javascript" src="scripts/csg.colorkey.js"></script>
 <script type="text/javascript" src="scripts/csg.shapekey.js"></script>
+<script type="text/javascript" src="scripts/csg.fillkey.js"></script>
 <!-- 
 <script type="text/javascript" src="http://gabelerner.github.io/canvg/rgbcolor.js"></script>
 <script type="text/javascript" src="http://gabelerner.github.io/canvg/StackBlur.js"></script>
@@ -90,6 +94,8 @@ var phenosIn = [];
 
 $(document).ready(function() {
 	var inputInfo = {};
+	var doeState = 2;
+	var doeLabels = ['- dir of effect', '+ dir of effect','All dir of effect'];
 
 	var chromplot	=	$("#drawing").iphenogram({chroms: chromsIn, phenos: phenosIn,
 	 cytoBands: cytoBandsIn, zoom_map: true, chromsOnly: false,
@@ -111,6 +117,7 @@ $(document).ready(function() {
 	  return 0;
 	});
 	var group_array = chromplot.iphenogram("getGroups");
+	var fill_array = chromplot.iphenogram("getFills");
 
 	$("#phenolist").colorkey({height: 400, width: 140, keyInfo: pheno_array});
 	$("#phenolist").on("colorkeyselected", function(event, data){
@@ -120,6 +127,10 @@ $(document).ready(function() {
 	$("#grouplist").on("shapekeyselected", function(event, data){
 		$("#drawing").iphenogram("highlightShapes", data.keyNames);
 	});
+	$("#filllist").fillkey({height: 400, width: 140, keyInfo: fill_array});
+	$("#filllist").on("fillkeyselected", function(event, data){
+		$("#drawing").iphenogram("highlightFills", data.keyNames);
+	});	
 
 	addChromsToList($("#chrommap").iphenogram('getChromNames'), $("#chrommap").iphenogram('option', 'includedChroms'));
 
@@ -179,6 +190,7 @@ $(document).ready(function() {
 		$("#chrommap").iphenogram('drawPlot');
 		$("#phenolist").colorkey('option', 'keyInfo',chromplot.iphenogram("getPhenoTypes"));
 		$("#grouplist").shapekey('option', 'keyInfo',chromplot.iphenogram("getGroups"));
+		$("#filllist").fillkey('option', 'keyInfo',chromplot.iphenogram("getFills"));
 		addChromsToList($("#chrommap").iphenogram('getChromNames'), $("#chrommap").iphenogram('option', 'includedChroms'));
   }
 
@@ -198,6 +210,7 @@ $(document).ready(function() {
 				$("#chrommap").iphenogram('resetOptions', mapOpts);
 				$("#phenolist").colorkey('option', 'keyInfo',chromplot.iphenogram("getPhenoTypes"));
 				$("#grouplist").shapekey('option', 'keyInfo',chromplot.iphenogram("getGroups"));
+				$("#filllist").fillkey('option', 'keyInfo',chromplot.iphenogram("getFills"));
 				addChromsToList($("#chrommap").iphenogram('getChromNames'),$("#chrommap").iphenogram('option', 'includedChroms'));
 				$("#cytoCheck").prop('checked', drawOpts.options.drawCyto);
 				$("#includePhenos").prop('checked', !drawOpts.options.chromsOnly);
@@ -232,12 +245,20 @@ $(document).ready(function() {
   	$("#drawing").iphenogram('resetView');
   }
 
+  function changeDOE(evt){
+  	doeState += 1;
+  	if(doeState > 2)
+  		doeState = 0;
+  	$("#doeChange").text(doeLabels[doeState]);
+  	$("#drawing").iphenogram('setDoeFlag', doeState);
+  }
 
   function resetPhenoColors(evt){
   	$("#drawing").iphenogram('resetPhenoColors');
 //   	$("#chrommap").iphenogram('resetPhenoColors');
   	$("#phenolist").colorkey('clearSelections');
   	$("#grouplist").shapekey('clearSelections');
+  	$("#filllist").fillkey('clearSelections');
   }
 
   function addChromsToList(chrNames, includedChroms){
@@ -341,6 +362,7 @@ $(document).ready(function() {
   $("#includePhenos").change(handlePhenoChange);
   $("#resetPhenotypes").click(resetPhenoColors);
   $("#resetPlot").click(resetPhenoPlot);
+  $("#doeChange").click(changeDOE);
   $("#chrSubmit").click(submitChromSelections);
   $("#toggleChroms").click(toggleChromSelections);
   $("#loadFiles").click(loadInputFiles);

@@ -127,12 +127,15 @@ $.widget('csg.iphenogram',{
 
 		this.options.pixelscale = this.options.xmax / this.options.width;
 
+		this.doefunc = function(val){return true;}
+
 		// set up drawing canvas
 		this.widgetID = this.element.attr('id');
 		this.canvasID = 'csg-iphenogram-'+this.widgetID;
 // 		this.highlighted_pheno = "";
 		this.highlightedPhenos = {};
 		this.highlightedShapes = {};
+		this.highlightedFills = {};
 
 		this.canvasjquery = $('<svg id="'+this.canvasID+'"></svg>').appendTo(this.element);
 		this.canvas = d3.select('#'+this.canvasID)
@@ -476,7 +479,8 @@ $.widget('csg.iphenogram',{
 			.attr("d", d3.svg.symbol()
 				.size(function(d){return elementsize;})
 				.type(function(d){return widget.groupMap[d.group];}))
-			.style("fill", function(d){return widget.phenoColors(d.pheno);})
+// 			.style("fill", function(d){return widget.phenoColors(d.pheno);})
+			.style("fill", function(d){return widget.fillMap[d.shading][d.pheno];})
 			.style("stroke",  function(d){return widget.phenoColors(d.pheno);})
 			.attr("visibility", circleVis)
 			.on("click", function(d){
@@ -486,14 +490,19 @@ $.widget('csg.iphenogram',{
 				widget._triggerPhenoSelection(d.pheno);
 			});				
 			
-		var regex = /^[a-z0-9]+$/i;
+// 		var regex = /^[a-z0-9]+$/i;
+		var regex = /[a-z0-9]/i;
 		if(widget.options.tip_enabled){
 			circles.on("mouseover", function(d){
-				var message;
+				var message = "<ul class='no-bullet'><li>" + d.pheno + "</li>";
 				if(regex.test(d.group))
-					message = "<ul class='no-bullet'><li>" + d.pheno + "</li><li>" + d.group + "</li></ul>"
-				else
-					message = "<ul class='no-bullet'><li>" + d.pheno + "</li></ul>"
+// 					message = "<ul class='no-bullet'><li>" + d.pheno + "</li><li>" + d.group + "</li></ul>"
+					message += "<li>" + d.group + "</li>";
+				if(d.pvalue > 0.0)
+					message += "<li>pval: " + d.pvalue.toString() + "</li>";
+				if(d.doe)
+					message += "<li>doe: " + d.doe.toString() + "</li>";
+				message += "</ul>";
 				widget.tooltip.html(message)
 					.style("left", (d3.event.pageX) + "px")
 					.style("top", (d3.event.pageY + Math.round(widget.options.circlesize/widget.options.pixelscale)) + "px");
@@ -778,6 +787,7 @@ $.widget('csg.iphenogram',{
 		// clear map
 		this.phenoMap={};
 		this.groupMap={};
+		this.fillMap={};
 		symbols = d3.svg.symbolTypes;
 		groupIndex=0;
 
@@ -813,10 +823,14 @@ $.widget('csg.iphenogram',{
 				this.groupMap[pheno.group] = symbols[groupIndex];
 				groupIndex++;
 			}
-			
+			// fillMap is a map of maps with the inner key being the phenotype name
+			if(this.fillMap[pheno.shading] == undefined){
+				this.fillMap[pheno.shading] = {};
+			}
 			
 		}
-		this.phenoColors=this._getPhenoColors()		
+		this.phenoColors=this._getPhenoColors();
+		this._setupFillMap();
 	},
 
 	/**
@@ -841,42 +855,56 @@ $.widget('csg.iphenogram',{
     * @param {object} phenopos The names of the phenotypes to display in color.
     * @param {boolean} reset When true, all phenotypes are colored.
     */
-	highlightPhenos: function(phenopos, reset){
+	highlightPhenos: function(phenopos, ireset){
 		var widget = this;
+		var reset = ireset;
 		if(reset){
 			widget.highlightedShapes={};
+			widget.highlightedFills={};
 		}
 		if(Object.keys(phenopos).length==0)
 			reset = true;
 		widget.allPhenoHighlight=false;
-		if(Object.keys(widget.highlightedShapes).length==0)
-			widget.allPhenoHighlight=true;	
+		widget.allShapes=widget.allFills=false;
+		if(Object.keys(widget.highlightedShapes).length==0 && Object.keys(widget.highlightedFills).length==0){
+			widget.allPhenoHighlight=true;
+		}
+		if(Object.keys(widget.highlightedShapes).length == 0){
+			widget.allShapes = true;
+		}
+		if(Object.keys(widget.highlightedFills).length == 0){
+			widget.allFills = true;
+		}
+
 		elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 		if(reset){
 			d3.selectAll(".phenocircle")
 				.transition()
 				.duration(250)
 				.style("fill", function(d){
-					if(widget.highlightedShapes[d.group] || widget.allPhenoHighlight){
-						return widget.phenoColors(d.pheno);
+					if(widget.doefunc(d.doe) && (widget.highlightedShapes[d.group] || widget.highlightedFills[d.shading] || widget.allPhenoHighlight)){
+						return widget.fillMap[d.shading][d.pheno];
 					}
 					else{
-						return "#f1f1f1";
+						return widget.fillMap[d.shading]['greyfill'];
 					}
 				})
 				.style("stroke",function(d){
-					if(widget.highlightedShapes[d.group] || widget.allPhenoHighlight){
+					if(widget.doefunc(d.doe) && (widget.highlightedShapes[d.group] || widget.highlightedFills[d.shading] || widget.allPhenoHighlight)){
 						return widget.phenoColors(d.pheno);
 					}
 					else{
-						return "#f1f1f1";
+						return widget.fillMap[d.shading]['greyfill'];
 					}
 				})
 			 	.attr("d", d3.svg.symbol()
 			 		.type(function(d){return widget.groupMap[d.group];})
-			 		.size(elementsize));		
-			widget.highlightedPhenos = {};
-			widget.highlightedShapes = {};
+			 		.size(elementsize));
+			if(ireset){		
+				widget.highlightedPhenos = {};
+				widget.highlightedShapes = {};
+				widget.highlightedFills = {};
+			}
 		}
 		else{
 			expandedsize = elementsize*4;		
@@ -892,15 +920,15 @@ $.widget('csg.iphenogram',{
 					}
 				})
 				.style("fill", function(d){
-					if(phenopos[d.pheno] && (widget.highlightedShapes[d.group] || widget.allPhenoHighlight)){
-						return widget.phenoColors(d.pheno);
+					if(widget.doefunc(d.doe) && phenopos[d.pheno] && ( widget.allPhenoHighlight || ((widget.allShapes || (d.group in widget.highlightedShapes) ) && (widget.allFills || (d.shading in widget.highlightedFills)) ))){
+						return widget.fillMap[d.shading][d.pheno];
 					}
 					else{
-						return "#f1f1f1";
+						return widget.fillMap[d.shading]['greyfill'];
 					}
 				})
 				.style("stroke", function(d){
-					if(phenopos[d.pheno] && (widget.highlightedShapes[d.group] || widget.allPhenoHighlight)){
+					if(widget.doefunc(d.doe) && phenopos[d.pheno] && ( widget.allPhenoHighlight || ((widget.allShapes || (d.group in widget.highlightedShapes) ) && (widget.allFills || (d.shading in widget.highlightedFills)) ))){
 						return widget.phenoColors(d.pheno);
 					}
 					else{
@@ -929,8 +957,10 @@ $.widget('csg.iphenogram',{
     */
 	highlightShapes: function(groupsSelected, reset){
 		var widget = this;
-		if(Object.keys(groupsSelected).length==0)
+		if(Object.keys(groupsSelected).length==0){
+			widget.highlightedShapes = groupsSelected;
 			reset = true;
+		}
 		elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
 		// when resetting shapes return the highlighted phenotypes to color
 		if(reset){
@@ -939,8 +969,17 @@ $.widget('csg.iphenogram',{
 		else{
 			expandedsize = elementsize*4;
 			widget.allPhenoHighlight=false;
-			if(Object.keys(widget.highlightedPhenos).length==0)
+			widget.allPhenos=widget.allFills=false;
+			if(Object.keys(widget.highlightedPhenos).length==0 && Object.keys(widget.highlightedFills).length==0){
 				widget.allPhenoHighlight=true;
+			}
+			if(Object.keys(widget.highlightedPhenos).length == 0){
+				widget.allPhenos = true;
+			}
+			if(Object.keys(widget.highlightedFills).length == 0){
+				widget.allFills = true;
+			}
+				
 			d3.selectAll(".phenocircle")
 				.transition()
 				.duration(500)
@@ -953,15 +992,15 @@ $.widget('csg.iphenogram',{
 					}
 				})
 				.style("fill", function(d){
-					if(groupsSelected[d.group] && (widget.highlightedPhenos[d.pheno] || widget.allPhenoHighlight)){
-						return widget.phenoColors(d.pheno);
+					if(widget.doefunc(d.doe) && groupsSelected[d.group] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allFills || widget.highlightedFills[d.shading]) ) )){
+						return widget.fillMap[d.shading][d.pheno];
 					}
 					else{
-						return "#f1f1f1";
+						return widget.fillMap[d.shading]['greyfill'];
 					}
 				})
 				.style("stroke", function(d){
-					if(groupsSelected[d.group] && (widget.highlightedPhenos[d.pheno] || widget.allPhenoHighlight)){
+					if(widget.doefunc(d.doe) && groupsSelected[d.group] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allFills || widget.highlightedFills[d.shading]) ) )){
 						return widget.phenoColors(d.pheno);
 					}
 					else{
@@ -980,6 +1019,80 @@ $.widget('csg.iphenogram',{
  				widget.highlightedShapes = groupsSelected;
 			}
 		},
+		
+		
+	 /**
+    * Specifies which shapes (groups) should be filled in with color.  All others
+    * will be gray.
+    * @param {object} fillsSelected The names of the fill types to display in color.
+    * @param {boolean} reset When true, all shapes are colored that are included in the highlighted phenotypes
+    */
+	highlightFills: function(fillsSelected, reset){
+		var widget = this;
+		if(Object.keys(fillsSelected).length==0){
+			widget.highlightedFills = fillsSelected;
+			reset = true;
+		}
+		elementsize = (widget.options.circleradius*2) * (widget.options.circleradius*2);
+		// when resetting shapes and fills return the highlighted phenotypes to color
+		if(reset){
+			widget.highlightPhenos(widget.highlightedPhenos, false);
+		}
+		else{
+			expandedsize = elementsize*4;
+			widget.allPhenoHighlight=false;
+			widget.allShapes=widget.allPhenos=false;
+			if(Object.keys(widget.highlightedPhenos).length==0 && Object.keys(widget.highlightedShapes).length==0){
+				widget.allPhenoHighlight=true;
+			}
+			if(Object.keys(widget.highlightedPhenos).length == 0){
+				widget.allPhenos = true;
+			}
+			if(Object.keys(widget.highlightedShapes).length == 0){
+				widget.allShapes = true;
+			}
+				
+			d3.selectAll(".phenocircle")
+				.transition()
+				.duration(500)
+				.each("start", function(d){
+					if(fillsSelected[d.shading]){
+						d3.select(this)
+							.attr("d", d3.svg.symbol()
+								.type(function(d){return widget.groupMap[d.group];})
+								.size(expandedsize))
+					}
+				})
+				.style("fill", function(d){
+					if(widget.doefunc(d.doe) && fillsSelected[d.shading] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allShapes || widget.highlightedShapes[d.group]) ) )){
+						return widget.fillMap[d.shading][d.pheno];
+					}
+					else{
+						return widget.fillMap[d.shading]['greyfill'];
+					}
+				})
+				.style("stroke", function(d){
+					if(widget.doefunc(d.doe) && fillsSelected[d.shading] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allShapes || widget.highlightedShapes[d.group]) ) )){
+						return widget.phenoColors(d.pheno);
+					}
+					else{
+						return 'lightgray';
+					}
+				})
+			 	.each("end", function(){
+			 		d3.select(this)
+			 		 .transition()
+			 		 .duration(1000)
+			 		 .attr("d", d3.svg.symbol()
+			 		 	.type(function(d){return widget.groupMap[d.group];})
+			 		 	.size(elementsize))
+
+				});
+ 				widget.highlightedFills = fillsSelected;
+			}
+		},		
+		
+		
 
 		/**
     	* Zoom handler
@@ -1033,11 +1146,17 @@ $.widget('csg.iphenogram',{
 			colHeaderMap['chrom']='chr';
 			colHeaderMap['position']='pos';
 			colHeaderMap['endpos']='end';
+			colHeaderMap['pval']='pvalue';
+			colHeaderMap['beta']='doe'; // direction of effect
+			colHeaderMap['category']='phenotype';
+			colHeaderMap['data']='shading';
+			colHeaderMap['fill']='shading';
+			colHeaderMap['tissue']='group';
 			
 			inputStr=this._checkHeaders(inputStr,['chr','pos','snp'],colHeaderMap);
 		
 			var inputData=d3.tsv.parse(inputStr, function(d){
-				var ePos, pCol, ph;
+				var ePos, pCol, ph, doeval, shade, pval;
 				d.end ? ePos = +d.end : ePos = undefined;
 // 				d.poscolor ? pCol = d.poscolor.toString() : pCol = undefined;
 				if(d.poscolor){
@@ -1048,6 +1167,10 @@ $.widget('csg.iphenogram',{
 				}
 				d.phenotype ? ph = d.phenotype.toString() : ph = undefined;
 				d.group ? gr = d.group.toString() : gr = ' ';
+				d.pvalue ? pval = +d.pvalue : pval=0.0;
+				// if no shading specified all will be default 
+				d.shading ? shade = d.shading : shade = '-';
+				d.doe ? doeval = +d.doe : doeval = undefined;
 				return {
 					chrom: d.chr.toString(),
 					position: +d.pos,
@@ -1055,7 +1178,10 @@ $.widget('csg.iphenogram',{
 					id: d.snp.toString(),
 					endPosition: ePos,
 					posColor: pCol,
-					group: gr
+					group: gr,
+					pvalue: pval,
+					shading: shade,
+					doe: doeval
 				}});
 			this._setOption('phenos', inputData);
 		}
@@ -1236,9 +1362,89 @@ $.widget('csg.iphenogram',{
 		return phenoReturn;
 	},
 	
+	
 	/**
-    * Returns information on phenotypes within plot.
-    * @return {array} Array with phenotype name and phenotype color objects.
+	* Set up fill map based on phenotypes
+	*/
+	_setupFillMap: function(){
+		var fillNames = Object.keys(this.fillMap);
+		if(fillNames.length == 0)
+			return;
+		d3.select("#d3svg").remove();
+		
+		var svg = d3.select("body").append("svg").attr("id", "d3svg")
+		    .attr("width", 120)
+		    .attr("height", 120);
+		var defs = svg.append("defs");
+		var phenoNames = Object.keys(this.phenoMap);
+		
+		// first pattern -- simple fill		
+		for(var j=0; j<phenoNames.length; j++){
+			this.fillMap[fillNames[0]][phenoNames[j]] = this.phenoColors(phenoNames[j]);
+		}
+		this.fillMap[fillNames[0]]['greyfill'] = "#f1f1f1";
+		
+		
+		// additional fill patterns need to be created and each color 
+		// added
+		if(fillNames.length > 1){
+			for(var j=0; j<phenoNames.length; j++){ 				
+				var patternName = fillNames[1] + "_" + phenoNames[j];
+				defs.append("pattern")
+					.attr({id:patternName, width:"10", height:"10",patternUnits:"userSpaceOnUse", patternTransform:"rotate(60)"})
+				.append("rect")
+					.attr({ width:"6", height:"8", transform:"translate(0,0)", fill:this.phenoColors(phenoNames[j]) });
+				this.fillMap[fillNames[1]][phenoNames[j]] = "url(#" + patternName + ")";
+			}
+			// default for key
+			var patternName = fillNames[1] + "_keyDefaultPattern";
+			defs.append("pattern")
+				.attr({id:patternName, width:"10", height:"10",patternUnits:"userSpaceOnUse", patternTransform:"rotate(60)"})
+				.append("rect")
+					.attr({ width:"6", height:"8", transform:"translate(0,0)", fill:"#000000"});
+			this.fillMap[fillNames[1]]['defaultkey'] = "url(#" + patternName + ")";
+			patternName = 'greyfill';
+			defs.append("pattern")
+				.attr({id:patternName, width:"10", height:"10",patternUnits:"userSpaceOnUse", patternTransform:"rotate(60)"})
+				.append("rect")
+					.attr({ width:"6", height:"8", transform:"translate(0,0)", fill:"#f1f1f1"});
+			this.fillMap[fillNames[1]]['greyfill'] = "url(#" + patternName + ")";	
+		}	
+		
+		
+		// additional fill patterns need to be created and each color 
+		// added
+		if(fillNames.length > 2){
+			for(var j=0; j<phenoNames.length; j++){ 				
+				var patternName = fillNames[2] + "_" + phenoNames[j];
+				defs.append("pattern")
+				.attr({id:patternName, width:"10", height:"10",patternUnits:"userSpaceOnUse", patternTransform:"rotate(0)"})
+				.append("rect")
+					.attr({ width:"4", height:"8", transform:"translate(0,0)", fill:this.phenoColors(phenoNames[j]) });
+				this.fillMap[fillNames[2]][phenoNames[j]] = "url(#" + patternName + ")";
+			}
+			// default for key
+			var patternName = fillNames[2] + "_keyDefaultPattern";
+			defs.append("pattern")
+				.attr({id:patternName, width:"10", height:"10",patternUnits:"userSpaceOnUse", patternTransform:"rotate(0)"})
+				.append("rect")
+					.attr({ width:"4", height:"8", transform:"translate(0,0)", fill:"#000000"});
+			this.fillMap[fillNames[2]]['defaultkey'] = "url(#" + patternName + ")";
+			patternName = 'greyfill';
+			defs.append("pattern")
+				.attr({id:patternName, width:"10", height:"10",patternUnits:"userSpaceOnUse", patternTransform:"rotate(0)"})
+				.append("rect")
+				.attr({ width:"4", height:"8", transform:"translate(0,0)", fill:"#f1f1f1"});
+			this.fillMap[fillNames[2]]['greyfill'] = "url(#" + patternName + ")";				
+		}
+		
+		
+					
+	},
+	
+	/**
+    * Returns information on groups within plot.
+    * @return {array} Array with group name and symbol type
   */
 	getGroups: function(){
 		var groupNames = Object.keys(this.groupMap);
@@ -1248,6 +1454,23 @@ $.widget('csg.iphenogram',{
 		}
 		return groupReturn;
 	},
+
+
+	/**
+    * Returns information on fills within plot.
+    * @return {array} Array with fill name and fill ID
+  */
+	getFills: function(){
+		var fillNames = Object.keys(this.fillMap);
+		// first is simple black for filled in with solid color
+		var fillReturn = [{name: fillNames[0], fillType: "#000000"}];
+		for(var i=1; i<fillNames.length;  i++){
+			fillReturn.push({name: fillNames[i], fillType: this.fillMap[fillNames[i]]['defaultkey']});
+		}
+		
+		return fillReturn;
+	},
+
 
 	/**
     * Returns chromosome names within plot.
@@ -1523,6 +1746,27 @@ $.widget('csg.iphenogram',{
 			}
 			return a.position - b.position;
 		});
+	},
+
+
+	/**
+	* Sets the flag for plotting based on direction of effect
+	* @param {integer} 0 - for negative, 1 - for positive and 2 - for all
+	*/
+	setDoeFlag:function(option){
+	
+	// set variable to a function that sets whether the value is right
+		var widget = this;
+		if(option == 0){
+			widget.doefunc = function(val){return val < 0.0 ? true : false;}
+		}
+		else if(option == 1){
+			widget.doefunc = function(val){return val >= 0.0 ? true : false;}		
+		}
+		else{ // option == 2
+			widget.doefunc = function(val){return true;}			
+		}
+		this.highlightPhenos(this.highlightedPhenos, false);
 	},
 
 	/**
