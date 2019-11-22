@@ -114,7 +114,7 @@ $.widget('csg.shapekey',{
 		// add symbol 
  		bar.append("path")
  			.attr("transform", "translate(" + (barHeight/2).toString()  + "," + (barHeight/2).toString() + ")")
- 			.attr("d", d3.svg.symbol()
+ 			.attr("d", d3.symbol()
  				.size(symbolSize)
  				.type(function(d){return d.symbolType;}))
  			.style("fill", "white")

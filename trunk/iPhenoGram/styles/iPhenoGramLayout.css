@@ -55,7 +55,7 @@
 	left: 935px;
 	top: 20px;
 	width: 150px;
-	height: 404px;
+	height: 684px;
 	padding: 0px;
 	margin: 0px;
 	font-size: 0.7em;
@@ -73,7 +73,7 @@ td.chromsSelection{
 div.select-panel{
 	overflow: auto;
 	width: 140px;
-	height: 350px;
+	height: 640px;
 }
 
 #chrommap {
@@ -90,13 +90,19 @@ div.select-panel{
 
 #controlpanel{
 	position: absolute;
+/* 
 	left: 935px;
 	top: 429px;
 	width: 150px;
 	height: 275px;
+ */
+/*  	left: 10px; */
+	top: 200px;
+ 	height: 504px;
+ 	width: 185px;
 	padding: 0px;
 	margin: 0px;
-	font-size: 0.7em;
+	font-size: 0.9em;
 	overflow: hidden;
 }
 
@@ -160,8 +166,8 @@ div.scroll{
 
 div.tab-panel{
 	overflow: hidden;
-	width: 110px;
-	height: 220px;
+	width: 150px;
+	height: 400px;
 	padding: 0px;
 }
 

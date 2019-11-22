@@ -1,10 +1,12 @@
 <!DOCTYPE html>
+<html>
 <head>
 <meta charset="utf-8">
 <title>d3 iPhenoGram widget test</title>
 <link rel="stylesheet" type="text/css" href="styles/iPhenoGramLayout.css">
 <!-- <link rel="stylesheet" type="text/css" href="styles/iPhenoGram.css"> -->
-<link rel="stylesheet" href="https://code.jquery.com/ui/1.11.2/themes/smoothness/jquery-ui.css">
+<!-- <link rel="stylesheet" type="text/css" href="https://code.jquery.com/ui/1.11.2/themes/smoothness/jquery-ui.css"> -->
+<link rel="stylesheet" type="text/css" href="styles/jquery-ui.css">
 <style>
 .inlined{
 	display: inline-block;
@@ -16,9 +18,11 @@
 <body>
 <!-- <h2>Testing the iPhenoGram Widget Redraw Phenos</h2> -->
 <div id="chrommap" class="containerBlock"></div>
+<!-- 
 <div id="display" class="containerBlock" >
 	<iframe id="displayFrame" src="about:blank"></iframe>
 </div>
+ -->
 <div id="drawing" class="containerBlock" ></div>
 <div id="selectionpanel" class="containerBlock scroll">
 	<ul>
@@ -68,22 +72,14 @@
 
 <script type="text/javascript" src="scripts/jquery-1.11.2.min.js"></script>
 <script type="text/javascript" src="scripts/jquery-ui.min.js"></script>
-<script type="text/javascript" src="scripts/d3.v3.min.js"></script>
+<script type="text/javascript" src="scripts/d3.v5.min.js"></script>
 <script type="text/javascript" src="scripts/csg.iphenogram.js"></script>
 <script type="text/javascript" src="scripts/csg.colorkey.js"></script>
 <script type="text/javascript" src="scripts/csg.shapekey.js"></script>
 <script type="text/javascript" src="scripts/csg.fillkey.js"></script>
-<!-- 
-<script type="text/javascript" src="http://gabelerner.github.io/canvg/rgbcolor.js"></script>
-<script type="text/javascript" src="http://gabelerner.github.io/canvg/StackBlur.js"></script>
-<script type="text/javascript" src="http://gabelerner.github.io/canvg/canvg.js"></script>
- -->
-<script type="text/javascript" src="scripts/rgbcolor.js"></script>
-<script type="text/javascript" src="scripts/StackBlur.js"></script>
-<script type="text/javascript" src="scripts/canvg.min.js"></script>
+ 
 <script type="text/javascript" src="scripts/default-data.js"></script>
 
-<!-- <script type="text/javascript" src="scripts/canvg.js"></script>  -->
 <script>
 
 var chromsIn  = chromsHuman;
@@ -134,11 +130,11 @@ $(document).ready(function() {
 
 	addChromsToList($("#chrommap").iphenogram('getChromNames'), $("#chrommap").iphenogram('option', 'includedChroms'));
 
-	$("#drawing").on("iphenogramposselected", function(event, data){
-			var searchStr = "https://www.ncbi.nlm.nih.gov/SNP/snp_ref.cgi?searchType=adhoc_search&type=rs&rs="
-				+ data.posInfo.id;
-			$("#displayFrame").attr('src', searchStr);
-	});
+// 	$("#drawing").on("iphenogramposselected", function(event, data){
+// 			var searchStr = "https://www.ncbi.nlm.nih.gov/SNP/snp_ref.cgi?searchType=adhoc_search&type=rs&rs="
+// 				+ data.posInfo.id;
+// 			$("#displayFrame").attr('src', searchStr);
+// 	});
 
 	$("#drawing").on("iphenogramselectpheno", function(event, data){
   	var keysSet = {};
@@ -265,7 +261,7 @@ $(document).ready(function() {
   	// remove all but first li
 //   	$('#chromList li:not(:first)').remove();
 		$(".chromsSelection tr").remove();
-		var interval = 3;
+		var interval = 2;
 		var appendString;
 		var checkedValue=' checked="1"';
   	for(var i=0; i<chrNames.length; i+=interval){
@@ -307,24 +303,37 @@ $(document).ready(function() {
   }
 
 	d3.select("#save").on("click", function(){
-		var html = $("#drawing").iphenogram('getSVG', 3);
-		var canvas = document.getElementById('intermediateImage');
-		canvg(canvas, html);
-		var canvasdata = canvas.toDataURL("image/png");
-		var pngimg = '<img src="'+canvasdata+'">';
-		d3.select("#pngdataurl").html(pngimg);
+		var svgString = $("#drawing").iphenogram('getSVG', 3);
+	
+		var re = /csg-iphenogram-drawing"\swidth="(\d+)"\sheight="(\d+)"/
+		var reResults = re.exec(svgString);
 
-		if (canvas.msToBlob) { //for IE
-			var blob = canvas.msToBlob();
-			window.navigator.msSaveBlob(blob, 'sample.png');
-		} else {
-			var a = document.createElement("a");
-			a.download = "sample.png";
-			a.href = canvasdata;
-			document.body.appendChild(a);
-			a.click();
-			a.remove();
-		}
+		document.getElementById('intermediateImage').style.width=reResults[1] + "px";
+		var canvas = document.getElementById('intermediateImage');
+
+		canvas.width=reResults[1];
+		canvas.height=reResults[2];
+				
+		var ctx = canvas.getContext("2d");
+		var DOMURL = self.URL || self.webkitURL || self;
+		var img = new Image();		
+		var svg = new Blob([svgString], {type: "image/svg+xml;charset=utf-8"});	
+		var url = DOMURL.createObjectURL(svg);
+		
+		img.onload = function() {
+			ctx.drawImage(img, 0, 0);
+		    png = canvas.toDataURL("image/png");
+    		document.querySelector('#pngdataurl').innerHTML = '<img src="'+png+'"/>';
+// 	    DOMURL.revokeObjectURL(png);
+	    
+	    	var a = document.createElement("a");
+		    a.download = "sample.png";
+		    a.href = png;
+	    	document.body.appendChild(a);
+		    a.click();
+		    a.remove();
+		};		
+		img.src = url;
 	});
 
 	d3.select("#saveOptions").on("click", function(){
