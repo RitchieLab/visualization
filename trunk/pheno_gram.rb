@@ -1,16 +1,14 @@
 #!/usr/bin/env ruby
 # Requires rubygems
 
-ENV['MAGICK_CONFIGURE_PATH'] = '/gpfs/group/mdr23/usr/tools/etc/ImageMagick'
+#ENV['MAGICK_CONFIGURE_PATH'] = '/gpfs/group/mdr23/usr/tools/etc/ImageMagick'
 
 Font_family = 'Verdana'
 SNPDefaultColor = 'black'
 DefaultEthnicity = '-'
 DefaultPhenotype = 'Unknown'
 $color_column_included = false
-#CytoBandFile = 'cytoBand.txt'
-CytoBandFile = '/Users/dudeksm/Documents/lab/rails/visualization/plot/cytoBand.txt'
-#CytoBandFile = '/gpfs/group1/m/mdr23/www/visualization/plot/cytoBand.txt'
+ScriptDir =File.expand_path(File.dirname(__FILE__))
 
 begin
   require 'rubygems'
@@ -31,11 +29,13 @@ begin
   exit(1)
 end
 
+#require '/Users/dudeksm/lab/rails/visualization/lib/file_handling.rb'
+
 require 'optparse'
 require 'ostruct'
 include Magick
 
-Version = '1.2.1'
+Version = '1.2.0'
 Name = 'pheno_gram.rb'
 
 # check for windows and select alternate font based on OS
@@ -66,7 +66,7 @@ class Arg
     options.out_name = 'pheno_gram'
     options.imageformat = 'png'
     options.title = " "
-    options.color = 'exhaustive'
+    options.color = 'random'
     options.pheno_spacing = 'alternative'
     options.rand_seed = 7
     options.chr_only = false
@@ -76,17 +76,39 @@ class Arg
     options.transparent_lines = false
     options.thickness_mult = 1
     options.thin_lines = false
+    options.color_file = nil
     options.big_font=false
     options.shade_inaccessible=false
-		options.cytobandfile = CytoBandFile
+		options.cytobandfile = ""
 		options.include_notes=false
 		options.zoomchr = nil
 		options.zoomstart = nil
 		options.zoomend = nil
 		options.restrict_chroms = false
 		options.transverse_lines = true
+	options.group_file = nil
+	options.spec_color_file = nil
     help_selected = false
     version_selected = false
+ 
+     newargs = Array.new
+    # concatenate any consecutive strings that do not - 
+    i=0
+    new_i=0
+    while(i < args.length)
+        if(args[i] =~ /^\-/)
+            newargs << args[i]
+            i+=1
+        else
+            newargs << args[i]
+            i+= 1
+            new_i = newargs.length-1
+            while(args[i] !~ /\-/ and i < args.length)
+                newargs[new_i] += " #{args[i]}"
+                i+=1
+            end
+        end
+    end
     
     opts = OptionParser.new do |opts|
        opts.banner = "Usage: #{Name}.rb [options]"
@@ -98,9 +120,9 @@ class Arg
         options.out_name = out_name
       end
       opts.on("-t [title]", "Main title for plot (enclose in quotes)") do |title|
-        options.title = title
+        title ? options.title  = title : options.title=" "
       end
-      opts.on("-C", "--chrom-only", "Plot only chromosomes with positions") do |chrom_only|
+      opts.on("-X", "--chrom-only", "Plot only chromosomes with positions") do |chrom_only|
         options.chr_only = true
       end
       opts.on("-S [circle_size]", "Set phenotype circle size (small, medium, large)") do |circle_size|
@@ -123,16 +145,25 @@ class Arg
 					options.zoomend = positions[1].to_i
 				end
 			end
-			opts.on("-G", "--restrict-chroms", "Include only chromosomes with input data on plot"){|restrict|options.restrict_chroms=true}
+			opts.on("-R", "--restrict-chroms", "Include only chromosomes with input data on plot"){|restrict|options.restrict_chroms=true}
 			opts.on("-a", "--include-annotation", "Include any annotation on plot"){|notes|options.include_notes=true}
-      opts.on("-z", "--high-res", "Set resolution to 1200 dpi") {|hres| options.highres=true}
+      opts.on("-z", "--high-res", "Set resolution to 600 dpi") {|hres| options.highres=true}
       opts.on("-T", "--trans-lines", "Make lines on chromosome more transparent") {|trans| options.transparent_lines=true}
       opts.on("-n", "--thin-lines", "Make lines across chromosomes thinner") {|thin| options.thin_lines=true}
 			opts.on("-N", "--no-lines", "Remove position lines across chromosomes"){|nolines|options.transverse_lines=false}
       opts.on("-B", "--thick-boundary", "Increase thickness of chromosome boundary") {|thick| options.thickness_mult=2}
       opts.on("-F", "--big-font", "Increase font size of labels") {|big_font| options.big_font=true}
-      opts.on("-x", "--shade-chromatin", "Add cross-hatch shading to inaccessible regions of chromosomes") {|cross_hatch|options.shade_inaccessible=true}
+      opts.on("-x", "--cross-hatch", "Add cross-hatch shading to inaccessible regions of chromosomes"){|cross_hatch|options.shade_inaccessible=true}
 			opts.on("-Y [cytoBand_file]", "Location of file with banding information for use with shading chromatin"){|cytoBand_file|options.cytobandfile=cytoBand_file}
+      opts.on("-C [color_file]", "Color file for generator") do |color_file|
+        options.color_file = color_file
+      end
+      opts.on("-s [spec_color_file]", "File for specifying colors to phenotypes") do |spec_color_file|
+        options.spec_color_file = spec_color_file
+      end
+      opts.on("-G [group_file]", "File for specifying shapes for specific groups") do |group_file|
+        options.group_file = group_file
+      end
       opts.on("-p [pheno_spacing]", "Options are standard or equal or proximity (default) ") do |pheno_spacing|
         options.pheno_spacing = pheno_spacing
 				options.pheno_spacing = 'alternative' if options.pheno_spacing == 'proximity'
@@ -155,7 +186,7 @@ class Arg
     end
       
     begin
-      opts.parse!(args)
+      opts.parse!(newargs)
     rescue => e
       puts e, "", opts
       exit(1)
@@ -169,7 +200,7 @@ class Arg
     if help_selected  
       puts
       exit(0)
-    end
+    end  
     
     if !options.input
       help_string = opts.help
@@ -179,18 +210,8 @@ class Arg
       print "\n"
       exit(1)
     end
-		
-		# check for cytoband file
-		if options.shade_inaccessible and !File.exist?(options.cytobandfile)
-			puts "\n#{Name} (Version: #{Version})"
-			puts "\nNo cytoBand file found for chromatin shading.\nUse -Y to pass location of file."
-			puts "If needed, file can be downloaded from ftp://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/cytoBand.txt.gz
-\n\n"
-			exit(1)
-		end
-    
     return options
-  end
+	end
 	
 	# splits string up to list individual values
 	def self.split_nums(str)
@@ -206,7 +227,6 @@ class Arg
 		end
 		return values
 	end
-	
 end
 
 
@@ -223,19 +243,23 @@ end
 
 
 class PhenotypeHolder
-  attr_accessor :phenonames, :maxname
+  attr_accessor :phenonames, :maxname, :spec_colors
   
   def initialize(params)
     @pheno_number = 1
+    @spec_colors = Hash.new
     if params[:color]=='group'
       @colormaker = GroupColorMaker.new
 		elsif params[:color]=='exhaustive' or params[:color] == 'optimized'
 			@colormaker = ExhaustiveSearchColorMaker.new
 		elsif params[:color]=='grayscale'
 			@colormaker = GrayScaleColorMaker.new
+		else
+		    @colormaker = ExhaustiveSearchColorMaker.new
     end
-    @phenonames = Hash.new
 		@maxname = 0
+    @phenonames = Hash.new
+		@phenocolororder = Array.new
   end
   
   def add_phenotype(name, group)
@@ -245,6 +269,7 @@ class PhenotypeHolder
       @phenonames[pheno.name] = pheno
       @colormaker.add_group(group)
 			@maxname = name.length unless @maxname > name.length
+			@phenocolororder << pheno.name
     end
     return @phenonames[name]
   end
@@ -256,18 +281,28 @@ class PhenotypeHolder
 
   def set_colors
 		@colormaker.set_color_num(@phenonames.length)
-    @phenonames.each_value {|pheno| pheno.color = @colormaker.gen_html(pheno.group)
-		}
-	end
+		@phenocolororder.each do |phenoname| 
+			pheno = @phenonames[phenoname]
+			if @spec_colors.has_key?(phenoname)
+			    pheno.color = @spec_colors[phenoname]
+			else
+    			pheno.color = @colormaker.gen_html(pheno.group)
+    		end
+		end
+  end
   
   def set_color(groupname)
-    return @colormaker.gen_html(groupname)
+	if @spec_colors.has_key?(phenoname)
+		return @spec_colors[phenoname]
+	else
+        return @colormaker.gen_html(groupname)
+    end
   end
   
 end
 
 class Genome
-  attr_accessor :chromosomes, :ethnicities
+  attr_accessor :chromosomes, :ethnicities, :designated_shapes
   
   def initialize
     @chromosomes = Array.new
@@ -275,6 +310,7 @@ class Genome
     @shapefactory=ShapeFactory.new
 		@max_chr_size=0
 		@chrNames = Hash.new
+	@designated_shapes = Hash.new
   end
   
 	def set_chroms(chroms)
@@ -320,10 +356,10 @@ class Genome
 		end
 		@chromosomes = newchroms
 		@chrNames = new_chr_names
-	end
+	end	
 	
   def add_snp(params)
-    shape = @shapefactory.get_shape(params[:eth])
+    shape = @shapefactory.get_shape(params[:eth],@designated_shapes)
     params[:chr].add_snp(:name=>params[:name], :pos=>params[:pos],
       :pheno=>params[:pheno], :chr=>params[:chr], :snpcolor=>params[:snpcolor], 
       :endpos=>params[:endpos], :shape=>shape, :note=>params[:note])
@@ -521,8 +557,8 @@ class PhenoPoint
     @pheno = p
     @shape = s
   end
+  
 end
-
 
 class SNP
   attr_accessor :chrom, :pos, :phenos, :linecolors, :endpos, :note
@@ -546,7 +582,7 @@ class ColorMaker
   def gen_html(groupname)
     return "rgb(220,220,220)"
   end
-	
+
 	def set_color_num(nColors)
 		@nColors = nColors
 	end
@@ -572,7 +608,7 @@ class ColorRange
     @start.luminance  = @start.luminance + @l_adjust
     return [color.hue, color.saturation, color.luminance]
   end
- 
+  
 end
 
   class HSL
@@ -583,23 +619,37 @@ end
       @saturation = sat
       @luminance = lum
     end
+    
+#    def to_color
+#      return ColorSpaceHelper.hsl_to_rgb(@hue, @saturation, @luminance)
+#    end
+    
   end
 
 class GroupColorMaker < ColorMaker
   
   def initialize
-    @color_ranges = Array.new 
+    @color_ranges = Array.new  
     
-    @color_ranges << ColorRange.new('blue', HSL.new(67, 100, 50))
+#    @color_ranges << ColorRange.new('blue', HSL.new(67, 100, 50))
+#    @color_ranges << ColorRange.new('red', HSL.new(0, 100, 50))
+#    @color_ranges << ColorRange.new('yellow', HSL.new(17, 100, 50),90)
+#    @color_ranges << ColorRange.new('gray', HSL.new(0, 0, 50),95)
+#    @color_ranges << ColorRange.new('green', HSL.new(33.3, 100, 25))
+#    @color_ranges << ColorRange.new('orange', HSL.new(6.7, 100, 50))
+#    @color_ranges << ColorRange.new('purple', HSL.new(83.3, 100, 25))
+#    @color_ranges << ColorRange.new('brown', HSL.new(7.2, 70, 22),80)
+#    @color_ranges << ColorRange.new('pink-jeep', HSL.new(93.6, 72, 57)) 
+    
+    @color_ranges << ColorRange.new('blue', HSL.new(240, 100, 50))
     @color_ranges << ColorRange.new('red', HSL.new(0, 100, 50))
-    @color_ranges << ColorRange.new('yellow', HSL.new(17, 100, 50),90)
-    @color_ranges << ColorRange.new('gray', HSL.new(0, 0, 50),95)
-    @color_ranges << ColorRange.new('green', HSL.new(33.3, 100, 25))
-    @color_ranges << ColorRange.new('orange', HSL.new(6.7, 100, 50))
-    @color_ranges << ColorRange.new('purple', HSL.new(83.3, 100, 25))
-    @color_ranges << ColorRange.new('brown', HSL.new(7.2, 70, 22),80)
-    @color_ranges << ColorRange.new('pink-jeep', HSL.new(93.6, 72, 57)) 
-    
+    @color_ranges << ColorRange.new('yellow', HSL.new(60, 100, 50),90)
+    @color_ranges << ColorRange.new('gray', HSL.new(0, 0, 38),95)
+    @color_ranges << ColorRange.new('green', HSL.new(120, 100, 40))
+    @color_ranges << ColorRange.new('orange', HSL.new(30, 100, 50))
+    @color_ranges << ColorRange.new('purple', HSL.new(2700, 100, 40))
+    @color_ranges << ColorRange.new('brown', HSL.new(30,51,26),80)
+    @color_ranges << ColorRange.new('pink-jeep', HSL.new(330,100,71))     
     
     @curr_group=0
     @group_totals = Hash.new
@@ -609,8 +659,10 @@ class GroupColorMaker < ColorMaker
   
   def add_group(g)
     unless @groups.has_key?(g)
+#print "adding group for #{g}\n"
       @curr_group = 0 if @curr_group == @color_ranges.length
       @groups[g]=@color_ranges[@curr_group]
+#print "curr_group is #{@curr_group}\n"
       @group_totals[g]=0
       @curr_group+=1
     end
@@ -625,37 +677,29 @@ class GroupColorMaker < ColorMaker
   def gen_html(groupname)
     set_intervals unless @intervals_set
     hsl = @groups[groupname].get_color
-    return "hsl(#{hsl[0]}%,#{hsl[1]}%,#{hsl[2]}%)"
+#print "gen_html #{@name} hsl(#{hsl[0]}%,#{hsl[1]}%,#{hsl[2]}%)\n"
+    return "hsl(#{hsl[0]},#{hsl[1]}%,#{hsl[2]}%)"
   end
   
 end
+
 
 class ExhaustiveSearchColorMaker < ColorMaker
 	
 	def initialize
 		@index=0
-		@exhaustiveColors = ['rgb(0,0,255)','rgb(0,255,0)','rgb(255,0,0)','rgb(0,0,52)','rgb(255,0,176)','rgb(0,79,0)','rgb(255,213,0)','rgb(155,147,255)','rgb(12,255,188)','rgb(152,79,63)','rgb(0,124,144)','rgb(62,1,145)','rgb(177,198,112)','rgb(255,150,200)','rgb(254,143,57)','rgb(225,2,255)','rgb(125,0,87)','rgb(29,24,0)','rgb(225,2,82)','rgb(1,172,38)','rgb(37,242,255)','rgb(196,255,70)','rgb(139,108,0)','rgb(126,101,143)','rgb(254,184,152)','rgb(149,199,255)','rgb(8,157,118)','rgb(105,112,80)','rgb(0,98,255)','rgb(238,118,255)','rgb(165,24,0)','rgb(3,66,156)','rgb(180,255,213)','rgb(69,0,20)','rgb(255,204,105)','rgb(254,120,106)','rgb(162,255,142)','rgb(160,0,155)','rgb(180,164,167)','rgb(0,51,71)','rgb(130,172,0)','rgb(0,255,115)','rgb(2,123,192)','rgb(124,48,235)','rgb(180,99,183)','rgb(247,209,255)','rgb(82,54,0)','rgb(251,255,123)','rgb(218,65,137)','rgb(123,189,183)','rgb(0,66,43)','rgb(143,0,50)','rgb(64,8,95)','rgb(255,242,188)','rgb(94,67,69)','rgb(79,151,64)','rgb(139,83,211)','rgb(182,163,1)','rgb(176,91,121)','rgb(171,88,22)','rgb(178,153,96)','rgb(77,33,73)','rgb(94,216,0)','rgb(250,255,0)','rgb(251,92,48)','rgb(90,110,0)','rgb(13,187,224)','rgb(237,170,255)','rgb(112,211,141)','rgb(255,171,0)','rgb(109,15,0)','rgb(230,30,212)','rgb(35,221,192)','rgb(28,1,22)','rgb(255,115,211)','rgb(45,62,113)','rgb(129,169,123)','rgb(0,114,234)','rgb(255,3,59)','rgb(166,154,219)','rgb(237,141,147)','rgb(42,56,0)','rgb(105,115,124)','rgb(182,253,255)','rgb(3,216,116)','rgb(202,211,30)','rgb(106,69,143)','rgb(220,148,83)','rgb(211,79,102)','rgb(51,120,102)','rgb(254,194,202)','rgb(196,208,184)','rgb(196,144,179)','rgb(185,134,115)','rgb(255,0,130)','rgb(197,132,2)','rgb(0,0,181)','rgb(4,59,183)','rgb(199,82,255)','rgb(109,166,255)','rgb(206,255,173)','rgb(106,145,184)','rgb(67,117,63)','rgb(185,209,227)','rgb(142,100,50)','rgb(179,222,96)','rgb(133,0,181)','rgb(101,112,194)','rgb(120,39,70)','rgb(187,70,56)','rgb(155,151,54)','rgb(56,73,68)','rgb(2,92,132)','rgb(196,6,142)','rgb(113,38,147)','rgb(149,110,120)','rgb(61,24,0)','rgb(121,215,74)','rgb(97,93,30)','rgb(0,173,243)','rgb(1,72,255)','rgb(243,232,140)','rgb(0,22,122)','rgb(137,66,120)','rgb(209,120,91)','rgb(166,0,255)','rgb(193,125,239)','rgb(2,128,0)','rgb(0,160,153)','rgb(156,255,0)','rgb(255,112,0)','rgb(0,173,96)','rgb(132,152,137)','rgb(209,36,50)','rgb(77,67,40)','rgb(2,29,99)','rgb(0,36,32)','rgb(238,198,135)','rgb(240,214,75)','rgb(74,75,99)','rgb(253,220,199)','rgb(117,55,0)','rgb(210,1,8)','rgb(133,94,255)','rgb(126,138,74)','rgb(121,120,255)','rgb(255,115,158)','rgb(204,87,0)','rgb(216,72,196)','rgb(152,45,138)','rgb(121,205,169)','rgb(123,199,96)','rgb(183,217,162)','rgb(166,44,96)','rgb(207,101,162)','rgb(129,96,76)','rgb(139,224,255)','rgb(97,91,198)','rgb(180,173,208)','rgb(77,50,202)','rgb(124,255,96)','rgb(190,194,74)','rgb(106,47,46)','rgb(139,206,0)','rgb(36,34,64)','rgb(230,116,67)','rgb(199,158,63)','rgb(86,137,0)','rgb(200,175,146)','rgb(128,255,238)','rgb(5,235,55)','rgb(45,40,45)','rgb(130,255,197)','rgb(150,0,26)','rgb(181,68,209)','rgb(193,0,89)','rgb(45,27,231)','rgb(254,148,255)','rgb(255,84,100)','rgb(44,0,57)','rgb(230,255,219)','rgb(0,90,93)','rgb(252,173,68)','rgb(120,72,98)','rgb(0,130,69)','rgb(8,34,0)','rgb(134,166,179)','rgb(150,112,181)','rgb(82,102,157)','rgb(138,173,63)','rgb(169,0,221)','rgb(255,75,129)','rgb(69,31,45)','rgb(16,127,223)','rgb(162,64,78)','rgb(209,136,200)','rgb(52,198,207)','rgb(236,215,231)','rgb(111,245,157)','rgb(255,255,255)']
-		@colors20 = ['rgb(255,246,255)','rgb(13,112,105)','rgb(31,22,50)','rgb(5,153,36)','rgb(255,255,0)','rgb(241,20,15)','rgb(37,183,255)','rgb(69,10,255)','rgb(22,250,228)','rgb(120,0,127)','rgb(32,115,255)','rgb(255,166,255)','rgb(255,22,254)','rgb(255,164,2)','rgb(74,255,15)','rgb(99,1,2)','rgb(123,110,29)','rgb(255,146,128)','rgb(255,31,137)','rgb(226,255,162)']
-		@colors21 = ['rgb(74,0,255)','rgb(32,255,255)','rgb(9,112,7)','rgb(72,107,255)','rgb(8,255,5)','rgb(234,255,6)','rgb(255,31,255)','rgb(106,76,0)','rgb(255,161,2)','rgb(48,0,91)','rgb(251,160,255)','rgb(255,146,129)','rgb(58,173,255)','rgb(0,5,21)','rgb(80,127,119)','rgb(255,3,143)','rgb(115,0,44)','rgb(249,239,150)','rgb(255,43,19)','rgb(251,240,255)','rgb(106,255,154)']
-		@colors25 = ['rgb(255,62,134)','rgb(109,78,27)','rgb(255,80,0)','rgb(37,251,255)','rgb(98,140,130)','rgb(138,192,255)','rgb(255,164,118)','rgb(150,7,21)','rgb(21,96,18)','rgb(49,13,160)','rgb(7,0,255)','rgb(255,176,214)','rgb(243,255,0)','rgb(132,37,113)','rgb(253,131,255)','rgb(5,66,121)','rgb(254,253,150)','rgb(66,127,254)','rgb(245,255,243)','rgb(255,184,13)','rgb(43,5,18)','rgb(55,255,174)','rgb(220,0,255)','rgb(112,192,41)','rgb(18,255,15)']
-		@colors = @exhaustiveColors
-		@final_color_index = @colors.length-1
-	end
-	
-	def set_color_num(nColors)
-			@colors = @exhaustiveColors
+		@colors = ['rgb(0,0,255)','rgb(0,255,0)','rgb(255,0,0)','rgb(0,0,52)','rgb(255,0,176)','rgb(0,79,0)','rgb(255,213,0)','rgb(155,147,255)','rgb(12,255,188)','rgb(152,79,63)','rgb(0,124,144)','rgb(62,1,145)','rgb(177,198,112)','rgb(255,150,200)','rgb(254,143,57)','rgb(225,2,255)','rgb(125,0,87)','rgb(29,24,0)','rgb(225,2,82)','rgb(1,172,38)','rgb(37,242,255)','rgb(196,255,70)','rgb(139,108,0)','rgb(126,101,143)','rgb(254,184,152)','rgb(149,199,255)','rgb(8,157,118)','rgb(105,112,80)','rgb(0,98,255)','rgb(238,118,255)','rgb(165,24,0)','rgb(3,66,156)','rgb(180,255,213)','rgb(69,0,20)','rgb(255,204,105)','rgb(254,120,106)','rgb(162,255,142)','rgb(160,0,155)','rgb(180,164,167)','rgb(0,51,71)','rgb(130,172,0)','rgb(0,255,115)','rgb(2,123,192)','rgb(124,48,235)','rgb(180,99,183)','rgb(247,209,255)','rgb(82,54,0)','rgb(251,255,123)','rgb(218,65,137)','rgb(123,189,183)','rgb(0,66,43)','rgb(143,0,50)','rgb(64,8,95)','rgb(255,242,188)','rgb(94,67,69)','rgb(79,151,64)','rgb(139,83,211)','rgb(182,163,1)','rgb(176,91,121)','rgb(171,88,22)','rgb(178,153,96)','rgb(77,33,73)','rgb(94,216,0)','rgb(250,255,0)','rgb(251,92,48)','rgb(90,110,0)','rgb(13,187,224)','rgb(237,170,255)','rgb(112,211,141)','rgb(255,171,0)','rgb(109,15,0)','rgb(230,30,212)','rgb(35,221,192)','rgb(28,1,22)','rgb(255,115,211)','rgb(45,62,113)','rgb(129,169,123)','rgb(0,114,234)','rgb(255,3,59)','rgb(166,154,219)','rgb(237,141,147)','rgb(42,56,0)','rgb(105,115,124)','rgb(182,253,255)','rgb(3,216,116)','rgb(202,211,30)','rgb(106,69,143)','rgb(220,148,83)','rgb(211,79,102)','rgb(51,120,102)','rgb(254,194,202)','rgb(196,208,184)','rgb(196,144,179)','rgb(185,134,115)','rgb(255,0,130)','rgb(197,132,2)','rgb(0,0,181)','rgb(4,59,183)','rgb(199,82,255)','rgb(109,166,255)','rgb(206,255,173)','rgb(106,145,184)','rgb(67,117,63)','rgb(185,209,227)','rgb(142,100,50)','rgb(179,222,96)','rgb(133,0,181)','rgb(101,112,194)','rgb(120,39,70)','rgb(187,70,56)','rgb(155,151,54)','rgb(56,73,68)','rgb(2,92,132)','rgb(196,6,142)','rgb(113,38,147)','rgb(149,110,120)','rgb(61,24,0)','rgb(121,215,74)','rgb(97,93,30)','rgb(0,173,243)','rgb(1,72,255)','rgb(243,232,140)','rgb(0,22,122)','rgb(137,66,120)','rgb(209,120,91)','rgb(166,0,255)','rgb(193,125,239)','rgb(2,128,0)','rgb(0,160,153)','rgb(156,255,0)','rgb(255,112,0)','rgb(0,173,96)','rgb(132,152,137)','rgb(209,36,50)','rgb(77,67,40)','rgb(2,29,99)','rgb(0,36,32)','rgb(238,198,135)','rgb(240,214,75)','rgb(74,75,99)','rgb(253,220,199)','rgb(117,55,0)','rgb(210,1,8)','rgb(133,94,255)','rgb(126,138,74)','rgb(121,120,255)','rgb(255,115,158)','rgb(204,87,0)','rgb(216,72,196)','rgb(152,45,138)','rgb(121,205,169)','rgb(123,199,96)','rgb(183,217,162)','rgb(166,44,96)','rgb(207,101,162)','rgb(129,96,76)','rgb(139,224,255)','rgb(97,91,198)','rgb(180,173,208)','rgb(77,50,202)','rgb(124,255,96)','rgb(190,194,74)','rgb(106,47,46)','rgb(139,206,0)','rgb(36,34,64)','rgb(230,116,67)','rgb(199,158,63)','rgb(86,137,0)','rgb(200,175,146)','rgb(128,255,238)','rgb(5,235,55)','rgb(45,40,45)','rgb(130,255,197)','rgb(150,0,26)','rgb(181,68,209)','rgb(193,0,89)','rgb(45,27,231)','rgb(254,148,255)','rgb(255,84,100)','rgb(44,0,57)','rgb(230,255,219)','rgb(0,90,93)','rgb(252,173,68)','rgb(120,72,98)','rgb(0,130,69)','rgb(8,34,0)','rgb(134,166,179)','rgb(150,112,181)','rgb(82,102,157)','rgb(138,173,63)','rgb(169,0,221)','rgb(255,75,129)','rgb(69,31,45)','rgb(16,127,223)','rgb(162,64,78)','rgb(209,136,200)','rgb(52,198,207)','rgb(236,215,231)','rgb(111,245,157)','rgb(255,255,255)']
 		@final_color_index = @colors.length-1
 	end
 	
 	def gen_html(groupname)
-		@index = 0 if @index > @final_color_index
-		colorname = @colors[@index]
-		@index += 1
+        @index = 0 if @index > @final_color_index
+        colorname = @colors[@index]
+        @index += 1
 		return colorname
   end
 	
 end
-
 
 class GrayScaleColorMaker < ColorMaker
 	
@@ -678,9 +722,10 @@ class GrayScaleColorMaker < ColorMaker
 	end
 	
 	def gen_html(groupname)
-		@index = 0 if @index > @final_color_index
-		colorname = @colors[@index]
-		@index += 1
+
+        @index = 0 if @index > @final_color_index
+        colorname = @colors[@index]
+        @index += 1
 		return colorname
   end
 	
@@ -707,13 +752,102 @@ class FileHandler
 end
 
 
+class GroupSpecFileReader < FileHandler
+
+    def open(filename)
+		@file = File.new(filename, "r")
+	end
+
+	def parse_file(filename)
+	    groupShapes = Hash.new
+
+		firstline = true
+		open(filename)
+			headers = nil
+	    while oline=@file.gets
+            oline.each_line("\r") do |line|
+				if firstline
+					headers = read_headers(line)
+					firstline = false
+					next
+				end
+				next unless line =~ /\w/
+				cols = strip_and_split_delim(line, "\t")
+				groupShapes[cols[@groupcol]]=cols[@shapecol].downcase
+			end
+		end
+		close
+		return groupShapes
+	end
+
+
+    def read_headers(oline)
+		oline.each_line("\r") do |line|
+			cols = strip_and_split_delim(line, "\t")
+			cols.each_with_index do |c,i|
+				if c =~ /group|ethnicity|race/i
+					@groupcol = i
+				elsif c =~ /shape/i
+					@shapecol  = i
+				end
+			end
+		end
+	end
+	
+end
+
+class ColorSpecReader < FileHandler
+
+	def open(filename)
+		@file = File.new(filename, "r")
+	end
+
+	def parse_file(filename)
+	    colors = Hash.new
+
+		firstline = true
+		open(filename)
+			headers = nil
+	    while oline=@file.gets
+            oline.each_line("\r") do |line|
+				if firstline
+					headers = read_headers(line)
+					firstline = false
+					next
+				end
+				next unless line =~ /\w/
+				cols = strip_and_split_delim(line, "\t")
+				colors[cols[@phenocol]]=cols[@colorcol].downcase
+			end
+		end
+		close
+		return colors
+	end
+
+
+    def read_headers(oline)
+		oline.each_line("\r") do |line|
+			cols = strip_and_split_delim(line, "\t")
+			cols.each_with_index do |c,i|
+				if c =~ /phenotype/i
+					@phenocol = i
+				elsif c =~ /color/i
+					@colorcol  = i
+				end
+			end
+		end
+	end
+	
+end
+
+
 class ChromosomeFileReader < FileHandler
 	
 	def initialize
 		@idcol = 0
 		@sizecol  = 1
 		@centcol = nil
-	end
+	end	
 	
 	def open(filename)
 		@file = File.new(filename, "r")
@@ -789,18 +923,18 @@ class CytoBandFileReader < FileHandler
 				else
 					chromstr = cols[@chromcol]
 				end
-				if cols[@endcol].to_i <= cols[@startcol].to_i
+				if cols[@endcol].to_f <= cols[@startcol].to_f
 					next
-				elsif cols[@startcol].to_i == 0
-						cols[@startcol] = 1
+				elsif cols[@startcol].to_f == 0
+						cols[@startcol] = 0.05
 				end
-				cyto = CytoBand.new(:start=>cols[@startcol].to_i, :finish=>cols[@endcol].to_i, :type=>cols[@giecol])
+				cyto = CytoBand.new(:start=>cols[@startcol].to_f, :finish=>cols[@endcol].to_f, :type=>cols[@giecol])
 				genome.get_chrom(chromstr).add_cytoband(cyto)
 			end
     end	
 	end
 	
-  def set_columns(headerline)
+	  def set_columns(headerline)
 		@chromcol = @startcol = @endcol = @giecol = nil
 		headers = strip_and_split_delim(headerline, "\t")
 		headers.each_with_index do |header,i|
@@ -816,13 +950,12 @@ class CytoBandFileReader < FileHandler
 		end
 		
 		unless @chromcol and @startcol and @endcol and @giecol
-			error_string = 'Cytoband input file must include #chrom, chromStart, chromEnd, gieStain columns'
+			error_string = 'Cytoband input file must include #chrom, chromStart, chromEnd, gieStain columns ' + pcs
       raise error_string
     end
   end	
 	
 end
-
 
 class PhenoGramFileReader < FileHandler
 
@@ -849,7 +982,7 @@ class PhenoGramFileReader < FileHandler
         @bpendcol = i
       elsif header =~ /^pheno/i
         @phenocol = i
-      elsif header =~ /^colorgroup$/i
+      elsif header =~ /^colorgroup$|^colourgroup$/i
         @groupcol = i
       elsif header =~ /^race|^ethnic|^ancestry|^group/i
         @ethcol = i
@@ -867,11 +1000,13 @@ class PhenoGramFileReader < FileHandler
   end
   
   def parse_file(filename, genome, phenoholder, params)
+    positions_added=0
+    max_pos_allowed=params[:max_pos_allowed].to_i || 1000000
 		chr_only = params[:chr_only] || false
 		if(params[:zoomchr])
 			included_chroms = Hash.new
 			params[:zoomchr].each {|name| included_chroms[name.to_s]=1}
-		end
+		end		
     open(filename)
     lines = Array.new
     # read in all lines and split to accommodate Mac files
@@ -882,20 +1017,15 @@ class PhenoGramFileReader < FileHandler
     
     set_columns(lines.shift, chr_only)
     group = 'default'
-		lineno = 1
     lines.each do |line|
-			lineno += 1
       next unless line =~ /\w/
       data = strip_and_split_delim(line,"\t")
       # add SNP info 
       next if data[@chromcol] =~ /chrM/
 			
 			chromosome = genome.get_chrom(data[@chromcol])
-      raise "Problem in #{filename} with line:\n#{line}\n#{data[@chromcol]} is not a valid chromosome number" unless chromosome
-			unless(chromosome.pos_good?(data[@bpcol]))
-				print "#{filename}: line ##{lineno} pos: #{data[@bpcol]} is outside chr #{data[@chromcol]} boundaries\n";
-				next
-			end
+      raise "Problem in #{filename} with line:\n#{line}\n#{data[@chromcol]} is not a valid chromsome number" unless chromosome
+      raise "Problem in #{filename} with line:\n#{line}\nPosition outside chromosome boundaries" unless chromosome.pos_good?(data[@bpcol])
 
       group = data[@groupcol] if @groupcol
 			@phenocol ? phenotype = data[@phenocol] : phenotype = DefaultPhenotype
@@ -908,17 +1038,22 @@ class PhenoGramFileReader < FileHandler
 				notecol = data[@notecol] if @notecol
 				raise "Problem in #{filename} with line:\n#{line}\nAnnotation may be no longer than 10 characters in length" if notecol and notecol.length > 10
 			end
+#			if(!params[:zoomchr] or (chromosome.display_num == params[:zoomchr] and 
+#							(!params[:zoomstart] or (data[@bpcol].to_i >= params[:zoomstart] and endbp <= params[:zoomend]))))
 			if(!params[:zoomchr] or (included_chroms.has_key?(chromosome.display_num)  and 
 							(!params[:zoomstart] or (data[@bpcol].to_i >= params[:zoomstart] and endbp <= params[:zoomend]))))
 				pheno = phenoholder.add_phenotype(phenotype, group)
 				genome.add_snp(:name => name, :chr=>chromosome, :pos=>data[@bpcol].to_i,
 					:pheno=>pheno, :snpcolor=>snpcolor, :endpos=>endbp, :eth=>ethnicity, 
 					:note=>notecol)
+        positions_added += 1
+        raise "Input file exceeded maximum allowed data points (#{max_pos_allowed})" if positions_added > max_pos_allowed
 			end
     end  
     phenoholder.set_colors
   end 
 end
+
 
 class Plotter
   @@circle_size=0
@@ -948,7 +1083,7 @@ class Plotter
 	def self.get_drawn_size
 		return @@drawn_circle_size
 	end
-	
+  
   def self.set_maxchrom(n)
     @@maxchrom=n
   end
@@ -965,7 +1100,6 @@ class Circle
   end
 end
 
-
 class ShapeFactory
   
   def initialize
@@ -973,10 +1107,14 @@ class ShapeFactory
     @shapecounter=1
   end
   
-  def get_shape(name)    
-    unless @shapes.has_key?(name)
-      @shapes[name] = create_shape(@shapecounter)
-      @shapecounter+=1  
+  def get_shape(name, designated_shapes)
+    if designated_shapes.has_key?(name)
+        @shapes[name] = type_by_name(designated_shapes[name])
+    else 
+        unless @shapes.has_key?(name)
+          @shapes[name] = create_shape(@shapecounter)
+          @shapecounter+=1  
+        end
     end
 
     return @shapes[name]
@@ -984,6 +1122,21 @@ class ShapeFactory
   
   def get_phenotypes_shapes
     return @shapes
+  end
+  
+  
+  def type_by_name(shapename)
+    case shapename
+    when "circle"
+        return PhenoCircle.new
+    when "diamond"
+        return PhenoDiamond.new
+    when "triangle"
+        return PhenoTriangle.new
+    when "square"
+        return PhenoSquare.new
+    end
+  
   end
   
   def create_shape(shapenum)
@@ -1065,12 +1218,10 @@ end
      pts << y+offset
      
      pen.polygon(pts).styles(:fill=>color, :stroke=>circle_outline)
-   end
-  
+   end 
 end
 
-
-
+ 
 class PhenoBox < Plotter
   attr_accessor :top_y, :bottom_y, :circles, :phenocolors, :chrom_y, :height, 
     :up, :line_colors, :chrom_end_y, :endpos, :phenoshapes, :note
@@ -1105,6 +1256,7 @@ class PhenoBox < Plotter
   end
   
   def estimate_height
+#  est = (@phenocolors.length.to_f/@@circles_per_row).ceil * @@drawn_circle_size
     return (@phenocolors.length.to_f/@@circles_per_row).ceil * @@drawn_circle_size
   end
   
@@ -1198,6 +1350,7 @@ class PhenoBin
     pbox.add_phenocolor(col)
     pbox.add_shape(shape)
 		pbox.note = note if note
+#    linecolors.each {|color| pbox.add_line_color(color)}
   end
   
   def add_linecolors(pos,linecolors)
@@ -1257,7 +1410,7 @@ class PhenoBinHolder
     end   
     
   end
-  
+  # rails generate model PhenogramSize name:string description:string
   def get_box_array(y_from_top, chrom_size, total_chrom_y)
     final_phenoboxes = Array.new
     bin_y = y_from_top
@@ -1320,6 +1473,8 @@ class PhenoBinHolder
         return pb
       end
     end
+    @phenobins.last.add_phenotype_snp(position, endpos, color, shape, note)
+    return @phenobins.last3
   end
   
   def set_pheno_positions
@@ -1489,9 +1644,8 @@ class PhenoBinHolder
       pb.endy = curr_y + pb.actual_height
       curr_y = pb.endy
     end
-  end
+  end 
  
-	
   def add_chrom(chrom)
 		chrom.snpnames.each do |snpname|
 			snp = chrom.snps[snpname]
@@ -1547,8 +1701,7 @@ class ChromLineHolder
     @colors.each_key do |color|
       start_index = -1
       last_value = -1
-      currvalue =0
-			
+      currvalue = 0
       @chromlines.each_with_index do |chromline, i|
         chromline.colors.has_key?(color) ? currvalue= @opacity + ((chromline.colors[color]-1) * @opacity * 0.15): currvalue = 0
         currvalue = 1.0 if currvalue > 1 # have to consider opacity when calculating values of objects
@@ -1588,10 +1741,9 @@ class ChromLineHolder
 								:stroke_width=>1, :stroke_opacity=>last_value, :fill_opacity=>last_value, :fill=>color)
           end					
 				end
-			end
-			
+			end			
     end
-
+    
   end
   
 end
@@ -1609,7 +1761,7 @@ class ChromosomePlotter < Plotter
   def self.set_circle_outline(color)
     @@circle_outline=color
   end
-  
+	
 	def self.calc_chr_per_row(total_num_chromosomes)
 		# want fewest rows for the smallest number in a row
 		# then largest value for that number of rows
@@ -1630,7 +1782,7 @@ class ChromosomePlotter < Plotter
 			number_to_use = i if val.to_i == fewest_rows
 		end
 		return number_to_use
-	end
+	end  
 	
   def self.set_phenos_row(p, params)
     @@num_phenos_row = p
@@ -1649,13 +1801,14 @@ class ChromosomePlotter < Plotter
     binholder = PhenoBinHolder.new
     binholder.totalchromy = params[:chrom_y]
     binholder.totaly = params[:available_y]
-    binholder.totalbases = params[:chrom_size]
+    binholder.totalbases = params[:chrom].size
+		binholder.totalbases = params[:chrom_size]
 		binholder.startbases = params[:chrom_start]
     binholder.set_num_bins(5)
     binholder.set_bases
     return binholder
   end
-  
+
 	def self.set_cyto_colors
 		@@cytocolors = Hash.new
 		@@cytocolors['gneg'] = 'white'
@@ -1666,13 +1819,15 @@ class ChromosomePlotter < Plotter
 		@@cytocolors['gpos66'] = '#AFAFAF'
 		@@cytocolors['gpos75'] = '#9F9F9F'
 		@@cytocolors['gpos100'] = '#787878'
+		#blues
 		@@cytocolors['stalk'] = '#63B8FF'
 		@@cytocolors['gvar'] = '#4F94CD'
 		@@cytocolors['acen'] = '#0000A0'
 		@@cytocolors['gpos'] = '#C7C7C7'
-		
+		@@cytocolors['black'] = '#000000'
+    @@cytocolors['red'] = '#FF0000'
 	end
-	
+  
     # utilizes new algorithm to place boxes
   # maintains relative location along chromosome
   def self.position_phenoboxes(params)
@@ -1706,7 +1861,7 @@ class ChromosomePlotter < Plotter
       binholder.add_chrom(chrom)
       phenobox_offset = (totalchromy-estimated_tot.to_f)/2        
     end
-    binholder.set_pheno_positions
+    binholder.set_pheno_positions  
     # adjust size of bins
     binholder.total_bins 
     # remap the phenotypes to the bins
@@ -1799,20 +1954,20 @@ class ChromosomePlotter < Plotter
     end   
     # when no room do nothing
   end
-  
-  
-  def self.plot_chrom(params)
+ 
+	def self.plot_chrom(params)
    
-    padding = @@circle_size*2
+    padding = @@circle_size*4
     # leave some space at top and bottom
     available_y = params[:height]-padding
+    maxchromsize = params[:maxchrom] || @@maxchrom
     
     chrom = params[:chrom]
 		chrom_start = params[:zoomstart]|| 0
 		params[:zoomstart] ? chrom_size = params[:zoomend]-params[:zoomstart] : chrom_size = chrom.size.to_f
 		
     # determine location of the chromosome -- leave a circle at top and bottom
-    total_chrom_y = chrom_size/ @@maxchrom * available_y
+    total_chrom_y = chrom_size/ maxchromsize * available_y
     # create a number of bins to hold information for each possible line
     unless $color_column_included
       params[:transparent] ? opacity = 0.05 : opacity = 1.0
@@ -1842,7 +1997,7 @@ class ChromosomePlotter < Plotter
 		
 		params[:zoomstart] ? startbp = params[:zoomstart] : startbp = 0
 		params[:zoomend] ? endbp = params[:zoomend] : endbp = chrom.size
-	
+		
     draw_chr(:canvas=>canvas, :centromere_y=>centromere_y, :start_chrom_y=>start_chrom_y, 
       :end_chrom_y=>end_chrom_y, :xbase=>xbase, :ybase=>ybase, :chromnum=>chrom.display_num,
       :thickness_mult=>params[:thickness_mult], :chr_only=>params[:chr_only], 
@@ -1850,7 +2005,6 @@ class ChromosomePlotter < Plotter
       :shade=>params[:shade], :startbp=>startbp, :endbp=>endbp, 
 			:chrom_start=>chrom_start, :chrom_bp=>chrom_size, :chrom=>chrom,
 			:increase_cyto_opacity=>!params[:draw_transverse])
-		
 		
     if params[:chr_only] or !(params[:alt_spacing]==:alternative or params[:alt_spacing]==:equal)
       phenoboxes = get_pheno_boxes(total_chrom_y, chrom, chrom_size, chrom_start)
@@ -1870,7 +2024,7 @@ class ChromosomePlotter < Plotter
       phenoboxes.each do |box|
         draw_phenos(canvas, box, circle_start_x, xbase, ybase + start_chrom_y, line_container,
           :chr_only=>false, :include_notes=>params[:include_notes], 
-					:bigtext=>params[:bigtext],:draw_transverse=>params[:draw_transverse])
+					:bigtext=>params[:bigtext], :draw_transverse=>params[:draw_transverse])
       end
       line_container.draw_lines(:canvas=>canvas, :xstart=>xbase, :ystart=>ybase + start_chrom_y, 
         :chrom_width=>@@chrom_width)
@@ -1883,7 +2037,7 @@ class ChromosomePlotter < Plotter
       phenoboxes.each do |box|
         draw_phenos_equal(canvas, box, circle_start_x, xbase, ybase + padding.to_f/2, 
           :chr_only=>params[:chr_only], :include_notes=>params[:include_notes],
-					:bigtext=>params[:bigtext],:draw_transverse=>params[:draw_transverse])
+					:bigtext=>params[:bigtext], :draw_transverse=>params[:draw_transverse])
       end
       @@circle_size=orig_circle
     end
@@ -1927,7 +2081,7 @@ class ChromosomePlotter < Plotter
 			end
 		end
   end
-
+  
  
   # ybase is from start of chromosome drawing
   # need start of chromosome and start of bins
@@ -1941,7 +2095,7 @@ class ChromosomePlotter < Plotter
     else
       params[:transparent] ? opacity = 0.55 : opacity = 1.0
     end
-
+		
 		annotation_x=annotation_y=0
 		font_size = get_font_size(params) / 1.35
     phenobox.line_colors.each do |linecolor|
@@ -1958,14 +2112,15 @@ class ChromosomePlotter < Plotter
 						annotation_x = start_x-@@circle_size
 						annotation_y = phenobox.chrom_y+@@drawn_circle_size.to_f/2.25
 					end
-				else
+				else	
 					draw.line(@@chrom_width,phenobox.chrom_y.round,start_x,phenobox.top_y).styles(:stroke=>linecolor,:stroke_width=>1) unless params[:chr_only]
 				end
       end
     end
+    
     unless params[:chr_only]
 			x = start_x
-			annotation_y = y+@@drawn_circle_size.to_f/2.25 + @@drawn_circle_size * 0.59
+			annotation_y = y+@@drawn_circle_size.to_f/2.25 + @@drawn_circle_size * 0.75
       phenobox.phenocolors.each_with_index do |color, i|
         if i % @@drawn_circles_per_row == 0
           y += @@drawn_circle_size * 0.75
@@ -1978,21 +2133,23 @@ class ChromosomePlotter < Plotter
       end
 			if params[:include_notes] and phenobox.note
 				phenobox.phenocolors.length >= @@drawn_circles_per_row ? annotation_x = start_x + @@drawn_circles_per_row* @@drawn_circle_size : annotation_x = x
-			end
+			end			
     end
 		if params[:include_notes] and phenobox.note
 			canvas.g.translate(xbase, ybase).text(annotation_x,annotation_y) do |write|
-				write.tspan(phenobox.note).styles(:font_size=>font_size*2, :text_anchor=>'start')
+				write.tspan(phenobox.note).styles(:font_size=>font_size, :text_anchor=>'start')
 			end
-		end
+		end		
   end
   
+	
   # ybase is from start of chromosome drawing
   def self.draw_phenos_equal(canvas, phenobox, start_x, xbase, ybase, params)
     
     y = phenobox.top_y - @@circle_size * 0.75
     x = start_x
     
+		annotation_y = y+@@drawn_circle_size.to_f/2.25 + @@drawn_circle_size * 0.75		
     phenobox.line_colors.each do |linecolor|
       canvas.g.translate(xbase,ybase) do |draw|
         if phenobox.chrom_end_y - phenobox.chrom_y <= 1.0
@@ -2005,15 +2162,16 @@ class ChromosomePlotter < Plotter
       end
     end
     
-		annotation_y = y+@@drawn_circle_size.to_f/2.25 + @@drawn_circle_size * 0.75
     phenobox.phenocolors.each_with_index do |color, i|
       if i % @@num_phenos_row == 0
         y += @@circle_size * 0.75
         x = start_x
       end
       canvas.g.translate(xbase, ybase) do |draw|
+#        draw.circle(@@circle_size.to_f/2, x, y).styles(:fill=>color, :stroke=>'black')
         phenobox.phenoshapes[i].draw(draw,@@drawn_circle_size,x,y,color,@@circle_outline)
       end
+      
       x += @@circle_size
     end
 		if params[:include_notes] and phenobox.note
@@ -2023,6 +2181,7 @@ class ChromosomePlotter < Plotter
 				write.tspan(phenobox.note).styles(:font_size=>font_size, :text_anchor=>'start')
 			end
 		end    
+   
   end
   
   # adds phenotypes to sets matching same SNP
@@ -2095,19 +2254,19 @@ class ChromosomePlotter < Plotter
     
     return pheno_boxes
   end
-  
-  
+
 	def self.get_font_size(params)
 		 params[:bigtext] ? font_size = @@circle_size * 1.5 : font_size = @@circle_size
-	end
-	
+	end  
+
 	def self.get_stroke_width(params)
 	  line_thickness = params[:thickness_mult] || 1
     stroke_width = @@circle_size / 10 * line_thickness
     stroke_width = 1 if stroke_width < 1
 		return stroke_width
 	end
-	
+  
+ 
   def self.draw_chr(params)
     canvas = params[:canvas]
     centromere_y = params[:centromere_y]
@@ -2195,7 +2354,7 @@ class ChromosomePlotter < Plotter
 			end
 		end
 	
-    canvas.g.translate(xbase,ybase).text(chrom_width.to_f/2,end_chrom_y+2*font_size) do |write|
+                canvas.g.translate(xbase,ybase).text(chrom_width.to_f/2,end_chrom_y+1.6*font_size) do |write|
       write.tspan(number.to_s).styles(:font_size=>font_size, :text_anchor=>'middle')
     end
     
@@ -2213,7 +2372,7 @@ class Title < Plotter
   
   def self.draw_center(params)
     xtotal = params[:xtotal]
-    xcenter = params[:xpos] || xtotal.to_f/2
+		xcenter = params[:xpos] || xtotal.to_f/2
     title = params[:title]
     ypos = params[:ypos]
     canvas = params[:canvas]
@@ -2227,14 +2386,13 @@ class Title < Plotter
   
 end
 
-
 class Ethlabels < Plotter
 
   def self.draw(params)
   
     canvas=params[:canvas]
     ystart=params[:ystart]
-    xstart=params[:xstart]
+    xstart=params[:xstart]    
     xtotal=params[:xtotal]
     shapes_per_row=params[:shapes_per_row]
     eth_shapes=params[:eth_shapes]
@@ -2272,10 +2430,8 @@ class Ethlabels < Plotter
   
 end
 
-
 class PhenotypeLabels < Plotter
-  
-	def self.phenotypes_per_row(maxname_length, params)
+ 	def self.phenotypes_per_row(maxname_length, params)
 		
 		# total number of characters for each type
 		if(params[:big_font])
@@ -2290,7 +2446,7 @@ class PhenotypeLabels < Plotter
 			if params[:zoom]
 				label_size = 40
 				char_per_row = label_size * 4
-			else
+			else 
 				label_size = 38
 				char_per_row = label_size * 5
 			end
@@ -2298,13 +2454,12 @@ class PhenotypeLabels < Plotter
 		
 		label_size = maxname_length if maxname_length > label_size
 		phenos_per_row = char_per_row/label_size.to_f
-		phenos_per_row *= params[:chroms_in_row].to_f / 12	
-		return phenos_per_row.round
+		phenos_per_row *= params[:chroms_in_row].to_f / 12
+		return phenos_per_row.round	
 	end
 	
 	
   def self.draw(params)
-
     canvas=params[:canvas]
     ystart=params[:ystart]
     xstart=params[:xstart]
@@ -2318,7 +2473,7 @@ class PhenotypeLabels < Plotter
     radius = @@circle_size.to_f/2
     y = 0
     x = 0
-    
+      
     if params[:bigtext]
       font_size = 33
       vert_offset = 2
@@ -2327,37 +2482,39 @@ class PhenotypeLabels < Plotter
       font_size = 22
       vert_offset = 2
       y_offset = 2
-    end  
+    end
+    
     phenokeys = phenoholder.phenonames.keys.sort{|a,b| phenoholder.phenonames[a].sortnumber <=> phenoholder.phenonames[b].sortnumber}
+    
     phenos_per_column = phenokeys.length / phenos_per_row 
     phenos_column_rem = phenokeys.length % phenos_per_row 
     curr_pheno = 0
-
-			phenos_per_row.times do |col|
-				phenos_to_do = phenos_per_column
-				if phenos_column_rem > 0
-					phenos_to_do += 1
-					phenos_column_rem -= 1
-				end
+    
+    phenos_per_row.times do |col|
+      phenos_to_do = phenos_per_column
+      if phenos_column_rem > 0
+        phenos_to_do += 1
+        phenos_column_rem -= 1
+      end
       
-				phenos_to_do.times do |row|
-					pheno = phenoholder.phenonames[phenokeys[curr_pheno]]
-					curr_pheno += 1
-					canvas.g.translate(xstart,ystart) do |draw|
-						shape.draw(draw,@@circle_size,x,y,pheno.color,'black')
-					end
-					canvas.g.translate(xstart,ystart).text(x+@@circle_size*1.5,y+@@circle_size.to_f/vert_offset) do |text|
-						text.tspan(pheno.name).styles(:font_size=>font_size)
-					end
-					y += @@circle_size * y_offset
-				end
+      phenos_to_do.times do |row|
+        pheno = phenoholder.phenonames[phenokeys[curr_pheno]]
+        curr_pheno += 1
+        canvas.g.translate(xstart,ystart) do |draw|
+#          draw.circle(radius, x, y).styles(:fill=>pheno.color, :stroke=>'black')
+          shape.draw(draw,@@circle_size,x,y,pheno.color,'black')
+        end
+        canvas.g.translate(xstart,ystart).text(x+@@circle_size*1.5,y+@@circle_size.to_f/vert_offset) do |text|
+          text.tspan(pheno.name).styles(:font_size=>font_size)
+        end
+        y += @@circle_size * y_offset
+      end
       
-				x += pheno_space
-				y = 0
-			end
-	end # end draw
-	
-end # PhenotypeLabels
+      x += pheno_space
+      y = 0
+    end
+  end
+end
 
 
 def draw_plot(genome, phenoholder, options)
@@ -2370,6 +2527,22 @@ def draw_plot(genome, phenoholder, options)
     alternative_pheno_spacing = :alternative  
   end
   
+  # 6 phenotypes in a row (when more wrap around with some overlap to show they are
+  # linked) -- main problem will be the verical spacing of the dots
+  # will be done in matched pairs (1 & 13, 2 & 14 etc.)
+  # 
+  # 1.0 inches at top
+  # 4.5 inches for top row of chromosomes
+  # 2.5 inches for bottom row of chromosomes
+  # 0.5 inches between two rows
+  # 1.0 inches to list below
+  # 8.0 inches to display phenotypes (probably make this dynamic)
+
+  # so 19.5 inches vertical X 10 inches horizontal
+
+  # a circle will be 5Y in height
+  # max chrom size (1) will be 40 circles (or 200Y) in height
+  # chromosome will be 2 circles wide
   options.thin_lines ? circle_size = 20 : circle_size = 20
 
 	total_num_chromosomes = genome.chromosomes.length-1
@@ -2388,7 +2561,7 @@ def draw_plot(genome, phenoholder, options)
 		max_chrom_size = genome.max_chrom_size
 		chrom_width = circle_size * 1.5
 	end
-
+	
 	Plotter.set_circle(circle_size, :size=>options.circle_size)
 	Plotter.set_maxchrom(max_chrom_size)
   chrom_circles_width = circle_size * num_circles_in_row
@@ -2421,6 +2594,7 @@ def draw_plot(genome, phenoholder, options)
 		end
 	end
 
+	
 	phenotypes_per_row = PhenotypeLabels.phenotypes_per_row(phenoholder.maxname,
 		:big_font=>options.big_font, :zoom=>options.zoomchr, :chroms_in_row=>chroms_in_row)
 	
@@ -2429,7 +2603,7 @@ def draw_plot(genome, phenoholder, options)
   phenotype_rows = phenoholder.phenonames.length/phenotypes_per_row
   phenotype_rows += 1 unless phenoholder.phenonames.length % phenotypes_per_row == 0
 
-  total_y = row_starts.last + last_max_chrom_box 
+  total_y = row_starts.last + last_max_chrom_box
 	total_y += last_max_chrom_box / 10 if options.chr_only
 	single_chrom_total_y = total_y - row_starts[0]
   # add row showing shapes/ethnicities when needed
@@ -2472,7 +2646,19 @@ def draw_plot(genome, phenoholder, options)
 
 	# first chromosomes start at standard left position
 	x_chr_start = Array.new(chroms_in_row+1){ |i| 0 }
+    maxsize_chr_row = Array.new(num_chr_rows){|i| 0}
+  for i in 0..num_chr_rows-1
+    for j in 1..chroms_in_row
+      chrIdx = j + chroms_in_row * i
+      next if genome.chromosomes[chrIdx].nil?
+      if genome.chromosomes[chrIdx].size > maxsize_chr_row[i]
+        maxsize_chr_row[i]=genome.chromosomes[chrIdx].size
+      end
+    end
+  end
+  
 	additional_notation_x=0
+#	for i in 2..13
 	for i in 2..chroms_in_row+1
 		if options.include_notes
 			# adjust for maxphenos of previous chromosome
@@ -2531,6 +2717,7 @@ def draw_plot(genome, phenoholder, options)
 		title_x = total_x/2 - x_per_chrom/4 if options.zoomchr
     Title.draw_center(:canvas=>canvas, :title=>options.title, :ypos=>title_margin-circle_size*3,
       :xtotal=>xmax, :xpos=>title_x)
+  
 		unless(options.zoomchr)
 			
 			# draw each row of chroms
@@ -2544,7 +2731,8 @@ def draw_plot(genome, phenoholder, options)
 						:alt_spacing=>alternative_pheno_spacing, :chr_only=>options.chr_only,
 						:transparent=>options.transparent_lines, :thickness_mult=>options.thickness_mult,
 						:bigtext=>options.big_font, :shade=>options.shade_inaccessible,
-						:include_notes=>options.include_notes, :draw_transverse=>options.transverse_lines)					
+						:include_notes=>options.include_notes, :draw_transverse=>options.transverse_lines,
+          :maxchrom => maxsize_chr_row[i])		
 				end
 			end
 		else
@@ -2575,33 +2763,48 @@ def draw_plot(genome, phenoholder, options)
 
   # produce output file
   outfile = options.out_name + '.' + options.imageformat
-  print "\n\tDrawing #{outfile}..."
+
   STDOUT.flush
 	begin
 		img = rvg.draw
 		img.write(outfile)
+		print "Created file #{outfile}\n"
 	rescue => e
-    puts "ERROR: #{e.to_s}"
+    STDERR.puts "Error: #{e.to_s}"
 		exit!
 	end
 
-  print " Created #{outfile}\n\n" 
+	
 end
+
 
 options = Arg.parse(ARGV)
 
-options.highres ? RVG::dpi=1200 : RVG::dpi=300
+options.highres ? RVG::dpi=600 : RVG::dpi=300
 srand(options.rand_seed)
 
 genome = Genome.new
 chrom_reader = ChromosomeFileReader.new
 options.genome_file ? genome.set_chroms(chrom_reader.parse_file(options.genome_file)) : genome.set_chroms(Chromosome.create_human_chroms)
-phenoholder = PhenotypeHolder.new(:color=>options.color)
+# read in group and color specification files if they exist and add maps to genome
+if options.group_file
+    group_reader = GroupSpecFileReader.new
+    genome.designated_shapes=group_reader.parse_file(options.group_file)
+end
+
+
+phenoholder = PhenotypeHolder.new(:color=>options.color, :color_file=>options.color_file, :spec_color_file=>options.spec_color_file)
+if options.spec_color_file
+    color_reader = ColorSpecReader.new
+    phenoholder.spec_colors = color_reader.parse_file(options.spec_color_file)
+end
+
 filereader = PhenoGramFileReader.new
 
-#begin
+begin
   filereader.parse_file(options.input, genome, phenoholder, :chr_only=>options.chr_only,
-		:zoomchr=>options.zoomchr, :zoomstart=>options.zoomstart, :zoomend=>options.zoomend)
+		:zoomchr=>options.zoomchr, :zoomstart=>options.zoomstart, :zoomend=>options.zoomend,
+    :max_pos_allowed=>30320000)
 	if options.shade_inaccessible and File.exists?(options.cytobandfile)
 		cytoreader = CytoBandFileReader.new
 		cytoreader.parse_file(options.cytobandfile, genome)
@@ -2615,11 +2818,10 @@ filereader = PhenoGramFileReader.new
 			options.zoomchr = options.zoomchr[0]
 		end
 	end
-#rescue => e
-#  puts "ERROR:"
-#  puts e.message
-#  exit(1)
-#end
+rescue => e
+  puts "ERROR:"
+  puts e.message
+  exit(1)
+end
 
 draw_plot(genome, phenoholder, options)
-
