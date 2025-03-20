@@ -485,7 +485,7 @@ $.widget('csg.iphenogram',{
 				.size(function(d){return elementsize;})
 				.type(function(d){return widget.groupMap[d.group];}))
 			.style("fill", function(d){
-				return widget.fillMap[d.shading][widget.cssEscape(d.pheno)];})
+				return widget.fillMap[d.shading][d.pheno];})
 			.style("stroke",  function(d){return widget.phenoColors(d.pheno);})
 			.attr("visibility", circleVis)
 			.on("click", function(event,d){
@@ -895,7 +895,7 @@ $.widget('csg.iphenogram',{
 				.duration(250)
 				.style("fill", function(d){
 					if(widget.doefunc(d.doe) && (widget.highlightedShapes[d.group] || widget.highlightedFills[d.shading] || widget.allPhenoHighlight)){
-						return widget.fillMap[d.shading][widget.cssEscape(d.pheno)];
+						return widget.fillMap[d.shading][d.pheno];
 					}
 					else{
 						return widget.fillMap[d.shading]['greyfill'];
@@ -933,7 +933,7 @@ $.widget('csg.iphenogram',{
 				})
 				.style("fill", function(d){
 					if(widget.doefunc(d.doe) && phenopos[d.pheno] && ( widget.allPhenoHighlight || ((widget.allShapes || (d.group in widget.highlightedShapes) ) && (widget.allFills || (d.shading in widget.highlightedFills)) ))){
-						return widget.fillMap[d.shading][widget.cssEscape(d.pheno)];
+						return widget.fillMap[d.shading][d.pheno];
 					}
 					else{
 						return widget.fillMap[d.shading]['greyfill'];
@@ -1005,7 +1005,7 @@ $.widget('csg.iphenogram',{
 				})
 				.style("fill", function(d){
 					if(widget.doefunc(d.doe) && groupsSelected[d.group] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allFills || widget.highlightedFills[d.shading]) ) )){
-						return widget.fillMap[d.shading][widget.cssEscape(d.pheno)];
+						return widget.fillMap[d.shading][d.pheno];
 					}
 					else{
 						return widget.fillMap[d.shading]['greyfill'];
@@ -1077,7 +1077,7 @@ $.widget('csg.iphenogram',{
 				})
 				.style("fill", function(d){
 					if(widget.doefunc(d.doe) && fillsSelected[d.shading] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allShapes || widget.highlightedShapes[d.group]) ) )){
-						return widget.fillMap[d.shading][widget.cssEscape(d.pheno)];
+						return widget.fillMap[d.shading][d.pheno];
 					}
 					else{
 						return widget.fillMap[d.shading]['greyfill'];
@@ -1409,7 +1409,7 @@ $.widget('csg.iphenogram',{
 		// first pattern -- simple fill		
 		for(var j=0; j<phenoNames.length; j++){
 			// escape any problematic characters for css
-			phenoNames[j] = this.cssEscape(phenoNames[j])
+			// phenoNames[j] = this.cssEscape(phenoNames[j])
 			this.fillMap[fillNames[0]][phenoNames[j]] = this.phenoColors(phenoNames[j]);
 		}
 		this.fillMap[fillNames[0]]['greyfill'] = "#f1f1f1";
@@ -1419,7 +1419,7 @@ $.widget('csg.iphenogram',{
 		// added
 		if(fillNames.length > 1){
 			for(var j=0; j<phenoNames.length; j++){ 				
-				var patternName = fillNames[1] + "_" + phenoNames[j];
+				var patternName = fillNames[1] + "_" + this.cssEscape(phenoNames[j])
 				defs.append("pattern")
 					.attr("id", patternName)
 					.attr("width", "10") 
@@ -1470,7 +1470,7 @@ $.widget('csg.iphenogram',{
 		// added
 		if(fillNames.length > 2){
 			for(var j=0; j<phenoNames.length; j++){ 				
-				var patternName = fillNames[2] + "_" + phenoNames[j];
+				var patternName = fillNames[2] + "_" + this.cssEscape(phenoNames[j]);
 				
 
 				defs.append("pattern")
