@@ -179,7 +179,7 @@ $.widget('csg.iphenogram',{
 
     var w = this;
     
-    w.zoom = d3.zoom().scaleExtent([1, 10]).on("zoom", function(){w._zoom(w)});
+    w.zoom = d3.zoom().scaleExtent([1, 10]).on("zoom", function(event){w._zoom(w, event)});
     if(this.options.zoom_enabled){
 // 			w.zm = d3.zoom().scaleExtent([1, 10]).on("zoom", function(){w._zoom(w)});
 // 			this.canvas.call(w.zm);
@@ -407,34 +407,7 @@ $.widget('csg.iphenogram',{
 				nodes.push(widget.options.chroms[i].positions[j]);
 				links.push({source: nodes[nodes.length-2], target: nodes[nodes.length-1]});
 			}
-		}
-// 			widget.options.chroms[i].layout = d3.forceSimulation(nodes)
-// 											.gravity(0.01)
-// 											.friction(0.7)
-// 											.linkDistance(widget.options.linelength)
-// 											.linkStrength(1.0)
-// 											.size([widget.options.linelength, widget.options.chromheight])
-// 											.charge(-85)
-// // 											.nodes(nodes)
-// 											.links(links)
-// 											.on("tick", function(){
-// 												for(var ni=0; ni<nodes.length; ni++){
-// 													if(nodes[ni].x != widget.chromWidth){
-// 														nodes[ni].x = widget.chromWidth+widget.options.linelength;
-// 													}
-// 													if(nodes[ni].y < widget.options.circleradius/2){
-// 														nodes[ni].y = widget.options.circleradius/2;
-// 													}
-// 													else if(nodes[ni].y > widget.options.chromheight){
-// 														nodes[ni].y = widget.options.chromheight - widget.options.circleradius/2;
-// 													}
-// 												}
-// 												}
-// 											)
-// 											.start();
-// 			for(var k=0; k<14; k++) widget.options.chroms[i].layout.tick();
-// 			widget.options.chroms[i].layout.stop();
-			
+		}			
 			
 		
 		widget.options.chroms[i].layout = d3.forceSimulation()
@@ -511,24 +484,22 @@ $.widget('csg.iphenogram',{
 			.attr("d", d3.symbol()
 				.size(function(d){return elementsize;})
 				.type(function(d){return widget.groupMap[d.group];}))
-// 			.style("fill", function(d){return widget.phenoColors(d.pheno);})
-			.style("fill", function(d){return widget.fillMap[d.shading][d.pheno];})
+			.style("fill", function(d){
+				return widget.fillMap[d.shading][widget.cssEscape(d.pheno)];})
 			.style("stroke",  function(d){return widget.phenoColors(d.pheno);})
 			.attr("visibility", circleVis)
-			.on("click", function(d){
+			.on("click", function(event,d){
 				var ph={};
 				ph[d.pheno]=1;
 				widget.highlightPhenos(ph, false);
 				widget._triggerPhenoSelection(d.pheno);
 			});				
 			
-// 		var regex = /^[a-z0-9]+$/i;
 		var regex = /[a-z0-9]/i;
 		if(widget.options.tip_enabled){
-			circles.on("mouseover", function(d){
+			circles.on("mouseover", function(event,d){
 				var message = "<ul class='no-bullet'><li>" + d.pheno + "</li>";
 				if(regex.test(d.group))
-// 					message = "<ul class='no-bullet'><li>" + d.pheno + "</li><li>" + d.group + "</li></ul>"
 					message += "<li>" + d.group + "</li>";
 				if(d.pvalue > 0.0)
 					message += "<li>pval: " + d.pvalue.toString() + "</li>";
@@ -536,8 +507,8 @@ $.widget('csg.iphenogram',{
 					message += "<li>doe: " + d.doe.toString() + "</li>";
 				message += "</ul>";
 				widget.tooltip.html(message)
-					.style("left", (d3.event.pageX) + "px")
-					.style("top", (d3.event.pageY + Math.round(widget.options.circlesize/widget.options.pixelscale)) + "px");
+					.style("left", (event.pageX) + "px")
+					.style("top", (event.pageY + Math.round(widget.options.circlesize/widget.options.pixelscale)) + "px");
 				widget.tooltip.transition()
 					.duration(200)
 					.style("opacity", 0.9);
@@ -546,7 +517,6 @@ $.widget('csg.iphenogram',{
 				widget.tooltip.transition()
 					.duration(750)
 					.style("opacity", 0.0);
-// 					.style({"opacity": 0, 'pointer-events': 'none' });
 			});
 			}
 
@@ -622,42 +592,36 @@ $.widget('csg.iphenogram',{
 					d.posColor != undefined ? strokecolor=d.posColor: strokecolor='gray';
 				}
 				return strokecolor;})
-// 				return d.endPos != undefined ? "none":"gray";})
 			.attr("stroke-width", 4)
 			.attr("fill", function(d){return d.posColor != undefined? d.posColor:"red";})
 			.attr("opacity", widget.options.lineOpacity);
 
 		if(this.options.tip_enabled){
 			if(!this.options.chromsOnly){
-				linkLines.on("mouseover", function(d){
+				linkLines.on("mouseover", function(event, d){
 					widget.tooltip.html("<ul class='no-bullet' style='text-align:left;'><li><span id='positionSpan' style='color:red;'>ID: " +
 						d.id + "</span></li><li>pos: " + d.pos + "</li></ul>")
-						.style("left", (d3.event.pageX) + "px")
-						.style("top", (d3.event.pageY + Math.round(widget.options.circlesize/widget.options.pixelscale)) + "px")
+						.style("left", (event.pageX) + "px")
+						.style("top", (event.pageY + Math.round(widget.options.circlesize/widget.options.pixelscale)) + "px")
 						.style('opacity',0.8)
 						.style('pointer-events','none');
-// 						.style({'opacity': 0.8, 'pointer-events': 'all'})
-// 					d3.select("#positionSpan").on('click', function(e){widget._triggerPosition(d, 'posID');});
 				})
-				.on("mouseout", function(d){
+				.on("mouseout", function(event, d){
 					widget.tooltip.transition()
 						.duration(250)
 						.delay(3000)
 						.style("opacity", 0.0)
 						.style("pointer-events", "none");
-// 						.style({opacity: 0, 'pointer-events': 'none' });
 				});
 			}
 
-			transverseLines.on("mouseover", function(d){
+			transverseLines.on("mouseover", function(event,d){
 					widget.tooltip.html("<ul class='no-bullet' style='text-align:left;'><li><span id='positionSpan' style='color:red;'>ID: " +
 						d.id + "</span></li><li>pos: " + d.pos + "</li></ul>")
-					.style("left", (d3.event.pageX) + "px")
-					.style("top", (d3.event.pageY + Math.round(widget.options.circlesize/widget.options.pixelscale)) + "px")
+					.style("left", (event.pageX) + "px")
+					.style("top", (event.pageY + Math.round(widget.options.circlesize/widget.options.pixelscale)) + "px")
 					.style("opacity", 0.8)
 					.style("pointer-events", "none");
-// 					.style({'opacity': 0.8, 'pointer-events': 'none'});
-// 				d3.select("#positionSpan").on('click', function(e){widget._triggerPosition(d, 'posID');});
 			})
 			.on("mouseout", function(d){
 				widget.tooltip.transition()
@@ -665,7 +629,6 @@ $.widget('csg.iphenogram',{
 					.delay(3000)
 					.style("opacity", 0.0)
 					.style("pointer-events", "none");
-// 					.style({opacity: 0, 'pointer-events': 'none' });
 			});
 
 		}
@@ -882,28 +845,18 @@ $.widget('csg.iphenogram',{
 	_getPhenoColors:function(){
 		var phenoNames = Object.keys(this.phenoMap);
 		if(phenoNames.length <= 10){
-// 			return d3.scale.category10().domain(phenoNames);
 			return d3.scaleOrdinal(d3.schemeCategory10).domain(phenoNames);
 		}
 		else if(phenoNames.length <= 20){
-// 			return d3.scale.category20().domain(phenoNames);
-// 			return d3.scaleOrdinal(d3.schemeCategory20).domain(phenoNames);
 			// generated the following colors from https://medialab.github.io/iwanthue/
 			// using default color setting at site
 			return d3.scaleOrdinal(["#d64054","#59b94c","#ad56c1","#aab647","#6c68d2","#d9a235","#697ec3","#d7602d","#45aecf","#d34595","#60c395","#9f496b","#5b8436","#ca88ca","#36835e","#e3808a","#837838","#a85036","#db9d68","#9f6f25"])
 				.domain(phenoNames);
-			// using all colors setting at site
-// 			return.d3.scaleOrdinal(["#31000e","#ddff97","#c566ff","#006f03","#f10097","#93ffd5","#3c005f","#c27e00","#3681ff","#ff7a58","#003290","#ffd795","#0067a1","#ffe9d2","#760028","#02b7c0","#443600","#ebb1ff","#004042","#76d4ff"])
-// 				.domain(phenoNames);
 		}
 		else{
 			// using default color setting at site
 			return d3.scaleOrdinal(["#dd572e","#4c6be0","#59bf50","#a83ba8","#7ea736","#7a53bf","#bdb834","#b775e7","#459652","#e46fce","#65c793","#c84491","#4d732d","#d94476","#42bfcf","#cd3647","#328d73","#a84c24","#5572c0","#d89333","#679dd6","#97662f","#c393d9","#79702a","#8a5b9e","#b0ac60","#9a4662","#de9b6d","#dd83a1","#d36d60"])
 				.domain(phenoNames)
-			// using all colors setting at site
-// 			return d3.scaleOrdinal(["#ffb96f","#7a00b4","#bcf800","#9961ff","#7fff5f","#d55bff","#5d8d00","#0159dc","#d8b800","#017bef","#ec0800","#01c173","#ff50a3","#536300","#fe9cff","#fdffa9","#210031","#ff8c39","#019ceb","#c02900","#003277","#ff5951","#007e81","#800011","#bce7ff","#400010","#ffe3dc","#940068","#362700","#ff9074"])				
-// 				.domain(phenoNames)
-				
 		}
 	},
 
@@ -942,7 +895,7 @@ $.widget('csg.iphenogram',{
 				.duration(250)
 				.style("fill", function(d){
 					if(widget.doefunc(d.doe) && (widget.highlightedShapes[d.group] || widget.highlightedFills[d.shading] || widget.allPhenoHighlight)){
-						return widget.fillMap[d.shading][d.pheno];
+						return widget.fillMap[d.shading][widget.cssEscape(d.pheno)];
 					}
 					else{
 						return widget.fillMap[d.shading]['greyfill'];
@@ -980,7 +933,7 @@ $.widget('csg.iphenogram',{
 				})
 				.style("fill", function(d){
 					if(widget.doefunc(d.doe) && phenopos[d.pheno] && ( widget.allPhenoHighlight || ((widget.allShapes || (d.group in widget.highlightedShapes) ) && (widget.allFills || (d.shading in widget.highlightedFills)) ))){
-						return widget.fillMap[d.shading][d.pheno];
+						return widget.fillMap[d.shading][widget.cssEscape(d.pheno)];
 					}
 					else{
 						return widget.fillMap[d.shading]['greyfill'];
@@ -1052,7 +1005,7 @@ $.widget('csg.iphenogram',{
 				})
 				.style("fill", function(d){
 					if(widget.doefunc(d.doe) && groupsSelected[d.group] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allFills || widget.highlightedFills[d.shading]) ) )){
-						return widget.fillMap[d.shading][d.pheno];
+						return widget.fillMap[d.shading][widget.cssEscape(d.pheno)];
 					}
 					else{
 						return widget.fillMap[d.shading]['greyfill'];
@@ -1124,7 +1077,7 @@ $.widget('csg.iphenogram',{
 				})
 				.style("fill", function(d){
 					if(widget.doefunc(d.doe) && fillsSelected[d.shading] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allShapes || widget.highlightedShapes[d.group]) ) )){
-						return widget.fillMap[d.shading][d.pheno];
+						return widget.fillMap[d.shading][widget.cssEscape(d.pheno)];
 					}
 					else{
 						return widget.fillMap[d.shading]['greyfill'];
@@ -1157,14 +1110,14 @@ $.widget('csg.iphenogram',{
     	* Zoom handler
 	    * @private
     	* @param {object} w csg.iphenogram widget
+		* @param {object} event 
   */
-		_zoom: function(w){
+		_zoom: function(w, event){
 			
-			var zoom_event = d3.event.transform;
-			var scale = 1/zoom_event.k
+			var zoom_event = event.transform;
+			var scale = 1/zoom_event.k;
 			
-//			console.log(zoom_event);
-			w.canvas.attr("transform", d3.event.transform)
+			w.canvas.attr("transform", zoom_event);
 // 
 // 			w.canvas.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
 			if(w.options.zoom_map){
@@ -1427,6 +1380,15 @@ $.widget('csg.iphenogram',{
 		return phenoReturn;
 	},
 	
+	/**
+	 * 
+	 * @returns string with indeligble CSS characters replaced
+	 */
+	cssEscape: function(text){
+		const regex = /\'/;
+		return text.replace(regex, '_');
+	},
+
 	
 	/**
 	* Set up fill map based on phenotypes
@@ -1443,9 +1405,11 @@ $.widget('csg.iphenogram',{
 // 		var defs = svg.append("defs");
 		var defs = this.canvas.append("defs");
 		var phenoNames = Object.keys(this.phenoMap);
-		
+
 		// first pattern -- simple fill		
 		for(var j=0; j<phenoNames.length; j++){
+			// escape any problematic characters for css
+			phenoNames[j] = this.cssEscape(phenoNames[j])
 			this.fillMap[fillNames[0]][phenoNames[j]] = this.phenoColors(phenoNames[j]);
 		}
 		this.fillMap[fillNames[0]]['greyfill'] = "#f1f1f1";
@@ -1456,7 +1420,6 @@ $.widget('csg.iphenogram',{
 		if(fillNames.length > 1){
 			for(var j=0; j<phenoNames.length; j++){ 				
 				var patternName = fillNames[1] + "_" + phenoNames[j];
-
 				defs.append("pattern")
 					.attr("id", patternName)
 					.attr("width", "10") 
@@ -1685,7 +1648,6 @@ $.widget('csg.iphenogram',{
 		var phenos = Object.keys(this.phenoMap);
 		var groups = Object.keys(this.groupMap);
 		var fills = Object.keys(this.fillMap);
-console.log(fills);
 		var adjustment = 1.0;
 		if(phenos.length > 0){
 			// place block around area to "white" out the non-visible portion and
@@ -1706,7 +1668,6 @@ console.log(fills);
 			else{
 				fillRowInfo = {'fillRows':0, 'fillsPerRow':0};
 			}
-console.log(fillRowInfo);
 			adjustment = 1.0 + ((phRowInfo.phenoRows + grRowInfo.groupRows + fillRowInfo.fillRows) * this.options.ymax / 40) / this.options.ymax;
 			
 // 			if(groups.length > 1){
@@ -1728,8 +1689,6 @@ console.log(fillRowInfo);
 		
 		var zoom_info = d3.zoomTransform(this.canvas.node());
 		// Hb {k: 8.316220983749089, x: -13369.738100584753, y: -7413.345818957543}
-// 		console.log(zoom_info);
-// 		console.log(zoom_info.x);
 		
 // 		var yPos = (this.options.ymax - this.zm.translate()[1])/this.zm.scale();
 		var yPos = (this.options.ymax - zoom_info.y/zoom_info.k);
@@ -1752,7 +1711,6 @@ console.log(fillRowInfo);
 				.attr("height", origHeight)
 				.attr("viewBox", "0 0 " + this.options.xmax + " " + this.options.ymax);
 		d3.selectAll(".phenoKeyInfo").remove();
-// console.log(html);
 		return html;
 	},
 

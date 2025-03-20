@@ -94,7 +94,7 @@ $.widget('csg.colorkey',{
 			.attr("width", this.options.width)
 			.attr("height", barHeight)
 			.style("fill", "rgb(255, 255, 255)")
-			.on("click", function(d){
+			.on("click", function(event, d){
 				var thisBar = d3.select(this);
 				var fillColor = thisBar.style("fill");
 				if(!self.selectedKeys[d.name]){

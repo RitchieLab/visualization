@@ -72,11 +72,11 @@
 
 <script type="text/javascript" src="scripts/jquery-1.11.2.min.js"></script>
 <script type="text/javascript" src="scripts/jquery-ui.min.js"></script>
-<script type="text/javascript" src="scripts/d3.v5.min.js"></script>
-<script type="text/javascript" src="scripts/csg.iphenogram.js"></script>
-<script type="text/javascript" src="scripts/csg.colorkey.js"></script>
-<script type="text/javascript" src="scripts/csg.shapekey.js"></script>
-<script type="text/javascript" src="scripts/csg.fillkey.js"></script>
+<script type="text/javascript" src="scripts/d3.v7.min.js"></script>
+<script type="text/javascript" src="scripts/csg.iphenogram.d3v7.js"></script>
+<script type="text/javascript" src="scripts/csg.colorkey.d3v7.js"></script>
+<script type="text/javascript" src="scripts/csg.shapekey.d3v7.js"></script>
+<script type="text/javascript" src="scripts/csg.fillkey.d3v7.js"></script>
  
 <script type="text/javascript" src="scripts/default-data.js"></script>
 
@@ -130,12 +130,6 @@ $(document).ready(function() {
 
 	addChromsToList($("#chrommap").iphenogram('getChromNames'), $("#chrommap").iphenogram('option', 'includedChroms'));
 
-// 	$("#drawing").on("iphenogramposselected", function(event, data){
-// 			var searchStr = "https://www.ncbi.nlm.nih.gov/SNP/snp_ref.cgi?searchType=adhoc_search&type=rs&rs="
-// 				+ data.posInfo.id;
-// 			$("#displayFrame").attr('src', searchStr);
-// 	});
-
 	$("#drawing").on("iphenogramselectpheno", function(event, data){
   	var keysSet = {};
   	keysSet[data.phenoName]=1;
@@ -165,7 +159,6 @@ $(document).ready(function() {
   		var n = document.getElementById('iPhenogramFiles').files[0].name;
   		alert("Error in file " + n + ' -> ' + err);
   	}
-//   	$("#chrommap").iphenogram('readPhenoInputString', inputInfo['iPhenogramFiles']);
 	try{
 		$("#drawing").iphenogram('readGenomeString', inputInfo['genomeFile']);
   	}catch(err){
@@ -324,7 +317,6 @@ $(document).ready(function() {
 			ctx.drawImage(img, 0, 0);
 		    png = canvas.toDataURL("image/png");
     		document.querySelector('#pngdataurl').innerHTML = '<img src="'+png+'"/>';
-// 	    DOMURL.revokeObjectURL(png);
 	    
 	    	var a = document.createElement("a");
 		    a.download = "sample.png";
