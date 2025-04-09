@@ -1320,6 +1320,9 @@ $.widget('csg.iphenogram',{
 		}
 		self._drawPhenos();
 		self._drawChroms();
+		if(this.zoomMain){
+			this.zoomMain.call(this.zoom.transform, d3.zoomIdentity);
+		}
 	},
 
 	/**
@@ -1952,36 +1955,44 @@ $.widget('csg.iphenogram',{
     * Provides current zoom and all other options for widget.
     * @return {object}  Zoom and all options.
   */
-	getOptions:function(){
-		if(this.zm)
-		 return {scale: this.zm.scale(), translate: this.zm.translate(), options: this.options};
-		else
-			return  {scale: 1.0, translate: [0,0], options: this.options};
+	getOptions: function () {
+		const zoomTransform = d3.zoomTransform(this.canvas.node());
+		return {zoomState: {
+			k: zoomTransform.k,
+			x: zoomTransform.x,
+			y: zoomTransform.y},
+			options: this.options};
 	},
 
 	/**
     * Loads in options and zoom to draw plot.
     * @param {object} oldOptions Contains zoom and options as provided by getoptions method.
   */
-	resetOptions:function(oldOptions){
-		// set options
-		this.options = oldOptions.options;
+	resetOptions: function (savedOptions) {
+		// Set widget options (excluding _zoomState)
+		// const { _zoomState, ...cleanOptions } = savedOptions;
+		// this._setOptions(savedOptions);
+		this.options = savedOptions.options;
 		this.drawPlot();
-
-		if(this.zm){
-			var transformStr = "translate("+ oldOptions.translate[0] + "," + oldOptions.translate[1]+ ")scale(" + oldOptions.scale + ")";
-			this.canvas.attr("transform", transformStr);
-			this.zm.scale(oldOptions.scale);
-			this.zm.translate(oldOptions.translate);
-			if(this.options.zoom_map){
-				var coords = [];
-				var scale = 1/oldOptions.scale;
-				coords[0] = oldOptions.translate[0] * -scale;
-				coords[1] = oldOptions.translate[1] * -scale;
-				this.zoomrect.attr("transform", "translate(" + coords[0] + "," + coords[1]+ ")scale(" + scale + ")");
-			}
+		_zoomState = savedOptions.zoomState;
+	
+		// Restore zoom if zoom is enabled and we have saved zoom info
+		if (_zoomState && this.options.zoom_enabled) {
+		  const t = d3.zoomIdentity
+			.translate(_zoomState.x, _zoomState.y)
+			.scale(_zoomState.k);
+	
+		  this.zoomMain.call(this.zoom.transform, t);
+	
+		  if (this.options.zoom_map && this.zoomrect) {
+			const scale = 1 / _zoomState.k;
+			const x = _zoomState.x * -scale;
+			const y = _zoomState.y * -scale;
+			this.zoomrect.attr("transform", `translate(${x},${y})scale(${scale})`);
+		  }
 		}
-	}
+	  }
+
 
 });
 
