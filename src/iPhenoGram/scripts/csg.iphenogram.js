@@ -1212,10 +1212,15 @@ $.widget('csg.iphenogram',{
   */
 	readCytoBandString: function(inputStr){
 		if(inputStr){
-			inputStr=this._checkHeaders(inputStr,['chrom','type','startband','finishband'],{});
+			var colHeaderMap={};
+			colHeaderMap['giestain']='type';
+			colHeaderMap['chromstart'] = 'startband';
+			colHeaderMap['chromend'] = 'finishband';
+			colHeaderMap['#chrom'] = 'chrom';
+			inputStr=this._checkHeaders(inputStr,['chrom','type','startband','finishband'],colHeaderMap);
 			var inputData=d3.tsvParse(inputStr, function(d){
 				return {
-					chrom: d.chrom.toString(),
+					chrom: d.chrom.toString().replace('chr',''),
 					type: d.type.toString(),
 					startBand: +d.startband,
 					finishBand: +d.finishband
@@ -1230,7 +1235,9 @@ $.widget('csg.iphenogram',{
   */
 	readGenomeString: function(inputStr){
 		if(inputStr){
-			inputStr=this._checkHeaders(inputStr,['name','size','centromerestart','centromereend']),{};
+			var colHeaderMap={};
+			colHeaderMap['id']='name';
+			inputStr=this._checkHeaders(inputStr,['name','size','centromerestart','centromereend'], colHeaderMap);
 			var inputData=d3.tsvParse(inputStr, function(d){
 				return {
 					name: d.name.toString(),
@@ -1259,7 +1266,6 @@ $.widget('csg.iphenogram',{
 		var errorString="";
 		if(nline > -1){
 			var headers=inputStr.substr(0,nline).split("\t");
-// 			headers.forEach(function(d){
 			for(var i=0; i<headers.length; i++){
 				headers[i]=headers[i].toLocaleLowerCase();
 				if(colHeaderMap[headers[i]]){
