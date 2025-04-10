@@ -504,7 +504,7 @@ $.widget('csg.iphenogram',{
 				if(d.pvalue > 0.0)
 					message += "<li>pval: " + d.pvalue.toString() + "</li>";
 				if(d.doe)
-					message += "<li>doe: " + d.doe.toString() + "</li>";
+					message += "<li>beta: " + d.doe.toString() + "</li>";
 				message += "</ul>";
 				widget.tooltip.html(message)
 					.style("left", (event.pageX) + "px")
