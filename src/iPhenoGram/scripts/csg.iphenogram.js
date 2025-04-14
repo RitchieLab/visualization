@@ -1698,17 +1698,26 @@ $.widget('csg.iphenogram',{
 		
 		var zoom_info = d3.zoomTransform(this.canvas.node());
 		// Hb {k: 8.316220983749089, x: -13369.738100584753, y: -7413.345818957543}
-		
-// 		var yPos = (this.options.ymax - this.zm.translate()[1])/this.zm.scale();
-		var yPos = (this.options.ymax - zoom_info.y/zoom_info.k);
-		// need to cut it at ymax (taking into account scale effect)
-		this.canvas.append("rect")
+
+		// let xStart = (0-zoom_info.x);
+		let xStart = 0;
+		let yStart = (this.options.ymax - zoom_info.y)/zoom_info.k;
+		let scale = 1/zoom_info.k;
+
+		var boxG = this.canvas.append("g")
+			.attr("class", "phenoKeyInfo")
+			.attr("transform", "translate(" + xStart + "," + yStart + ")scale(1.0)");
+			// .attr("transform", "translate(" + xStart + "," + yStart + ")scale(" + 1/zoom_info.k + ")");
+
+		boxG.append("rect")
 			.attr("class", "phenoKeyInfo")
 			.attr("x",0)
-			.attr("y",yPos)
+			.attr("y",0)
 			.attr("width", this.options.xmax)
 			.attr("height", this.options.ymax*adjustment - this.options.ymax)
 			.attr("fill",this.options.backgroundColor);
+
+
 		if(phenos.length > 0){
 			this._addPhenoKey(zoom_info.x,zoom_info.y,
 				zoom_info.k,phRowInfo,grRowInfo,fillRowInfo);
@@ -1720,6 +1729,8 @@ $.widget('csg.iphenogram',{
 				.attr("height", origHeight)
 				.attr("viewBox", "0 0 " + this.options.xmax + " " + this.options.ymax);
 		d3.selectAll(".phenoKeyInfo").remove();
+
+		// console.log(html);
 		return html;
 	},
 
