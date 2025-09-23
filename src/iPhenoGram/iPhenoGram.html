@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>d3 iPhenoGram widget test</title>
-<link rel="stylesheet" type="text/css" href="styles/iPhenoGramLayout.new.css">
+<link rel="stylesheet" type="text/css" href="styles/iPhenoGramLayout.css">
 <link rel="stylesheet" type="text/css" href="styles/jquery-ui.css">
 <style>
 .inlined{
@@ -59,7 +59,7 @@
     position: absolute;
 
     /* Position the tooltip 50% down the parent container */
-    top: 50%;
+    top: -5%;
 
     /* Position the tooltip 100% to the right of the left edge of the parent container */
     left: -30%;
@@ -134,7 +134,7 @@
 		</ul>
 		<div class="sliders-container">
 		<div class="slider-group">
-			<label for="magnitude-control" class="smallfont">Magnitude</label>
+			<label for="magnitude-control" class="smallfont">DOE</label>
 			<input type="range" class="vertical-slider reversed-slider" id="magnitude-control" min="0" max="15" value="0">
 			<span class="slider-tooltip">Direction of effect threshold for display </span>
 			<p class="smallfont"><span id="magnitude-value">0.0</span></p>
@@ -175,7 +175,7 @@
 <script type="text/javascript" src="scripts/jquery-3.7.1.min.js"></script>
 <script type="text/javascript" src="scripts/jquery-ui.1.4.1.min.js"></script>
 <script type="text/javascript" src="scripts/d3.v7.min.js"></script>
-<script type="text/javascript" src="scripts/csg.iphenogram.new.js"></script>
+<script type="text/javascript" src="scripts/csg.iphenogram.js"></script>
 <script type="text/javascript" src="scripts/csg.colorkey.js"></script>
 <script type="text/javascript" src="scripts/csg.shapekey.js"></script>
 <script type="text/javascript" src="scripts/csg.fillkey.js"></script>
