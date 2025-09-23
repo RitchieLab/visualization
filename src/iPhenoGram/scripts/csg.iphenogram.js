@@ -128,6 +128,8 @@ $.widget('csg.iphenogram',{
 		this.options.pixelscale = this.options.xmax / this.options.width;
 
 		this.doefunc = function(val){return true;}
+		this.pvalfunc = function(val){return true;}
+		this.magnitudefunc = function(val){return true;}
 
 		// set up drawing canvas
 		this.widgetID = this.element.attr('id');
@@ -894,7 +896,7 @@ $.widget('csg.iphenogram',{
 				.transition()
 				.duration(250)
 				.style("fill", function(d){
-					if(widget.doefunc(d.doe) && (widget.highlightedShapes[d.group] || widget.highlightedFills[d.shading] || widget.allPhenoHighlight)){
+					if(widget.doefunc(d.doe) && widget.pvalfunc(d.pvalue) && widget.magnitudefunc(d.doe) && (widget.highlightedShapes[d.group] || widget.highlightedFills[d.shading] || widget.allPhenoHighlight)){
 						return widget.fillMap[d.shading][d.pheno];
 					}
 					else{
@@ -902,7 +904,7 @@ $.widget('csg.iphenogram',{
 					}
 				})
 				.style("stroke",function(d){
-					if(widget.doefunc(d.doe) && (widget.highlightedShapes[d.group] || widget.highlightedFills[d.shading] || widget.allPhenoHighlight)){
+					if(widget.doefunc(d.doe) && widget.pvalfunc(d.pvalue) && widget.magnitudefunc(d.doe) && (widget.highlightedShapes[d.group] || widget.highlightedFills[d.shading] || widget.allPhenoHighlight)){
 						return widget.phenoColors(d.pheno);
 					}
 					else{
@@ -932,7 +934,7 @@ $.widget('csg.iphenogram',{
 					}
 				})
 				.style("fill", function(d){
-					if(widget.doefunc(d.doe) && phenopos[d.pheno] && ( widget.allPhenoHighlight || ((widget.allShapes || (d.group in widget.highlightedShapes) ) && (widget.allFills || (d.shading in widget.highlightedFills)) ))){
+					if(widget.doefunc(d.doe) && widget.pvalfunc(d.pvalue) && widget.magnitudefunc(d.doe) && phenopos[d.pheno] && ( widget.allPhenoHighlight || ((widget.allShapes || (d.group in widget.highlightedShapes) ) && (widget.allFills || (d.shading in widget.highlightedFills)) ))){
 						return widget.fillMap[d.shading][d.pheno];
 					}
 					else{
@@ -940,7 +942,7 @@ $.widget('csg.iphenogram',{
 					}
 				})
 				.style("stroke", function(d){
-					if(widget.doefunc(d.doe) && phenopos[d.pheno] && ( widget.allPhenoHighlight || ((widget.allShapes || (d.group in widget.highlightedShapes) ) && (widget.allFills || (d.shading in widget.highlightedFills)) ))){
+					if(widget.doefunc(d.doe) && widget.pvalfunc(d.pvalue) && widget.magnitudefunc(d.doe) && phenopos[d.pheno] && ( widget.allPhenoHighlight || ((widget.allShapes || (d.group in widget.highlightedShapes) ) && (widget.allFills || (d.shading in widget.highlightedFills)) ))){
 						return widget.phenoColors(d.pheno);
 					}
 					else{
@@ -1004,7 +1006,7 @@ $.widget('csg.iphenogram',{
 					}
 				})
 				.style("fill", function(d){
-					if(widget.doefunc(d.doe) && groupsSelected[d.group] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allFills || widget.highlightedFills[d.shading]) ) )){
+					if(widget.doefunc(d.doe) && widget.pvalfunc(d.pvalue) &&  widget.magnitudefunc(d.doe) && groupsSelected[d.group] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allFills || widget.highlightedFills[d.shading]) ) )){
 						return widget.fillMap[d.shading][d.pheno];
 					}
 					else{
@@ -1012,7 +1014,7 @@ $.widget('csg.iphenogram',{
 					}
 				})
 				.style("stroke", function(d){
-					if(widget.doefunc(d.doe) && groupsSelected[d.group] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allFills || widget.highlightedFills[d.shading]) ) )){
+					if(widget.doefunc(d.doe) && widget.pvalfunc(d.pvalue) && widget.magnitudefunc(d.doe) && groupsSelected[d.group] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allFills || widget.highlightedFills[d.shading]) ) )){
 						return widget.phenoColors(d.pheno);
 					}
 					else{
@@ -1076,7 +1078,7 @@ $.widget('csg.iphenogram',{
 					}
 				})
 				.style("fill", function(d){
-					if(widget.doefunc(d.doe) && fillsSelected[d.shading] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allShapes || widget.highlightedShapes[d.group]) ) )){
+					if(widget.doefunc(d.doe) && widget.pvalfunc(d.pvalue) && widget.magnitudefunc(d.doe) && fillsSelected[d.shading] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allShapes || widget.highlightedShapes[d.group]) ) )){
 						return widget.fillMap[d.shading][d.pheno];
 					}
 					else{
@@ -1084,7 +1086,7 @@ $.widget('csg.iphenogram',{
 					}
 				})
 				.style("stroke", function(d){
-					if(widget.doefunc(d.doe) && fillsSelected[d.shading] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allShapes || widget.highlightedShapes[d.group]) ) )){
+					if(widget.doefunc(d.doe) && widget.pvalfunc(d.pvalue) && widget.magnitudefunc(d.doe) && fillsSelected[d.shading] && (widget.allPhenoHighlight || ( (widget.allPhenos || widget.highlightedPhenos[d.pheno]) && (widget.allShapes || widget.highlightedShapes[d.group]) ) )){
 						return widget.phenoColors(d.pheno);
 					}
 					else{
@@ -1730,7 +1732,6 @@ $.widget('csg.iphenogram',{
 				.attr("viewBox", "0 0 " + this.options.xmax + " " + this.options.ymax);
 		d3.selectAll(".phenoKeyInfo").remove();
 
-		// console.log(html);
 		return html;
 	},
 
@@ -1961,6 +1962,27 @@ $.widget('csg.iphenogram',{
 		}
 		this.highlightPhenos(this.highlightedPhenos, false);
 	},
+
+	/**
+	* Sets the pvalue threshold for display of the phenotype 
+	* @param {float} p-value to use for filtering
+	*/
+	filterByPval:function(threshold){	
+		var widget = this;
+		widget.pvalfunc = function(val){return val <= threshold ? true : false;}
+		widget.highlightPhenos(this.highlightedPhenos, false);
+	},
+
+	/**
+	* Sets the threshold for display of the phenotype using absolute value of direction of effect
+	* @param {float} threshold to use for filtering
+	*/
+	filterByMagnitude:function(threshold){
+		var widget = this;
+		widget.magnitudefunc = function(val){return Math.abs(val) >= threshold ? true : false;}
+		widget.highlightPhenos(this.highlightedPhenos, false);
+	},
+
 
 	/**
     * Provides current zoom and all other options for widget.
