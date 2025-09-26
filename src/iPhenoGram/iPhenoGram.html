@@ -23,6 +23,7 @@
   padding: 10px;
 }
 
+
 .slider-group { 
   position: relative;
   display: flex;
@@ -42,32 +43,37 @@
   direction: rtl;
 }
 
-/* Updated CSS for the label */
-.slider-group label {
-  /* Give the label a fixed width to prevent it from resizing */
-  width: 30px; /* Adjust this value as needed to fit your longest label */
-  text-align: center; /* Center the label text within its fixed width */
+/* ---------------------------------------------------------------- */
+/* CHANGE: Target the new input element instead of the old label */
+/* ---------------------------------------------------------------- */
+.slider-group .slider-value-input {
+  /* Give the input a fixed width to prevent the slider from shifting */
+  width: 50px; /* Increased to accommodate a wider input box */
+  text-align: center; /* Center the text inside the input */
   margin-bottom: 10px;
+  
+  /* Add basic input styling */
+  border: 1px solid #ccc;
+  padding: 2px;
 }
 
+/* The paragraph element remains the same */
 .slider-group p {
   margin-bottom: 10px;
 }
 
+
+/* ---------------------------------------------------------------- */
+/* TOOLTIP: The tooltip styling remains, but the hover rule is removed */
+/* (The tooltip visibility is now managed by JavaScript) */
+/* ---------------------------------------------------------------- */
 .slider-tooltip {
-    /* Use 'absolute' positioning relative to its parent container */
+    /* Since you are managing position with JS, these values are just initial states */
     position: absolute;
-
-    /* Position the tooltip 50% down the parent container */
     top: -5%;
-
-    /* Position the tooltip 100% to the right of the left edge of the parent container */
     left: -30%;
-
-    /* Offset the tooltip to the right and vertically center it */
-    transform: translate(10px, -50%); /* Adjust '10px' for desired spacing */
+    transform: translate(10px, -50%); 
     
-    /* Other styling remains the same */
     background-color: #333;
     color: white;
     padding: 5px 8px;
@@ -78,14 +84,19 @@
     z-index: 10;
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+    /* Keep the transition for the fade-out effect */
+    transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
 }
 
-/* Show the tooltip when hovering over the slider container */
+/* ---------------------------------------------------------------- */
+/* REMOVED: The following hover rule is removed because the tooltip */
+/* visibility is now controlled by jQuery's mouseenter/mousemove events. */
+
 .slider-group:hover .slider-tooltip {
     opacity: 1;
     visibility: visible;
 }
+
 
 
 </style>
@@ -136,15 +147,17 @@
 		<div class="slider-group">
 			<label for="magnitude-control" class="smallfont">DOE</label>
 			<input type="range" class="vertical-slider reversed-slider" id="magnitude-control" min="0" max="15" value="0">
-			<span class="slider-tooltip">Direction of effect threshold for display </span>
-			<p class="smallfont"><span id="magnitude-value">0.0</span></p>
+			<span class="slider-tooltip">Direction of effect display threshold </span>
+			<!-- <p class="smallfont"><span id="magnitude-value">0.0</span></p> -->
+			 <input type="text" id="magnitude-input" class="smallfont slider-value-input" value="0.0">
 		</div>
 		<div class="slider-group">
 			<label for="pvalue-control" class="smallfont">P-val</label>
 			<input type="range" class="vertical-slider reversed-slider" id="pvalue-control" min="0" max="20" value="20">
-			<span class="slider-tooltip">P-value threshold for display </span>
+			<span class="slider-tooltip">P-value display threshold</span>
 			<!-- <p class="smallfont">Value: <span id="pval-value">50</span></p> -->
-			 <p class="smallfont"><span id="pval-value">1.0</span></p>
+			 <!-- <p class="smallfont"><span id="pval-value">1.0</span></p> -->
+			<input type="text" id="pvalue-input" class="smallfont slider-value-input" value="1.0">
 		</div>
 		</div>
 	</div>
@@ -197,6 +210,11 @@ $(document).ready(function() {
 	// const pValues = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01, 0.001, 0.0001, 1e-5, 1e-6, 1e-7, 5e-8, 1e-9, 1e-10, 1e-20];
 	const pValues = [1e-20, 1e-10, 1e-09, 5e-08, 1e-07, 1e-06, 1e-05, 1e-4, 1e-3, 0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
 	const magValues = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0,1.5,2.0,5.0,10.0,20.0];
+
+	const $magnitudeControl = $('#magnitude-control');
+    const $magnitudeInput = $('#magnitude-input');
+	const $pvalControl = $('#pvalue-control');
+	const $pvalInput = $('#pvalue-input');
 
 	var chromplot	=	$("#drawing").iphenogram({chroms: chromsIn, phenos: phenosIn,
 	 cytoBands: cytoBandsIn, zoom_map: true, chromsOnly: false,
@@ -460,14 +478,11 @@ $(document).ready(function() {
     // 'this' refers to the checkbox that was just changed
 	doeStatus=3;
 	if($('#add-doe').is(':checked')){
-		console.log("add-doe checked");
 		doeStatus=1;
 	}
 	if($('#subtract-doe').is(':checked')){
-		console.log("subtract-doe checked");
 		doeStatus == 1 ? doeStatus = 2 : doeStatus = 0;
 	}
-	console.log("doeSate=" + doeStatus);
 	if(doeStatus >= 0){
 		$("#drawing").iphenogram('setDoeFlag', doeStatus);
 	}
@@ -487,23 +502,110 @@ $(document).ready(function() {
     $("#magnitude-value").text(sliderValue.toFixed(1));
   }
 
+
+  	// const $pvalControl = $('#pvalue-control');
+	// const $pvalInput = $('#pvalue-input');
+
+    /**
+     * Finds the index of the closest value in the array to the target number.
+     * @param {number} target The user-entered value.
+     * @param {Array<number>} arr The array of valid slider values.
+     * @returns {number} The index of the closest value.
+     */
+    function findClosestIndex(target, arr) {
+        if (isNaN(target) || target === null) return 0; // Default to the first index
+
+        let closestDiff = Infinity;
+        let closestIndex = 0;
+
+        for (let i = 0; i < arr.length; i++) {
+            const diff = Math.abs(arr[i] - target);
+
+            if (diff < closestDiff) {
+                closestDiff = diff;
+                closestIndex = i;
+            }
+        }
+        return closestIndex;
+    }
+
+	// 1. Slider -> Input
+    $magnitudeControl.on('input', function() {
+        const sliderIndex = parseInt($(this).val(), 10);
+        const value = magValues[sliderIndex];
+        $magnitudeInput.val(value); // Update the input box
+		$("#drawing").iphenogram('filterByMagnitude',Number($magnitudeInput.val()));
+    });
+
+
+    $pvalControl.on('input', function() {
+        const sliderIndex = parseInt($(this).val(), 10);
+        const value = pValues[sliderIndex];
+		if (value < 0.01) {
+			displayval = value.toExponential(0);
+			// $("#pval-value").text(sliderValue.toExponential(0)); 
+		} else {
+			// $("#pval-value").text(sliderValue.toFixed(2)); 
+			displayval = value.toFixed(2)
+		}
+
+		$pvalInput.val(displayval);
+		$("#drawing").iphenogram('filterByPval',Number($pvalInput.val()));
+		// $("#drawing").iphenogram('filterByMagnitude',Number()
+        // $pvalInput.val(value); // Update the input box
+        // You would also update your display <p> element here if needed
+    });
+
+    // 2. Input -> Slider
+    $magnitudeInput.on('change', function() {
+        const targetValue = parseFloat($(this).val());
+        
+        // Find the index of the closest value
+        const closestIndex = findClosestIndex(targetValue, magValues);
+        
+        // Move the slider to that index
+        // $magnitudeControl.val(closestIndex).trigger('input'); // Trigger 'input' to update visual position
+        
+		$magnitudeControl.val(closestIndex); 
+		$("#drawing").iphenogram('filterByMagnitude',Number(targetValue));
+        // Update the input field with the precise, accepted array value
+        // $(this).val(magValues[closestIndex]);
+    });
+
+    $pvalInput.on('change', function() {
+        const targetValue = parseFloat($(this).val());
+        
+        // Find the index of the closest value
+        const closestIndex = findClosestIndex(targetValue, pValues);
+        $pvalControl.val(closestIndex);
+        // Move the slider to that index
+        // $pvalControl.val(closestIndex).trigger('input'); // Trigger 'input' to update visual position
+        $("#drawing").iphenogram('filterByPval',Number($pvalInput.val()));
+		
+        // Update the input field with the precise, accepted array value
+        // $(this).val(pValues[closestIndex]);
+    });
+
+
+	$magnitudeInput.val(magValues[$magnitudeControl.val()]);
+
   $("#controlpanel").tabs();
   $("#selectionpanel").tabs();
 
   $("#iPhenogramFiles").on('change', handleFileSelect);
   $("#genomeFile").on('change', handleFileSelect);
   $("#cytoFile").on('change', handleFileSelect);
-  $("#pvalue-control").on('input', function(){
-	const index = parseInt($(this).val(), 10);
-	updatePvalDisplay(pValues[index]);
-	$("#drawing").iphenogram('filterByPval',Number(pValues[index]));
-  });
+//   $("#pvalue-control").on('input', function(){
+// 	const index = parseInt($(this).val(), 10);
+// 	updatePvalDisplay(pValues[index]);
+// 	$("#drawing").iphenogram('filterByPval',Number(pValues[index]));
+//   });
 
-  $("#magnitude-control").on('input', function(){
-	const index = parseInt($(this).val(), 10);
-	updateMagvalDisplay(magValues[index]);
-	$("#drawing").iphenogram('filterByMagnitude',Number(magValues[index]));
-  });
+//   $("#magnitude-control").on('input', function(){
+// 	const index = parseInt($(this).val(), 10);
+// 	updateMagvalDisplay(magValues[index]);
+// 	$("#drawing").iphenogram('filterByMagnitude',Number(magValues[index]));
+//   });
 
   $("#cytoCheck").change(handleCytoChange);
   $("#includePhenos").change(handlePhenoChange);
@@ -516,6 +618,7 @@ $(document).ready(function() {
   $("#iPhenoGramOptions").change(loadOptionFile);
 
 });
+
 
 </script>
 </body>
