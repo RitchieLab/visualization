@@ -1957,8 +1957,11 @@ $.widget('csg.iphenogram',{
 		else if(option == 1){
 			widget.doefunc = function(val){return val >= 0.0 ? true : false;}		
 		}
-		else{ // option == 2
+		else if(option == 2){ // option == 2
 			widget.doefunc = function(val){return true;}			
+		}
+		else{
+			widget.doefunc = function(val){return false;}
 		}
 		this.highlightPhenos(this.highlightedPhenos, false);
 	},
